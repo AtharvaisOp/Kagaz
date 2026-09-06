@@ -4,7 +4,7 @@ ENV PNPM_HOME=/pnpm
 ENV PATH=$PNPM_HOME:$PATH
 WORKDIR /app
 
-RUN corepack enable && corepack prepare pnpm@12.3.4 --activate
+RUN npm install --global pnpm@12.3.4
 
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml turbo.json tsconfig.base.json eslint.config.js ./
 COPY apps/api/package.json apps/api/package.json
