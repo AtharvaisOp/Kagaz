@@ -869,6 +869,142 @@ input:focus-visible + * {
   background: #27272a;
 }
 
+.download-button {
+  border-color: #c2410c;
+  color: #fff7ed;
+  background: #f97316;
+  box-shadow: 0 8px 20px rgb(249 115 22 / 18%);
+}
+
+.download-button:hover:not(:disabled) {
+  border-color: #fb923c;
+  color: #ffffff;
+  background: #ea580c;
+}
+
+.export-status,
+.export-error {
+  position: absolute;
+  right: clamp(16px, 3vw, 40px);
+  bottom: -30px;
+  display: inline-flex;
+  gap: 7px;
+  align-items: center;
+  min-height: 24px;
+  padding: 4px 9px;
+  border: 1px solid #164e63;
+  border-radius: 6px;
+  color: #a5f3fc;
+  background: #10252b;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 9px;
+  letter-spacing: 0.02em;
+}
+
+.export-error {
+  border-color: #7c2d12;
+  color: #fed7aa;
+  background: #2a1912;
+}
+
+.export-status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: #06b6d4;
+}
+
+.extract-dialog-scrim {
+  position: fixed;
+  z-index: 80;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgb(0 0 0 / 72%);
+}
+
+.extract-dialog {
+  width: min(100%, 430px);
+  padding: 22px;
+  border: 1px solid #3f3f46;
+  border-radius: 12px;
+  background: #1a1a1a;
+  box-shadow: 0 24px 80px rgb(0 0 0 / 55%);
+}
+
+.extract-dialog-heading,
+.extract-dialog-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.extract-dialog-heading {
+  margin-bottom: 22px;
+}
+
+.extract-dialog h2 {
+  margin: 0;
+  color: #ffffff;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.extract-dialog label {
+  display: block;
+  margin-bottom: 8px;
+  color: #e4e4e7;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.extract-dialog input {
+  width: 100%;
+  min-height: 42px;
+  padding: 0 12px;
+  border: 1px solid #52525b;
+  border-radius: 7px;
+  outline: 0;
+  color: #ffffff;
+  background: #111111;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 12px;
+}
+
+.extract-dialog input:focus {
+  border-color: #06b6d4;
+  box-shadow: 0 0 0 3px rgb(6 182 212 / 16%);
+}
+
+.extract-dialog input[aria-invalid='true'] {
+  border-color: #f97316;
+}
+
+.extract-dialog-hint,
+.extract-dialog-count,
+.extract-dialog-error {
+  margin: 8px 0 0;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 10px;
+  line-height: 1.5;
+}
+
+.extract-dialog-hint,
+.extract-dialog-count {
+  color: #a1a1aa;
+}
+
+.extract-dialog-error {
+  color: #fdba74;
+}
+
+.extract-dialog-actions {
+  gap: 10px;
+  justify-content: flex-end;
+  margin-top: 24px;
+}
+
 .toolbar-button:disabled,
 .primary-button:disabled {
   border-color: #3f3f46;
@@ -1064,6 +1200,7 @@ input:focus-visible + * {
   }
 
   .viewer-toolbar {
+    position: sticky;
     align-items: stretch;
     flex-direction: column;
     gap: 9px;
@@ -1116,6 +1253,10 @@ input:focus-visible + * {
     justify-content: space-between;
   }
 
+  .toolbar-actions {
+    flex-wrap: wrap;
+  }
+
   .document-name {
     max-width: 62vw;
   }
@@ -1124,6 +1265,32 @@ input:focus-visible + * {
     width: 38px;
     padding: 0;
     font-size: 0;
+  }
+
+  .download-button {
+    width: auto;
+    padding: 0 10px;
+    font-size: 11px;
+  }
+
+  .extract-button {
+    width: 38px;
+    padding: 0;
+    font-size: 0;
+  }
+
+  .export-status,
+  .export-error {
+    right: 14px;
+    bottom: -32px;
+    max-width: calc(100vw - 28px);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .extract-dialog {
+    padding: 18px;
   }
 
   .start-over-button {

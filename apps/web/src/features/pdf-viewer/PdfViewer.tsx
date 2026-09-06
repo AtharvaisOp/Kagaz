@@ -3,11 +3,13 @@ import { useLayoutEffect, useRef, useState } from 'react';
 import { FileIssueList } from '../../components/FileIssueList';
 import { MemoizedPdfPage } from './PdfPage';
 import { ViewerToolbar } from './ViewerToolbar';
+import { ExtractPagesDialog } from './ExtractPagesDialog';
 import { ThumbnailRail } from '../pdf-workspace/components/ThumbnailRail';
 import { useWorkspaceNavigation } from '../pdf-workspace/hooks/useWorkspaceNavigation';
 
 import type { FileLoadIssue } from '../pdf-workspace/loading/types';
 import type { WorkspaceLoadingState } from '../pdf-workspace/hooks/usePdfWorkspace';
+import type { PdfExportState } from '../pdf-workspace/hooks/usePdfExport';
 import type { SourceDocumentRegistry } from '../pdf-workspace/runtime/sourceDocumentRegistry';
 import type {
   SourceDocumentId,
@@ -38,6 +40,9 @@ interface PdfViewerProps {
   readonly onRotatePage: (pageId: WorkspacePageId, delta?: number) => void;
   readonly onZoomIn: () => void;
   readonly onZoomOut: () => void;
+  readonly exportState: PdfExportState;
+  readonly onDownloadPdf: () => void;
+  readonly onExtractPages: (pages: readonly WorkspacePage[]) => void;
 }
 
 function getSourceLabel(
@@ -78,8 +83,13 @@ export function PdfViewer({
   onRotatePage,
   onZoomIn,
   onZoomOut,
+  exportState,
+  onDownloadPdf,
+  onExtractPages,
 }: PdfViewerProps) {
   const [mobilePageManagerOpen, setMobilePageManagerOpen] = useState(false);
+  const [extractOpen, setExtractOpen] = useState(false);
+  const [extractSession, setExtractSession] = useState(0);
   const scrollBeforePageManagerRef = useRef(0);
   const openPageManager = () => {
     scrollBeforePageManagerRef.current = window.scrollY;
@@ -105,6 +115,11 @@ export function PdfViewer({
   const readySourceCount = sourceOrder.filter(
     (sourceId) => sources[sourceId]?.status === 'ready',
   ).length;
+  const openExtract = () => {
+    setMobilePageManagerOpen(false);
+    setExtractSession((current) => current + 1);
+    setExtractOpen(true);
+  };
 
   return (
     <section className="viewer" aria-label={`Viewing ${sourceLabel}`}>
@@ -122,6 +137,22 @@ export function PdfViewer({
         mobilePageManagerOpen={mobilePageManagerOpen}
         onZoomIn={onZoomIn}
         onZoomOut={onZoomOut}
+        exportState={exportState}
+        onDownloadPdf={onDownloadPdf}
+        onOpenExtract={openExtract}
+      />
+      <ExtractPagesDialog
+        key={extractSession}
+        pageCount={pages.length}
+        open={extractOpen}
+        onClose={() => setExtractOpen(false)}
+        onExtract={(indexes) => {
+          onExtractPages(
+            indexes
+              .map((index) => pages[index])
+              .filter((page): page is WorkspacePage => Boolean(page)),
+          );
+        }}
       />
       <div className="workspace-layout">
         <ThumbnailRail

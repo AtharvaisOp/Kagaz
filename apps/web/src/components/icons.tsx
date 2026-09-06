@@ -21,6 +21,15 @@ export function UploadIcon(props: IconProps) {
   );
 }
 
+export function DownloadIcon(props: IconProps) {
+  return (
+    <svg {...baseProps} {...props}>
+      <path d="M12 4v12m0 0-4.5-4.5M12 16l4.5-4.5" />
+      <path d="M5 14v4a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-4" />
+    </svg>
+  );
+}
+
 export function FileIcon(props: IconProps) {
   return (
     <svg {...baseProps} {...props}>

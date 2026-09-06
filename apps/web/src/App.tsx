@@ -5,6 +5,7 @@ import { FilePicker } from './components/FilePicker';
 import { LoadingState } from './components/LoadingState';
 import { PdfViewer } from './features/pdf-viewer/PdfViewer';
 import { usePdfWorkspace } from './features/pdf-workspace/hooks/usePdfWorkspace';
+import { usePdfExport } from './features/pdf-workspace/hooks/usePdfExport';
 
 import type { FileLoadIssue } from './features/pdf-workspace/loading/types';
 
@@ -27,6 +28,7 @@ export function App() {
     deletePage,
     rotatePage,
   } = usePdfWorkspace();
+  const pdfExport = usePdfExport(workspace, registry);
 
   const handleInitialSelection = (
     files: readonly File[],
@@ -45,6 +47,7 @@ export function App() {
 
   const handleStartOver = () => {
     if (startOver()) {
+      pdfExport.cancel();
       setZoom(100);
     }
   };
@@ -93,6 +96,9 @@ export function App() {
           onZoomOut={() =>
             setZoom((current) => Math.max(MIN_ZOOM, current - ZOOM_STEP))
           }
+          exportState={pdfExport.state}
+          onDownloadPdf={pdfExport.downloadWorkspace}
+          onExtractPages={pdfExport.extractPages}
         />
       ) : null}
     </main>

@@ -1,6 +1,8 @@
 import { FilePicker } from '../../components/FilePicker';
 import {
   CloseIcon,
+  DownloadIcon,
+  FileIcon,
   MinusIcon,
   PagesIcon,
   PlusIcon,
@@ -8,6 +10,7 @@ import {
 
 import type { FileLoadIssue } from '../pdf-workspace/loading/types';
 import type { WorkspaceLoadingState } from '../pdf-workspace/hooks/usePdfWorkspace';
+import type { PdfExportState } from '../pdf-workspace/hooks/usePdfExport';
 
 interface ViewerToolbarProps {
   readonly sourceLabel: string;
@@ -26,6 +29,9 @@ interface ViewerToolbarProps {
   readonly mobilePageManagerOpen: boolean;
   readonly onZoomIn: () => void;
   readonly onZoomOut: () => void;
+  readonly exportState: PdfExportState;
+  readonly onDownloadPdf: () => void;
+  readonly onOpenExtract: () => void;
 }
 
 export function ViewerToolbar({
@@ -42,9 +48,28 @@ export function ViewerToolbar({
   mobilePageManagerOpen,
   onZoomIn,
   onZoomOut,
+  exportState,
+  onDownloadPdf,
+  onOpenExtract,
 }: ViewerToolbarProps) {
+  const exporting = exportState.status === 'exporting';
+  const exportStatus = exportState.progress
+    ? exportState.progress.phase === 'loading'
+      ? `Loading ${exportState.progress.current} of ${exportState.progress.total} source PDFs · ${exportState.progress.fileName}`
+      : exportState.progress.phase === 'building'
+        ? `Building page ${exportState.progress.current} of ${exportState.progress.total}`
+        : exportState.progress.phase === 'saving'
+          ? 'Saving PDF…'
+          : 'Preparing PDF…'
+    : null;
+
   return (
-    <div className="viewer-toolbar" role="toolbar" aria-label="PDF controls">
+    <div
+      className="viewer-toolbar"
+      role="toolbar"
+      aria-label="PDF controls"
+      aria-busy={exporting}
+    >
       <div className="document-meta">
         <span className="document-name" title={sourceLabel}>
           {sourceLabel}
@@ -82,6 +107,25 @@ export function ViewerToolbar({
           onSelect={onAddFiles}
         />
         <button
+          className="toolbar-button extract-button"
+          type="button"
+          disabled={exporting}
+          onClick={onOpenExtract}
+        >
+          <FileIcon className="size-4" />
+          Extract pages
+        </button>
+        <button
+          className="toolbar-button download-button"
+          type="button"
+          disabled={exporting || pageCount === 0}
+          aria-label={exporting ? 'Creating PDF' : 'Download PDF'}
+          onClick={onDownloadPdf}
+        >
+          <DownloadIcon className="size-4" />
+          {exporting ? 'Creating…' : 'Download PDF'}
+        </button>
+        <button
           className="toolbar-button pages-toggle-button"
           type="button"
           aria-controls="thumbnail-rail"
@@ -100,6 +144,17 @@ export function ViewerToolbar({
           Start over
         </button>
       </div>
+      {exportStatus ? (
+        <div className="export-status" role="status" aria-live="polite">
+          <span className="export-status-dot" aria-hidden="true" />
+          {exportStatus}
+        </div>
+      ) : null}
+      {exportState.status === 'error' && exportState.error ? (
+        <div className="export-error" role="alert">
+          {exportState.error}
+        </div>
+      ) : null}
     </div>
   );
 }
