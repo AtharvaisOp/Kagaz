@@ -1,39 +1,48 @@
-import { CloseIcon, MinusIcon, PlusIcon } from '../../components/icons';
 import { FilePicker } from '../../components/FilePicker';
+import { CloseIcon, MinusIcon, PlusIcon } from '../../components/icons';
+
+import type { FileLoadIssue } from '../pdf-workspace/loading/types';
+import type { WorkspaceLoadingState } from '../pdf-workspace/hooks/usePdfWorkspace';
 
 interface ViewerToolbarProps {
-  fileName: string;
-  pageCount: number;
-  zoom: number;
-  minZoom: number;
-  maxZoom: number;
-  onClose: () => void;
-  onFileError: (message: string | null) => void;
-  onReplace: (file: File) => void;
-  onZoomIn: () => void;
-  onZoomOut: () => void;
+  readonly sourceLabel: string;
+  readonly sourceCount: number;
+  readonly pageCount: number;
+  readonly loading: WorkspaceLoadingState;
+  readonly zoom: number;
+  readonly minZoom: number;
+  readonly maxZoom: number;
+  readonly onAddFiles: (
+    files: readonly File[],
+    issues: readonly FileLoadIssue[],
+  ) => void;
+  readonly onStartOver: () => void;
+  readonly onZoomIn: () => void;
+  readonly onZoomOut: () => void;
 }
 
 export function ViewerToolbar({
-  fileName,
+  sourceLabel,
+  sourceCount,
   pageCount,
+  loading,
   zoom,
   minZoom,
   maxZoom,
-  onClose,
-  onFileError,
-  onReplace,
+  onAddFiles,
+  onStartOver,
   onZoomIn,
   onZoomOut,
 }: ViewerToolbarProps) {
   return (
     <div className="viewer-toolbar" role="toolbar" aria-label="PDF controls">
       <div className="document-meta">
-        <span className="document-name" title={fileName}>
-          {fileName}
+        <span className="document-name" title={sourceLabel}>
+          {sourceLabel}
         </span>
         <span className="document-pages">
-          {pageCount} {pageCount === 1 ? 'page' : 'pages'}
+          {sourceCount} {sourceCount === 1 ? 'PDF' : 'PDFs'} · {pageCount}{' '}
+          {pageCount === 1 ? 'page' : 'pages'}
         </span>
       </div>
       <div className="toolbar-actions">
@@ -58,14 +67,18 @@ export function ViewerToolbar({
             <PlusIcon className="size-4" />
           </button>
         </div>
-        <FilePicker compact onError={onFileError} onSelect={onReplace} />
+        <FilePicker
+          compact
+          disabled={loading.status === 'loading'}
+          onSelect={onAddFiles}
+        />
         <button
-          className="icon-button"
+          className="toolbar-button start-over-button"
           type="button"
-          aria-label="Close PDF"
-          onClick={onClose}
+          onClick={onStartOver}
         >
           <CloseIcon className="size-4" />
+          Start over
         </button>
       </div>
     </div>

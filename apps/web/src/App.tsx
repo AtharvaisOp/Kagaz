@@ -1,79 +1,83 @@
 import { useState } from 'react';
 
 import { AppHeader } from './components/AppHeader';
-import { ErrorState } from './components/ErrorState';
 import { FilePicker } from './components/FilePicker';
 import { LoadingState } from './components/LoadingState';
 import { PdfViewer } from './features/pdf-viewer/PdfViewer';
-import { usePdfDocument } from './hooks/usePdfDocument';
+import { usePdfWorkspace } from './features/pdf-workspace/hooks/usePdfWorkspace';
+
+import type { FileLoadIssue } from './features/pdf-workspace/loading/types';
 
 const MIN_ZOOM = 50;
 const MAX_ZOOM = 200;
 const ZOOM_STEP = 10;
 
 export function App() {
-  const [file, setFile] = useState<File | null>(null);
-  const [fileError, setFileError] = useState<string | null>(null);
   const [zoom, setZoom] = useState(100);
-  const pdfState = usePdfDocument(file);
+  const {
+    workspace,
+    registry,
+    loading,
+    issues,
+    openInitialFiles,
+    addFiles,
+    startOver,
+  } = usePdfWorkspace();
 
-  const selectFile = (nextFile: File) => {
-    setFile(nextFile);
+  const handleInitialSelection = (
+    files: readonly File[],
+    selectionIssues: readonly FileLoadIssue[],
+  ) => {
     setZoom(100);
-    setFileError(null);
+    openInitialFiles(files, selectionIssues);
   };
 
-  const clearFile = () => {
-    setFile(null);
-    setZoom(100);
-    setFileError(null);
+  const handleAddSelection = (
+    files: readonly File[],
+    selectionIssues: readonly FileLoadIssue[],
+  ) => {
+    addFiles(files, selectionIssues);
+  };
+
+  const handleStartOver = () => {
+    if (startOver()) {
+      setZoom(100);
+    }
   };
 
   return (
     <main className="app-shell">
       <AppHeader />
-      {pdfState.status === 'idle' ? (
+      {workspace.sessionStatus === 'empty' && loading.status === 'idle' ? (
         <section className="upload-layout">
           <div className="ambient-grid" aria-hidden="true" />
           <div className="intro-copy">
             <p className="eyebrow">A clearer way through PDFs</p>
-            <h1>Your document. Your browser. Nothing in between.</h1>
+            <h1>Your documents. Your browser. Nothing in between.</h1>
             <p>
               Kagaz opens PDFs locally, keeping the first step of your workflow
               private and immediate.
             </p>
           </div>
-          <FilePicker
-            error={fileError}
-            onError={setFileError}
-            onSelect={selectFile}
-          />
+          <FilePicker onSelect={handleInitialSelection} issues={issues} />
         </section>
       ) : null}
-      {pdfState.status === 'loading' ? (
-        <LoadingState fileName={pdfState.fileName} />
+      {workspace.sessionStatus === 'empty' && loading.status === 'loading' ? (
+        <LoadingState progress={loading} onStartOver={handleStartOver} />
       ) : null}
-      {pdfState.status === 'error' ? (
-        <ErrorState
-          fileError={fileError}
-          fileName={pdfState.fileName}
-          message={pdfState.message}
-          onClear={clearFile}
-          onFileError={setFileError}
-          onReplace={selectFile}
-        />
-      ) : null}
-      {pdfState.status === 'ready' ? (
+      {workspace.sessionStatus === 'active' ? (
         <PdfViewer
-          document={pdfState.document}
-          fileError={fileError}
-          fileName={pdfState.fileName}
+          pages={workspace.pages}
+          sources={workspace.sources}
+          sourceOrder={workspace.sourceOrder}
+          registry={registry}
+          issues={issues}
+          loading={loading}
           zoom={zoom}
           minZoom={MIN_ZOOM}
           maxZoom={MAX_ZOOM}
-          onClose={clearFile}
-          onFileError={setFileError}
-          onReplace={selectFile}
+          onAddFiles={handleAddSelection}
+          onStartOver={handleStartOver}
           onZoomIn={() =>
             setZoom((current) => Math.min(MAX_ZOOM, current + ZOOM_STEP))
           }

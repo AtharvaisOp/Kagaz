@@ -1,18 +1,26 @@
 import { useEffect, useRef, useState } from 'react';
 
 import { useNearViewport } from '../../hooks/useNearViewport';
+import { normalizeRotation } from '../pdf-workspace/model/operations';
 
+import type { WorkspacePage } from '../pdf-workspace/model/types';
 import type { PDFDocumentProxy, PDFPageProxy, RenderTask } from 'pdfjs-dist';
 
 interface PdfPageProps {
-  document: PDFDocumentProxy;
-  pageNumber: number;
-  zoom: number;
+  readonly page: WorkspacePage;
+  readonly document: PDFDocumentProxy;
+  readonly workspacePosition: number;
+  readonly zoom: number;
 }
 
 type PageStatus = 'waiting' | 'loading' | 'ready' | 'error';
 
-export function PdfPage({ document, pageNumber, zoom }: PdfPageProps) {
+export function PdfPage({
+  page,
+  document,
+  workspacePosition,
+  zoom,
+}: PdfPageProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const { elementRef, isNearViewport } = useNearViewport();
   const [status, setStatus] = useState<PageStatus>('waiting');
@@ -31,7 +39,7 @@ export function PdfPage({ document, pageNumber, zoom }: PdfPageProps) {
     }
 
     let active = true;
-    let page: PDFPageProxy | null = null;
+    let loadedPage: PDFPageProxy | null = null;
     let renderTask: RenderTask | null = null;
     const canvas = canvasRef.current;
 
@@ -42,15 +50,24 @@ export function PdfPage({ document, pageNumber, zoom }: PdfPageProps) {
     setStatus('loading');
 
     void document
-      .getPage(pageNumber)
-      .then((loadedPage) => {
+      .getPage(page.sourcePageIndex + 1)
+      .then((nextPage) => {
         if (!active) {
           return;
         }
 
-        page = loadedPage;
-        const baseViewport = loadedPage.getViewport({ scale: 1 });
-        const viewport = loadedPage.getViewport({ scale: zoom / 100 });
+        loadedPage = nextPage;
+        const totalRotation = normalizeRotation(
+          nextPage.rotate + page.rotationDelta,
+        );
+        const baseViewport = nextPage.getViewport({
+          scale: 1,
+          rotation: totalRotation,
+        });
+        const viewport = nextPage.getViewport({
+          scale: zoom / 100,
+          rotation: totalRotation,
+        });
         const pixelRatio = Math.min(window.devicePixelRatio || 1, 2);
         const context = canvas.getContext('2d', { alpha: false });
 
@@ -67,7 +84,7 @@ export function PdfPage({ document, pageNumber, zoom }: PdfPageProps) {
         canvas.style.width = `${viewport.width}px`;
         canvas.style.height = `${viewport.height}px`;
 
-        renderTask = loadedPage.render({
+        renderTask = nextPage.render({
           canvas,
           canvasContext: context,
           transform:
@@ -97,24 +114,27 @@ export function PdfPage({ document, pageNumber, zoom }: PdfPageProps) {
     return () => {
       active = false;
       renderTask?.cancel();
-      page?.cleanup();
+      loadedPage?.cleanup();
       canvas.width = 0;
       canvas.height = 0;
     };
-  }, [document, isNearViewport, pageNumber, zoom]);
+  }, [document, isNearViewport, page, zoom]);
+
+  const workspacePageNumber = workspacePosition + 1;
 
   return (
     <article
       ref={elementRef}
       className="pdf-page-shell"
-      aria-label={`Page ${pageNumber}`}
+      data-workspace-page-id={page.id}
+      aria-label={`Page ${workspacePageNumber}`}
       style={{
         width: displayDimensions.width,
         minHeight: displayDimensions.height,
       }}
     >
       <div className="page-index" aria-hidden="true">
-        {String(pageNumber).padStart(2, '0')}
+        {String(workspacePageNumber).padStart(2, '0')}
       </div>
       <canvas
         ref={canvasRef}
@@ -126,7 +146,7 @@ export function PdfPage({ document, pageNumber, zoom }: PdfPageProps) {
       {!isNearViewport || status === 'loading' || status === 'waiting' ? (
         <div
           className="page-placeholder"
-          aria-label={`Loading page ${pageNumber}`}
+          aria-label={`Loading page ${workspacePageNumber}`}
         >
           <span className="loading-line" />
           <span className="loading-line short" />
@@ -135,7 +155,7 @@ export function PdfPage({ document, pageNumber, zoom }: PdfPageProps) {
       ) : null}
       {status === 'error' ? (
         <div className="page-error" role="alert">
-          Page {pageNumber} could not be rendered.
+          Page {workspacePageNumber} could not be rendered.
         </div>
       ) : null}
     </article>

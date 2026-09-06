@@ -1,69 +1,126 @@
+import { FileIssueList } from '../../components/FileIssueList';
 import { PdfPage } from './PdfPage';
 import { ViewerToolbar } from './ViewerToolbar';
 
-import type { PDFDocumentProxy } from 'pdfjs-dist';
+import type { FileLoadIssue } from '../pdf-workspace/loading/types';
+import type { WorkspaceLoadingState } from '../pdf-workspace/hooks/usePdfWorkspace';
+import type { SourceDocumentRegistry } from '../pdf-workspace/runtime/sourceDocumentRegistry';
+import type {
+  SourceDocumentId,
+  SourceDocumentSummary,
+  WorkspacePage,
+} from '../pdf-workspace/model/types';
 
 interface PdfViewerProps {
-  document: PDFDocumentProxy;
-  fileError: string | null;
-  fileName: string;
-  zoom: number;
-  minZoom: number;
-  maxZoom: number;
-  onClose: () => void;
-  onFileError: (message: string | null) => void;
-  onReplace: (file: File) => void;
-  onZoomIn: () => void;
-  onZoomOut: () => void;
+  readonly pages: readonly WorkspacePage[];
+  readonly sources: Readonly<Record<SourceDocumentId, SourceDocumentSummary>>;
+  readonly sourceOrder: readonly SourceDocumentId[];
+  readonly registry: SourceDocumentRegistry;
+  readonly issues: readonly FileLoadIssue[];
+  readonly loading: WorkspaceLoadingState;
+  readonly zoom: number;
+  readonly minZoom: number;
+  readonly maxZoom: number;
+  readonly onAddFiles: (
+    files: readonly File[],
+    issues: readonly FileLoadIssue[],
+  ) => void;
+  readonly onStartOver: () => void;
+  readonly onZoomIn: () => void;
+  readonly onZoomOut: () => void;
+}
+
+function getSourceLabel(
+  sources: Readonly<Record<SourceDocumentId, SourceDocumentSummary>>,
+  sourceOrder: readonly SourceDocumentId[],
+): string {
+  const fileNames = sourceOrder
+    .map((sourceId) => sources[sourceId])
+    .filter(
+      (source): source is SourceDocumentSummary => source?.status === 'ready',
+    )
+    .map((source) => source.fileName)
+    .filter((fileName): fileName is string => Boolean(fileName));
+
+  if (fileNames.length === 1) {
+    return fileNames[0] ?? 'PDF workspace';
+  }
+
+  return `${fileNames.length || 1} PDFs`;
 }
 
 export function PdfViewer({
-  document,
-  fileError,
-  fileName,
+  pages,
+  sources,
+  sourceOrder,
+  registry,
+  issues,
+  loading,
   zoom,
   minZoom,
   maxZoom,
-  onClose,
-  onFileError,
-  onReplace,
+  onAddFiles,
+  onStartOver,
   onZoomIn,
   onZoomOut,
 }: PdfViewerProps) {
-  const pages = Array.from(
-    { length: document.numPages },
-    (_, index) => index + 1,
-  );
+  const sourceLabel = getSourceLabel(sources, sourceOrder);
+  const readySourceCount = sourceOrder.filter(
+    (sourceId) => sources[sourceId]?.status === 'ready',
+  ).length;
 
   return (
-    <section className="viewer" aria-label={`Viewing ${fileName}`}>
+    <section className="viewer" aria-label={`Viewing ${sourceLabel}`}>
       <ViewerToolbar
-        fileName={fileName}
-        pageCount={document.numPages}
+        sourceLabel={sourceLabel}
+        sourceCount={readySourceCount}
+        pageCount={pages.length}
+        loading={loading}
         zoom={zoom}
         minZoom={minZoom}
         maxZoom={maxZoom}
-        onClose={onClose}
-        onFileError={onFileError}
-        onReplace={onReplace}
+        onAddFiles={onAddFiles}
+        onStartOver={onStartOver}
         onZoomIn={onZoomIn}
         onZoomOut={onZoomOut}
       />
       <div className="page-stack">
-        {pages.map((pageNumber) => (
-          <PdfPage
-            key={`${document.fingerprints[0] ?? fileName}-${pageNumber}`}
-            document={document}
-            pageNumber={pageNumber}
-            zoom={zoom}
-          />
-        ))}
+        {pages.map((page, workspacePosition) => {
+          const document = registry.getDocument(page.sourceDocumentId);
+
+          if (!document) {
+            return (
+              <article
+                key={page.id}
+                className="pdf-page-shell page-unavailable"
+                data-workspace-page-id={page.id}
+                aria-label={`Page ${workspacePosition + 1}`}
+              >
+                <div className="page-error" role="alert">
+                  This source is no longer available.
+                </div>
+              </article>
+            );
+          }
+
+          return (
+            <PdfPage
+              key={page.id}
+              page={page}
+              document={document}
+              workspacePosition={workspacePosition}
+              zoom={zoom}
+            />
+          );
+        })}
       </div>
-      {fileError ? (
-        <div className="viewer-alert" role="alert">
-          {fileError}
+      {loading.status === 'loading' ? (
+        <div className="viewer-loading" aria-live="polite">
+          Loading {loading.currentIndex} of {loading.total} PDFs
+          {loading.fileName ? ` · ${loading.fileName}` : ''}
         </div>
       ) : null}
+      <FileIssueList issues={issues} />
     </section>
   );
 }

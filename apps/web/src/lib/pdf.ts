@@ -52,7 +52,7 @@ export function isPdfFile(file: File): boolean {
 export function describePdfError(error: unknown): string {
   if (error instanceof Error) {
     if (error.name === 'PasswordException') {
-      return 'This PDF is password protected. Password entry is not available in Phase 0.';
+      return 'This PDF is password protected. Password entry is not available yet.';
     }
 
     if (
