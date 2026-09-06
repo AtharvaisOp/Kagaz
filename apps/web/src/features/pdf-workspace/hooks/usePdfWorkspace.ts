@@ -4,12 +4,13 @@ import {
   loadSourceBatch,
   type SourceBatchResult,
 } from '../loading/sourceBatch';
+import { deleteWorkspacePage } from '../editing';
 import type { FileLoadIssue, LoadingProgress } from '../loading/types';
 import { createBrowserIdFactory } from '../runtime/ids';
 import { SourceDocumentRegistry } from '../runtime/sourceDocumentRegistry';
 import { createEmptyWorkspaceState, workspaceReducer } from '../model/reducer';
 
-import type { PdfWorkspaceState } from '../model/types';
+import type { PdfWorkspaceState, WorkspacePageId } from '../model/types';
 
 export interface WorkspaceLoadingState {
   readonly status: 'idle' | 'loading';
@@ -32,6 +33,10 @@ export interface PdfWorkspaceController {
     initialIssues?: readonly FileLoadIssue[],
   ) => void;
   readonly startOver: () => boolean;
+  readonly selectPage: (pageId: WorkspacePageId) => void;
+  readonly movePage: (pageId: WorkspacePageId, toIndex: number) => void;
+  readonly deletePage: (pageId: WorkspacePageId) => void;
+  readonly rotatePage: (pageId: WorkspacePageId, delta?: number) => void;
 }
 
 const IDLE_LOADING: WorkspaceLoadingState = {
@@ -245,6 +250,25 @@ export function usePdfWorkspace(): PdfWorkspaceController {
     return true;
   }, [invalidateSession, workspace.dirty]);
 
+  const selectPage = useCallback((pageId: WorkspacePageId) => {
+    dispatch({ type: 'SELECT_PAGE', pageId });
+  }, []);
+
+  const movePage = useCallback((pageId: WorkspacePageId, toIndex: number) => {
+    dispatch({ type: 'MOVE_PAGE', pageId, toIndex });
+  }, []);
+
+  const deletePage = useCallback(
+    (pageId: WorkspacePageId) => {
+      deleteWorkspacePage(workspace, pageId, dispatch, registry);
+    },
+    [registry, workspace],
+  );
+
+  const rotatePage = useCallback((pageId: WorkspacePageId, delta?: number) => {
+    dispatch({ type: 'ROTATE_PAGE', pageId, delta });
+  }, []);
+
   useEffect(() => {
     return () => {
       generationRef.current += 1;
@@ -261,5 +285,9 @@ export function usePdfWorkspace(): PdfWorkspaceController {
     openInitialFiles,
     addFiles,
     startOver,
+    selectPage,
+    movePage,
+    deletePage,
+    rotatePage,
   };
 }

@@ -22,6 +22,10 @@ export function App() {
     openInitialFiles,
     addFiles,
     startOver,
+    selectPage,
+    movePage,
+    deletePage,
+    rotatePage,
   } = usePdfWorkspace();
 
   const handleInitialSelection = (
@@ -78,6 +82,11 @@ export function App() {
           maxZoom={MAX_ZOOM}
           onAddFiles={handleAddSelection}
           onStartOver={handleStartOver}
+          selectedPageId={workspace.selectedPageId}
+          onSelectPage={selectPage}
+          onMovePage={movePage}
+          onDeletePage={deletePage}
+          onRotatePage={rotatePage}
           onZoomIn={() =>
             setZoom((current) => Math.min(MAX_ZOOM, current + ZOOM_STEP))
           }

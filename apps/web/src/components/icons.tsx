@@ -53,3 +53,54 @@ export function CloseIcon(props: IconProps) {
     </svg>
   );
 }
+
+export function RotateIcon(props: IconProps) {
+  return (
+    <svg {...baseProps} {...props}>
+      <path d="M20 11a8 8 0 0 0-14.9-4L3 10" />
+      <path d="M3 5v5h5M4 13a8 8 0 0 0 14.9 4L21 14" />
+      <path d="M21 19v-5h-5" />
+    </svg>
+  );
+}
+
+export function TrashIcon(props: IconProps) {
+  return (
+    <svg {...baseProps} {...props}>
+      <path d="M4 7h16M10 11v6M14 11v6M6 7l1 14h10l1-14M9 7V4h6v3" />
+    </svg>
+  );
+}
+
+export function ChevronUpIcon(props: IconProps) {
+  return (
+    <svg {...baseProps} {...props}>
+      <path d="m6 15 6-6 6 6" />
+    </svg>
+  );
+}
+
+export function ChevronDownIcon(props: IconProps) {
+  return (
+    <svg {...baseProps} {...props}>
+      <path d="m6 9 6 6 6-6" />
+    </svg>
+  );
+}
+
+export function GripIcon(props: IconProps) {
+  return (
+    <svg {...baseProps} {...props}>
+      <path d="M9 5h.01M15 5h.01M9 12h.01M15 12h.01M9 19h.01M15 19h.01" />
+    </svg>
+  );
+}
+
+export function PagesIcon(props: IconProps) {
+  return (
+    <svg {...baseProps} {...props}>
+      <rect x="6" y="4" width="12" height="16" rx="1" />
+      <path d="M9 8h6M9 12h6M9 16h4" />
+    </svg>
+  );
+}

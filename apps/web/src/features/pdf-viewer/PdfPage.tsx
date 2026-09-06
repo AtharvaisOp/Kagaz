@@ -1,9 +1,12 @@
-import { useEffect, useRef, useState } from 'react';
+import { memo, useEffect, useRef, useState } from 'react';
 
 import { useNearViewport } from '../../hooks/useNearViewport';
 import { normalizeRotation } from '../pdf-workspace/model/operations';
 
-import type { WorkspacePage } from '../pdf-workspace/model/types';
+import type {
+  WorkspacePage,
+  WorkspacePageId,
+} from '../pdf-workspace/model/types';
 import type { PDFDocumentProxy, PDFPageProxy, RenderTask } from 'pdfjs-dist';
 
 interface PdfPageProps {
@@ -11,6 +14,10 @@ interface PdfPageProps {
   readonly document: PDFDocumentProxy;
   readonly workspacePosition: number;
   readonly zoom: number;
+  readonly registerPage?: (
+    pageId: WorkspacePageId,
+    element: HTMLDivElement | null,
+  ) => void;
 }
 
 type PageStatus = 'waiting' | 'loading' | 'ready' | 'error';
@@ -20,6 +27,7 @@ export function PdfPage({
   document,
   workspacePosition,
   zoom,
+  registerPage,
 }: PdfPageProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const { elementRef, isNearViewport } = useNearViewport();
@@ -31,6 +39,11 @@ export function PdfPage({
   const displayDimensions = {
     width: baseDimensions.width * (zoom / 100),
     height: baseDimensions.height * (zoom / 100),
+  };
+
+  const setPageRef = (element: HTMLDivElement | null) => {
+    elementRef.current = element;
+    registerPage?.(page.id, element);
   };
 
   useEffect(() => {
@@ -118,13 +131,19 @@ export function PdfPage({
       canvas.width = 0;
       canvas.height = 0;
     };
-  }, [document, isNearViewport, page, zoom]);
+  }, [
+    document,
+    isNearViewport,
+    page.rotationDelta,
+    page.sourcePageIndex,
+    zoom,
+  ]);
 
   const workspacePageNumber = workspacePosition + 1;
 
   return (
     <article
-      ref={elementRef}
+      ref={setPageRef}
       className="pdf-page-shell"
       data-workspace-page-id={page.id}
       aria-label={`Page ${workspacePageNumber}`}
@@ -161,3 +180,5 @@ export function PdfPage({
     </article>
   );
 }
+
+export const MemoizedPdfPage = memo(PdfPage);

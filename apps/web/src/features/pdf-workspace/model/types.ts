@@ -77,6 +77,10 @@ export type WorkspaceAction =
       readonly pageId: WorkspacePageId;
     }
   | {
+      readonly type: 'REMOVE_SOURCE';
+      readonly sourceId: SourceDocumentId;
+    }
+  | {
       readonly type: 'ROTATE_PAGE';
       readonly pageId: WorkspacePageId;
       readonly delta?: number;

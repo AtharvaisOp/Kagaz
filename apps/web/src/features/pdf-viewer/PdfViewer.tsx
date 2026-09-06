@@ -1,6 +1,10 @@
+import { useLayoutEffect, useRef, useState } from 'react';
+
 import { FileIssueList } from '../../components/FileIssueList';
-import { PdfPage } from './PdfPage';
+import { MemoizedPdfPage } from './PdfPage';
 import { ViewerToolbar } from './ViewerToolbar';
+import { ThumbnailRail } from '../pdf-workspace/components/ThumbnailRail';
+import { useWorkspaceNavigation } from '../pdf-workspace/hooks/useWorkspaceNavigation';
 
 import type { FileLoadIssue } from '../pdf-workspace/loading/types';
 import type { WorkspaceLoadingState } from '../pdf-workspace/hooks/usePdfWorkspace';
@@ -9,6 +13,7 @@ import type {
   SourceDocumentId,
   SourceDocumentSummary,
   WorkspacePage,
+  WorkspacePageId,
 } from '../pdf-workspace/model/types';
 
 interface PdfViewerProps {
@@ -26,6 +31,11 @@ interface PdfViewerProps {
     issues: readonly FileLoadIssue[],
   ) => void;
   readonly onStartOver: () => void;
+  readonly selectedPageId: WorkspacePageId | null;
+  readonly onSelectPage: (pageId: WorkspacePageId) => void;
+  readonly onMovePage: (pageId: WorkspacePageId, toIndex: number) => void;
+  readonly onDeletePage: (pageId: WorkspacePageId) => void;
+  readonly onRotatePage: (pageId: WorkspacePageId, delta?: number) => void;
   readonly onZoomIn: () => void;
   readonly onZoomOut: () => void;
 }
@@ -61,9 +71,36 @@ export function PdfViewer({
   maxZoom,
   onAddFiles,
   onStartOver,
+  selectedPageId,
+  onSelectPage,
+  onMovePage,
+  onDeletePage,
+  onRotatePage,
   onZoomIn,
   onZoomOut,
 }: PdfViewerProps) {
+  const [mobilePageManagerOpen, setMobilePageManagerOpen] = useState(false);
+  const scrollBeforePageManagerRef = useRef(0);
+  const openPageManager = () => {
+    scrollBeforePageManagerRef.current = window.scrollY;
+    setMobilePageManagerOpen(true);
+  };
+
+  useLayoutEffect(() => {
+    if (!mobilePageManagerOpen) return;
+    const scrollY = scrollBeforePageManagerRef.current;
+    window.scrollTo({ top: scrollY, behavior: 'auto' });
+    const frame = window.requestAnimationFrame(() => {
+      window.scrollTo({ top: scrollY, behavior: 'auto' });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [mobilePageManagerOpen]);
+
+  const navigation = useWorkspaceNavigation({
+    pages,
+    selectedPageId,
+    onSelectPage,
+  });
   const sourceLabel = getSourceLabel(sources, sourceOrder);
   const readySourceCount = sourceOrder.filter(
     (sourceId) => sources[sourceId]?.status === 'ready',
@@ -81,46 +118,70 @@ export function PdfViewer({
         maxZoom={maxZoom}
         onAddFiles={onAddFiles}
         onStartOver={onStartOver}
+        onOpenPages={openPageManager}
+        mobilePageManagerOpen={mobilePageManagerOpen}
         onZoomIn={onZoomIn}
         onZoomOut={onZoomOut}
       />
-      <div className="page-stack">
-        {pages.map((page, workspacePosition) => {
-          const document = registry.getDocument(page.sourceDocumentId);
+      <div className="workspace-layout">
+        <ThumbnailRail
+          pages={pages}
+          sources={sources}
+          registry={registry}
+          selectedPageId={selectedPageId}
+          issues={issues}
+          mobileOpen={mobilePageManagerOpen}
+          onCloseMobile={() => setMobilePageManagerOpen(false)}
+          onSelectPage={(pageId) => {
+            navigation.scrollToPage(pageId);
+            setMobilePageManagerOpen(false);
+          }}
+          onMovePage={onMovePage}
+          onDeletePage={onDeletePage}
+          onRotatePage={onRotatePage}
+        />
+        <div className="viewer-column">
+          <div className="page-stack">
+            {pages.map((page, workspacePosition) => {
+              const document = registry.getDocument(page.sourceDocumentId);
 
-          if (!document) {
-            return (
-              <article
-                key={page.id}
-                className="pdf-page-shell page-unavailable"
-                data-workspace-page-id={page.id}
-                aria-label={`Page ${workspacePosition + 1}`}
-              >
-                <div className="page-error" role="alert">
-                  This source is no longer available.
-                </div>
-              </article>
-            );
-          }
+              if (!document) {
+                return (
+                  <article
+                    key={page.id}
+                    className="pdf-page-shell page-unavailable"
+                    data-workspace-page-id={page.id}
+                    ref={(element) => navigation.registerPage(page.id, element)}
+                    aria-label={`Page ${workspacePosition + 1}`}
+                  >
+                    <div className="page-error" role="alert">
+                      This source is no longer available.
+                    </div>
+                  </article>
+                );
+              }
 
-          return (
-            <PdfPage
-              key={page.id}
-              page={page}
-              document={document}
-              workspacePosition={workspacePosition}
-              zoom={zoom}
-            />
-          );
-        })}
-      </div>
-      {loading.status === 'loading' ? (
-        <div className="viewer-loading" aria-live="polite">
-          Loading {loading.currentIndex} of {loading.total} PDFs
-          {loading.fileName ? ` · ${loading.fileName}` : ''}
+              return (
+                <MemoizedPdfPage
+                  key={page.id}
+                  page={page}
+                  document={document}
+                  workspacePosition={workspacePosition}
+                  zoom={zoom}
+                  registerPage={navigation.registerPage}
+                />
+              );
+            })}
+          </div>
+          {loading.status === 'loading' ? (
+            <div className="viewer-loading" aria-live="polite">
+              Loading {loading.currentIndex} of {loading.total} PDFs
+              {loading.fileName ? ` · ${loading.fileName}` : ''}
+            </div>
+          ) : null}
+          <FileIssueList issues={issues} />
         </div>
-      ) : null}
-      <FileIssueList issues={issues} />
+      </div>
     </section>
   );
 }

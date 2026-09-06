@@ -179,6 +179,28 @@ function updateSource(
   };
 }
 
+function removeSource(
+  state: PdfWorkspaceState,
+  sourceId: SourceDocumentId,
+): PdfWorkspaceState {
+  if (!state.sources[sourceId]) {
+    return state;
+  }
+
+  if (state.pages.some((page) => page.sourceDocumentId === sourceId)) {
+    return state;
+  }
+
+  const remainingSources = { ...state.sources };
+  delete remainingSources[sourceId];
+
+  return {
+    ...state,
+    sources: remainingSources,
+    sourceOrder: state.sourceOrder.filter((id) => id !== sourceId),
+  };
+}
+
 export function workspaceReducer(
   state: PdfWorkspaceState,
   action: WorkspaceAction,
@@ -275,6 +297,9 @@ export function workspaceReducer(
         selectedPageId,
       };
     }
+
+    case 'REMOVE_SOURCE':
+      return removeSource(state, action.sourceId);
 
     case 'ROTATE_PAGE': {
       const pages = rotatePage(state.pages, action.pageId, action.delta);

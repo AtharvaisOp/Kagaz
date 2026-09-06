@@ -1,5 +1,10 @@
 import { FilePicker } from '../../components/FilePicker';
-import { CloseIcon, MinusIcon, PlusIcon } from '../../components/icons';
+import {
+  CloseIcon,
+  MinusIcon,
+  PagesIcon,
+  PlusIcon,
+} from '../../components/icons';
 
 import type { FileLoadIssue } from '../pdf-workspace/loading/types';
 import type { WorkspaceLoadingState } from '../pdf-workspace/hooks/usePdfWorkspace';
@@ -17,6 +22,8 @@ interface ViewerToolbarProps {
     issues: readonly FileLoadIssue[],
   ) => void;
   readonly onStartOver: () => void;
+  readonly onOpenPages: () => void;
+  readonly mobilePageManagerOpen: boolean;
   readonly onZoomIn: () => void;
   readonly onZoomOut: () => void;
 }
@@ -31,6 +38,8 @@ export function ViewerToolbar({
   maxZoom,
   onAddFiles,
   onStartOver,
+  onOpenPages,
+  mobilePageManagerOpen,
   onZoomIn,
   onZoomOut,
 }: ViewerToolbarProps) {
@@ -72,6 +81,16 @@ export function ViewerToolbar({
           disabled={loading.status === 'loading'}
           onSelect={onAddFiles}
         />
+        <button
+          className="toolbar-button pages-toggle-button"
+          type="button"
+          aria-controls="thumbnail-rail"
+          aria-expanded={mobilePageManagerOpen}
+          onClick={onOpenPages}
+        >
+          <PagesIcon className="size-4" />
+          Pages
+        </button>
         <button
           className="toolbar-button start-over-button"
           type="button"
