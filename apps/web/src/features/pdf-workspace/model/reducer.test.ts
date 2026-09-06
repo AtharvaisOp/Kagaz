@@ -257,6 +257,29 @@ describe('workspaceReducer', () => {
     expect(next.dirty).toBe(false);
   });
 
+  it('removes an unreferenced source without changing logical pages', () => {
+    const state = initialize([pageA0]);
+    const next = workspaceReducer(state, {
+      type: 'REMOVE_SOURCE',
+      sourceId: 'source-b',
+    });
+
+    expect(next.sources['source-b']).toBeUndefined();
+    expect(next.sourceOrder).toEqual(['source-a']);
+    expect(next.pages).toEqual(state.pages);
+    expect(next.dirty).toBe(false);
+  });
+
+  it('refuses to remove a source while a page still references it', () => {
+    const state = initialize([pageA0, pageB0]);
+    const next = workspaceReducer(state, {
+      type: 'REMOVE_SOURCE',
+      sourceId: 'source-a',
+    });
+
+    expect(next).toBe(state);
+  });
+
   it('rotates through a full cycle and returns clean', () => {
     let state = initialize([pageA0]);
     for (let index = 0; index < 4; index += 1) {
