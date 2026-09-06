@@ -179,28 +179,6 @@ function updateSource(
   };
 }
 
-function removeSource(
-  state: PdfWorkspaceState,
-  sourceId: SourceDocumentId,
-): PdfWorkspaceState {
-  if (!state.sources[sourceId]) {
-    return state;
-  }
-
-  if (state.pages.some((page) => page.sourceDocumentId === sourceId)) {
-    return state;
-  }
-
-  const remainingSources = { ...state.sources };
-  delete remainingSources[sourceId];
-
-  return {
-    ...state,
-    sources: remainingSources,
-    sourceOrder: state.sourceOrder.filter((id) => id !== sourceId),
-  };
-}
-
 export function workspaceReducer(
   state: PdfWorkspaceState,
   action: WorkspaceAction,
@@ -292,14 +270,30 @@ export function workspaceReducer(
           ? (pages[Math.min(pageIndex, pages.length - 1)]?.id ?? null)
           : state.selectedPageId;
 
+      const deletedPage = state.pages[pageIndex];
+      const sourceStillReferenced =
+        deletedPage === undefined ||
+        pages.some(
+          (page) => page.sourceDocumentId === deletedPage.sourceDocumentId,
+        );
+      const nextState = withPages(state, pages);
+
+      if (sourceStillReferenced || deletedPage === undefined) {
+        return { ...nextState, selectedPageId };
+      }
+
+      const remainingSources = { ...nextState.sources };
+      delete remainingSources[deletedPage.sourceDocumentId];
+
       return {
-        ...withPages(state, pages),
+        ...nextState,
+        sources: remainingSources,
+        sourceOrder: nextState.sourceOrder.filter(
+          (sourceId) => sourceId !== deletedPage.sourceDocumentId,
+        ),
         selectedPageId,
       };
     }
-
-    case 'REMOVE_SOURCE':
-      return removeSource(state, action.sourceId);
 
     case 'ROTATE_PAGE': {
       const pages = rotatePage(state.pages, action.pageId, action.delta);

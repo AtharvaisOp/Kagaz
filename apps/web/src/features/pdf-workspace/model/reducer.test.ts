@@ -20,7 +20,7 @@ const sourceB: SourceDocumentSummary = {
   id: 'source-b',
   fileName: 'b.pdf',
   status: 'ready',
-  pageCount: 1,
+  pageCount: 2,
   error: null,
 };
 
@@ -42,6 +42,13 @@ const pageB0: WorkspacePage = {
   id: 'page-b-0',
   sourceDocumentId: 'source-b',
   sourcePageIndex: 0,
+  rotationDelta: 0,
+};
+
+const pageB1: WorkspacePage = {
+  id: 'page-b-1',
+  sourceDocumentId: 'source-b',
+  sourcePageIndex: 1,
   rotationDelta: 0,
 };
 
@@ -257,27 +264,36 @@ describe('workspaceReducer', () => {
     expect(next.dirty).toBe(false);
   });
 
-  it('removes an unreferenced source without changing logical pages', () => {
-    const state = initialize([pageA0]);
-    const next = workspaceReducer(state, {
-      type: 'REMOVE_SOURCE',
-      sourceId: 'source-b',
+  it('keeps a source while one of its pages remains', () => {
+    let state = initialize([pageA0, pageB0, pageB1]);
+    state = workspaceReducer(state, {
+      type: 'DELETE_PAGE',
+      pageId: 'page-b-0',
     });
 
-    expect(next.sources['source-b']).toBeUndefined();
-    expect(next.sourceOrder).toEqual(['source-a']);
-    expect(next.pages).toEqual(state.pages);
-    expect(next.dirty).toBe(false);
+    expect(state.pages.map((page) => page.id)).toEqual([
+      'page-a-0',
+      'page-b-1',
+    ]);
+    expect(state.sources['source-b']).toBeDefined();
+    expect(state.sourceOrder).toEqual(['source-a', 'source-b']);
   });
 
-  it('refuses to remove a source while a page still references it', () => {
-    const state = initialize([pageA0, pageB0]);
-    const next = workspaceReducer(state, {
-      type: 'REMOVE_SOURCE',
-      sourceId: 'source-a',
+  it('prunes a source after sequential deletes remove its final page', () => {
+    let state = initialize([pageA0, pageB0, pageB1]);
+    state = workspaceReducer(state, {
+      type: 'DELETE_PAGE',
+      pageId: 'page-b-0',
+    });
+    state = workspaceReducer(state, {
+      type: 'DELETE_PAGE',
+      pageId: 'page-b-1',
     });
 
-    expect(next).toBe(state);
+    expect(state.pages).toEqual([pageA0]);
+    expect(Object.keys(state.sources)).toEqual(['source-a']);
+    expect(state.sourceOrder).toEqual(['source-a']);
+    expect(state.selectedPageId).toBe('page-a-0');
   });
 
   it('rotates through a full cycle and returns clean', () => {
@@ -333,8 +349,8 @@ describe('workspaceReducer', () => {
       pageId: 'page-b-0',
     });
     expect(state.dirty).toBe(false);
-    expect(state.sources['source-b']).toBeDefined();
-    expect(state.sourceOrder).toContain('source-b');
+    expect(state.sources['source-b']).toBeUndefined();
+    expect(state.sourceOrder).not.toContain('source-b');
   });
 
   it('requires explicit initialization for an empty session append', () => {

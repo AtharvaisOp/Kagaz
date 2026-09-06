@@ -4,13 +4,17 @@ import {
   loadSourceBatch,
   type SourceBatchResult,
 } from '../loading/sourceBatch';
-import { deleteWorkspacePage } from '../editing';
 import type { FileLoadIssue, LoadingProgress } from '../loading/types';
 import { createBrowserIdFactory } from '../runtime/ids';
+import { destroyRemovedSources } from '../runtime/sourceCleanup';
 import { SourceDocumentRegistry } from '../runtime/sourceDocumentRegistry';
 import { createEmptyWorkspaceState, workspaceReducer } from '../model/reducer';
 
-import type { PdfWorkspaceState, WorkspacePageId } from '../model/types';
+import type {
+  PdfWorkspaceState,
+  SourceDocumentId,
+  WorkspacePageId,
+} from '../model/types';
 
 export interface WorkspaceLoadingState {
   readonly status: 'idle' | 'loading';
@@ -67,6 +71,7 @@ export function usePdfWorkspace(): PdfWorkspaceController {
   const [registry] = useState(() => new SourceDocumentRegistry());
   const generationRef = useRef(0);
   const batchControllerRef = useRef<AbortController | null>(null);
+  const committedSourceIdsRef = useRef<readonly SourceDocumentId[]>([]);
   const [loading, setLoading] = useState<WorkspaceLoadingState>(IDLE_LOADING);
   const [issues, setIssues] = useState<readonly FileLoadIssue[]>([]);
 
@@ -258,16 +263,27 @@ export function usePdfWorkspace(): PdfWorkspaceController {
     dispatch({ type: 'MOVE_PAGE', pageId, toIndex });
   }, []);
 
-  const deletePage = useCallback(
-    (pageId: WorkspacePageId) => {
-      deleteWorkspacePage(workspace, pageId, dispatch, registry);
-    },
-    [registry, workspace],
-  );
+  const deletePage = useCallback((pageId: WorkspacePageId) => {
+    dispatch({ type: 'DELETE_PAGE', pageId });
+  }, []);
 
   const rotatePage = useCallback((pageId: WorkspacePageId, delta?: number) => {
     dispatch({ type: 'ROTATE_PAGE', pageId, delta });
   }, []);
+
+  useEffect(() => {
+    const currentSourceIds = Object.keys(workspace.sources);
+
+    if (workspace.sessionStatus === 'active') {
+      destroyRemovedSources(
+        registry,
+        committedSourceIdsRef.current,
+        currentSourceIds,
+      );
+    }
+
+    committedSourceIdsRef.current = currentSourceIds;
+  }, [registry, workspace.sessionStatus, workspace.sources]);
 
   useEffect(() => {
     return () => {

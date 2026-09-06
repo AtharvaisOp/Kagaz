@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 
 import { normalizeRotation } from '../model/operations';
+import { adoptResolvedPdfPage } from '../runtime/pdfPageLifecycle';
 
 import type { WorkspacePage } from '../model/types';
 import type { PDFDocumentProxy, PDFPageProxy, RenderTask } from 'pdfjs-dist';
@@ -57,13 +58,16 @@ export function ThumbnailCanvas({
     void document
       .getPage(page.sourcePageIndex + 1)
       .then((pdfPage) => {
-        if (!active) return;
-        loadedPage = pdfPage;
-        const rotation = normalizeRotation(pdfPage.rotate + page.rotationDelta);
-        const baseViewport = pdfPage.getViewport({ scale: 1, rotation });
+        const ownedPage = adoptResolvedPdfPage(pdfPage, active);
+        if (!ownedPage) return;
+        loadedPage = ownedPage;
+        const rotation = normalizeRotation(
+          ownedPage.rotate + page.rotationDelta,
+        );
+        const baseViewport = ownedPage.getViewport({ scale: 1, rotation });
         const scale =
           baseViewport.width > 0 ? THUMBNAIL_WIDTH / baseViewport.width : 1;
-        const viewport = pdfPage.getViewport({ scale, rotation });
+        const viewport = ownedPage.getViewport({ scale, rotation });
         const pixelRatio = Math.min(window.devicePixelRatio || 1, 1.75);
         const context = canvas.getContext('2d', { alpha: false });
         if (!context) throw new Error('Thumbnail rendering is unavailable.');
@@ -72,7 +76,7 @@ export function ThumbnailCanvas({
         canvas.height = Math.floor(viewport.height * pixelRatio);
         canvas.style.width = `${viewport.width}px`;
         canvas.style.height = `${viewport.height}px`;
-        renderTask = pdfPage.render({
+        renderTask = ownedPage.render({
           canvas,
           canvasContext: context,
           transform:

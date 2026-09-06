@@ -2,6 +2,7 @@ import { memo, useEffect, useRef, useState } from 'react';
 
 import { useNearViewport } from '../../hooks/useNearViewport';
 import { normalizeRotation } from '../pdf-workspace/model/operations';
+import { adoptResolvedPdfPage } from '../pdf-workspace/runtime/pdfPageLifecycle';
 
 import type {
   WorkspacePage,
@@ -65,19 +66,20 @@ export function PdfPage({
     void document
       .getPage(page.sourcePageIndex + 1)
       .then((nextPage) => {
-        if (!active) {
+        const ownedPage = adoptResolvedPdfPage(nextPage, active);
+        if (!ownedPage) {
           return;
         }
 
-        loadedPage = nextPage;
+        loadedPage = ownedPage;
         const totalRotation = normalizeRotation(
-          nextPage.rotate + page.rotationDelta,
+          ownedPage.rotate + page.rotationDelta,
         );
-        const baseViewport = nextPage.getViewport({
+        const baseViewport = ownedPage.getViewport({
           scale: 1,
           rotation: totalRotation,
         });
-        const viewport = nextPage.getViewport({
+        const viewport = ownedPage.getViewport({
           scale: zoom / 100,
           rotation: totalRotation,
         });
@@ -97,7 +99,7 @@ export function PdfPage({
         canvas.style.width = `${viewport.width}px`;
         canvas.style.height = `${viewport.height}px`;
 
-        renderTask = nextPage.render({
+        renderTask = ownedPage.render({
           canvas,
           canvasContext: context,
           transform:
