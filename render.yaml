@@ -1,0 +1,14 @@
+services:
+  - type: web
+    name: kagaz-api
+    runtime: docker
+    region: singapore
+    plan: free
+    branch: main
+    dockerfilePath: apps/api/Dockerfile
+    dockerContext: .
+    healthCheckPath: /health
+    autoDeployTrigger: commit
+    envVars:
+      - key: CORS_ORIGINS
+        value: https://kagaz-personal.vercel.app

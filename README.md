@@ -119,19 +119,24 @@ The root `packageManager` field pins pnpm, so Vercel can use Corepack consistent
 
 ## Deploy the backend to Render
 
-Create the backend as a Docker web service so later phases can add native PDF binaries without replacing the deployment model:
+The repository includes a Render Blueprint at [`render.yaml`](./render.yaml). It creates one Docker Web Service from `apps/api/Dockerfile`, uses the repository root as its Docker context, deploys the `main` branch automatically, and checks `/health`. The Blueprint currently allows the Vercel project shown in the dashboard (`https://kagaz-personal.vercel.app`) through `CORS_ORIGINS`.
 
-1. In Render, choose **New → Web Service** and connect `https://github.com/AtharvaisOp/Kagaz`.
-2. Select branch `main` and runtime **Docker**.
-3. Use the repository root as the Docker build context.
-4. Set **Dockerfile Path** to `apps/api/Dockerfile`.
-5. Leave the Docker command blank; the image starts `node dist/index.js`.
-6. Add `CORS_ORIGINS` with the exact deployed Vercel origin, for example `https://kagaz.example.vercel.app`. Multiple origins may be comma-separated.
-7. Render supplies `PORT`; the API reads it automatically. No manual `PORT` value is normally needed.
-8. Set **Health Check Path** to `/health`.
-9. Deploy and verify `https://<render-service>.onrender.com/health` returns `status: "ok"`.
+1. Confirm [`render.yaml`](./render.yaml) is present on the `main` branch.
+2. Open the Render Blueprint importer: `https://dashboard.render.com/blueprint/new?repo=https://github.com/AtharvaisOp/Kagaz`.
+3. Complete GitHub authorization if Render asks for it.
+4. Review the service before applying it:
+   - service name: `kagaz-api`
+   - runtime: Docker
+   - Dockerfile: `apps/api/Dockerfile`
+   - Docker context: repository root
+   - region: Singapore
+   - plan: Free
+   - health check: `/health`
+5. Click **Apply** to create and deploy the service.
+6. On the service's **Deploys** page, wait for the first deploy to become **Live**.
+7. Open `https://<your-service-name>.onrender.com/health`; it should return `status: "ok"`.
 
-When the final Vercel domain changes, update `CORS_ORIGINS` in Render and redeploy the service. Do not add a trailing slash to origins.
+Render supplies `PORT` automatically; do not add a manual production `PORT`. If the Vercel domain changes, update `CORS_ORIGINS` in the Render service environment and redeploy. Keep origins comma-separated and omit trailing slashes.
 
 To test the same image locally from the repository root:
 
