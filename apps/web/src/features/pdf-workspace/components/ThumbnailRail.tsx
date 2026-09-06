@@ -205,6 +205,12 @@ export function ThumbnailRail({
     button?.focus();
   }, [pages, railRoot, selectedPageId]);
 
+  useEffect(() => {
+    if (mobileOpen) {
+      railRoot?.focus();
+    }
+  }, [mobileOpen, railRoot]);
+
   const handleDelete = (pageId: WorkspacePageId) => {
     const position = pageOrder.indexOf(pageId);
     pendingFocusPageId.current = pageOrder[Math.max(0, position - 1)] ?? null;
@@ -239,6 +245,7 @@ export function ThumbnailRail({
         className="thumbnail-rail"
         data-mobile-open={mobileOpen || undefined}
         aria-label="Workspace pages"
+        tabIndex={mobileOpen ? -1 : undefined}
       >
         <div className="sr-only" role="status" aria-live="polite">
           {announcement}

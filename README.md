@@ -1,154 +1,160 @@
 # Kagaz
 
-Kagaz is a browser-first PDF workspace built around a simple rule: when a document operation can happen safely on the user's device, it should. Phase 0 establishes the engineering foundation and delivers a polished local PDF viewer with multi-page rendering, vertical scrolling, lazy page activation, and zoom controls.
+Kagaz is a browser-first PDF workspace for combining and arranging documents
+locally. Open one or several PDFs, inspect their pages, reorder them, rotate or
+delete pages, extract a range, and download the result without sending PDF
+bytes to a server.
 
-PDF files selected in the viewer are read directly by PDF.js in the browser. They are **not uploaded to the Kagaz API**. The API is currently a small deployment-ready foundation for later operations that genuinely require native server tooling.
+## Phase 1 capabilities
 
-## Phase 0 capabilities
+- Open one or multiple PDF files, including drag-and-drop selection
+- Keep valid files when a mixed selection contains invalid files
+- View multi-page documents with lazy, viewport-aware rendering
+- Navigate with the page manager and stable page identities
+- Reorder pages with drag-and-drop or Move Up/Move Down controls
+- Rotate pages in 90-degree increments
+- Delete pages while protecting the final page in a workspace
+- Add more PDFs to an existing workspace, including duplicate selections
+- Merge sources according to the current workspace order
+- Extract single pages, inclusive ranges, and comma-separated page expressions
+- Download edited, merged, or extracted PDFs
+- Keep PDF editing and export browser-local
 
-- Choose or drag and drop a local PDF
-- Validate the selected file and report corrupt/unsupported documents
-- Render all pages in a vertically scrolling viewer
-- Zoom from 50% to 200% in 10% steps
-- Replace or close the active document cleanly
-- Render nearby pages on demand with `IntersectionObserver`, releasing canvases that move well outside the viewport
-- Render canvases at device-aware resolution for crisp output
-- Serve a typed `GET /health` endpoint from the API
+The current workspace is intentionally lightweight: zoom is display state,
+while page order, deletion, rotation, and selection are logical workspace
+state. Start Over protects dirty work with a discard confirmation.
 
-Merge, split, page editing, annotations, forms, signatures, OCR, conversion, accounts, and persistence are intentionally not part of Phase 0.
+## Privacy-first architecture
 
-## Architecture
-
-Kagaz is a pnpm/Turborepo TypeScript monorepo:
+PDF source files stay in the browser for current Phase 1 operations. The
+backend is not involved in PDF editing or export.
 
 ```text
-Kagaz/
-├── apps/
-│   ├── web/                 React, Vite, Tailwind CSS, PDF.js
-│   └── api/                 Express and TypeScript
-├── packages/
-│   └── shared-types/        Cross-application contracts
-├── .github/workflows/ci.yml
-├── AGENTS.md
-├── design.md
-├── package.json
-├── pnpm-workspace.yaml
-└── turbo.json
+Browser
+│
+├─ SourceDocumentRegistry
+│    └─ PDF.js source documents and loading lifecycle
+│
+├─ WorkspacePage[]
+│    └─ order, source page, rotation, selection
+│
+├─ Thumbnail / main viewer
+│
+└─ pdf-lib export
+     └─ browser-local Blob download
+
+Backend
+└─ Express /health foundation for future server-heavy work
 ```
 
-The web app owns lightweight and privacy-sensitive PDF work. The API is reserved for future workloads that need tools such as Ghostscript, qpdf, Tesseract, or LibreOffice; none are installed in this phase.
+PDF.js is responsible for preview and rendering. The workspace reducer stores
+serializable logical edits. The source registry owns browser `File` objects
+and PDF.js runtime resources. The export layer resolves the original Files by
+stable source ID and uses pdf-lib to create output bytes in the browser.
 
 ## Technology
 
-- Node.js 22.20.0 (minimum supported version: 22.13.0)
-- pnpm 12.3.4
-- Turborepo
-- React 19, Vite, TypeScript, Tailwind CSS
+- React 19, Vite, TypeScript, and Tailwind CSS
 - PDF.js through `pdfjs-dist`
-- Express 5
-- Docker for the backend deployment path
-- GitHub Actions for lint, typecheck, and build verification
+- `pdf-lib` for browser-local output generation
+- `@dnd-kit/react` for page reordering
+- Vitest for deterministic model, lifecycle, and export tests
+- pnpm workspaces and Turborepo
+- Express 5 and Docker for the API foundation
+- GitHub Actions, Vercel, and Render deployment paths
 
 ## Local development
 
-Prerequisites: Node.js 22.13 or newer and Corepack.
+Prerequisites: Node.js 22.13 or newer and pnpm 12.3.4.
 
 ```bash
-corepack enable
 pnpm install
 pnpm dev
+pnpm lint
+pnpm typecheck
+pnpm test
+pnpm build
+pnpm format:check
 ```
 
-The web app defaults to [http://localhost:5173](http://localhost:5173), and the API defaults to [http://localhost:4000](http://localhost:4000). The viewer does not require the API.
+The web app runs at `http://localhost:5173`; the API defaults to
+`http://localhost:4000`. Phase 1 PDF editing does not require the API.
 
-Useful repository commands:
-
-```bash
-pnpm dev          # run web and API development servers
-pnpm lint         # lint every workspace
-pnpm typecheck    # typecheck every workspace
-pnpm build        # build every workspace
-pnpm format:check # check repository formatting
-```
-
-To run only one application:
+Run one application directly when useful:
 
 ```bash
 pnpm --filter @kagaz/web dev
 pnpm --filter @kagaz/api dev
 ```
 
-### API environment
+The web production output is written to `apps/web/dist`. The API entry point
+is `apps/api/dist/index.js`.
 
-Copy `apps/api/.env.example` to `apps/api/.env` when custom local values are needed.
+## API environment
 
-| Variable       | Required | Default                 | Purpose                                                      |
-| -------------- | -------- | ----------------------- | ------------------------------------------------------------ |
-| `PORT`         | No       | `4000`                  | HTTP port; hosting platforms may provide this automatically. |
-| `CORS_ORIGINS` | No       | `http://localhost:5173` | Comma-separated browser origins allowed to call the API.     |
+Copy `apps/api/.env.example` to `apps/api/.env` only when custom local values
+are needed.
 
-No secrets are required in Phase 0.
+| Variable       | Default                 | Purpose                                               |
+| -------------- | ----------------------- | ----------------------------------------------------- |
+| `PORT`         | `4000`                  | API listening port; hosting platforms may provide it. |
+| `CORS_ORIGINS` | `http://localhost:5173` | Comma-separated API origins.                          |
 
-## Production builds
+No secrets are required for the current Phase 1 workflow.
 
-```bash
-pnpm install --frozen-lockfile
-pnpm lint
-pnpm typecheck
-pnpm build
+## Deployment
+
+### Vercel
+
+The intended frontend configuration uses the repository root:
+
+- Repository: `AtharvaisOp/Kagaz`
+- Root Directory: `./`
+- Framework: Vite
+- Node.js: 22.x
+- Install Command: `pnpm install --frozen-lockfile`
+- Build Command: `pnpm --filter @kagaz/web build`
+- Output Directory: `apps/web/dist`
+
+The configured production-origin candidate is
+`https://kagaz-personal.vercel.app`. The repository does not require a
+frontend API environment variable for Phase 1.
+
+During the final Phase 1 audit, that domain was reachable but still served
+the older single-document viewer. Promote the latest `main` deployment before
+using it as the Phase 1 product URL. The previously known preview URL was
+Vercel-authenticated in the audit environment.
+
+### Render
+
+The API service is `kagaz-api` at
+`https://kagaz-api.onrender.com`. Its health endpoint is:
+
+```text
+https://kagaz-api.onrender.com/health
 ```
 
-The web output is written to `apps/web/dist`. The compiled API entry point is `apps/api/dist/index.js`.
+The Render Blueprint uses the `main` branch, Docker, the Singapore region,
+and `/health` as its health check. `CORS_ORIGINS` is configured for the
+intended production frontend origin. Render is reserved for future operations
+that genuinely need native tooling.
 
-## Deploy the frontend to Vercel
+## Current limitations
 
-Do not create a separate frontend repository. Configure the monorepo from its root:
+- Password-protected PDFs cannot be opened; password entry is not available.
+- There is no undo/redo or persistence yet.
+- Annotations, forms, signatures, OCR, compression, and conversion are not
+  implemented.
+- There are no accounts, cloud storage, or collaboration features.
+- Very large PDFs may create browser memory pressure.
+- The page-copy export workflow may not preserve every document-level feature,
+  such as outlines or advanced interactive structures.
 
-1. In Vercel, choose **Add New → Project** and import `AtharvaisOp/Kagaz`.
-2. Select the `main` branch.
-3. Set **Root Directory** to the repository root (`./`), not `apps/web`.
-4. Select **Vite** as the framework preset.
-5. Set **Node.js Version** to `22.x`.
-6. Set **Install Command** to `pnpm install --frozen-lockfile`.
-7. Set **Build Command** to `pnpm --filter @kagaz/web build`.
-8. Set **Output Directory** to `apps/web/dist`.
-9. No frontend environment variables are required for Phase 0.
-10. Deploy, then verify the upload flow at the assigned Vercel domain.
+## Roadmap
 
-The root `packageManager` field pins pnpm, so Vercel can use Corepack consistently. If Vercel offers an "Include source files outside of the Root Directory" option, it is irrelevant with the repository-root configuration above.
+- Phase 2 — annotations
+- Phase 3 — forms and signatures
+- Phase 4 — server-backed heavy processing such as OCR and conversion
 
-## Deploy the backend to Render
-
-The repository includes a Render Blueprint at [`render.yaml`](./render.yaml). It creates one Docker Web Service from `apps/api/Dockerfile`, uses the repository root as its Docker context, deploys the `main` branch automatically, and checks `/health`. The Blueprint currently allows the Vercel project shown in the dashboard (`https://kagaz-personal.vercel.app`) through `CORS_ORIGINS`.
-
-1. Confirm [`render.yaml`](./render.yaml) is present on the `main` branch.
-2. Open the Render Blueprint importer: `https://dashboard.render.com/blueprint/new?repo=https://github.com/AtharvaisOp/Kagaz`.
-3. Complete GitHub authorization if Render asks for it.
-4. Review the service before applying it:
-   - service name: `kagaz-api`
-   - runtime: Docker
-   - Dockerfile: `apps/api/Dockerfile`
-   - Docker context: repository root
-   - region: Singapore
-   - plan: Free
-   - health check: `/health`
-5. Click **Apply** to create and deploy the service.
-6. On the service's **Deploys** page, wait for the first deploy to become **Live**.
-7. Open `https://<your-service-name>.onrender.com/health`; it should return `status: "ok"`.
-
-Render supplies `PORT` automatically; do not add a manual production `PORT`. If the Vercel domain changes, update `CORS_ORIGINS` in the Render service environment and redeploy. Keep origins comma-separated and omit trailing slashes.
-
-To test the same image locally from the repository root:
-
-```bash
-docker build -f apps/api/Dockerfile -t kagaz-api .
-docker run --rm -p 4000:4000 -e PORT=4000 -e CORS_ORIGINS=http://localhost:5173 kagaz-api
-```
-
-## Privacy model
-
-The browser receives the PDF as a `File`, converts it to an in-memory byte array, and passes it directly to the bundled PDF.js worker. No object URL or network request is created for the document. Replacing or closing a PDF cancels active page renders and destroys the previous PDF.js document so its resources can be released. Page canvases are also cancelled and cleared after moving beyond an observer margin, which bounds rendering work as the user moves through a large document.
-
-## Project status
-
-Phase 0 is the viewing infrastructure only. The planned sequence adds client-side page operations, annotations, forms and signatures, then carefully scoped server-backed conversion/OCR work. The hybrid architecture and package boundaries established here should remain the default unless a later requirement provides a concrete reason to change them.
+The browser-local architecture remains the default for operations that can be
+performed safely on the device.

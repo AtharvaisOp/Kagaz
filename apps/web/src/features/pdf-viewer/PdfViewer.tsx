@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef, useState } from 'react';
+import { useCallback, useLayoutEffect, useRef, useState } from 'react';
 
 import { FileIssueList } from '../../components/FileIssueList';
 import { MemoizedPdfPage } from './PdfPage';
@@ -90,11 +90,18 @@ export function PdfViewer({
   const [mobilePageManagerOpen, setMobilePageManagerOpen] = useState(false);
   const [extractOpen, setExtractOpen] = useState(false);
   const [extractSession, setExtractSession] = useState(0);
+  const extractTriggerRef = useRef<HTMLButtonElement>(null);
+  const pagesTriggerRef = useRef<HTMLButtonElement>(null);
   const scrollBeforePageManagerRef = useRef(0);
   const openPageManager = () => {
     scrollBeforePageManagerRef.current = window.scrollY;
     setMobilePageManagerOpen(true);
   };
+
+  const closePageManager = useCallback(() => {
+    setMobilePageManagerOpen(false);
+    window.requestAnimationFrame(() => pagesTriggerRef.current?.focus());
+  }, []);
 
   useLayoutEffect(() => {
     if (!mobilePageManagerOpen) return;
@@ -120,6 +127,10 @@ export function PdfViewer({
     setExtractSession((current) => current + 1);
     setExtractOpen(true);
   };
+  const closeExtract = useCallback(() => {
+    setExtractOpen(false);
+    window.requestAnimationFrame(() => extractTriggerRef.current?.focus());
+  }, []);
 
   return (
     <section className="viewer" aria-label={`Viewing ${sourceLabel}`}>
@@ -140,12 +151,14 @@ export function PdfViewer({
         exportState={exportState}
         onDownloadPdf={onDownloadPdf}
         onOpenExtract={openExtract}
+        extractTriggerRef={extractTriggerRef}
+        pagesTriggerRef={pagesTriggerRef}
       />
       <ExtractPagesDialog
         key={extractSession}
         pageCount={pages.length}
         open={extractOpen}
-        onClose={() => setExtractOpen(false)}
+        onClose={closeExtract}
         onExtract={(indexes) => {
           onExtractPages(
             indexes
@@ -162,10 +175,10 @@ export function PdfViewer({
           selectedPageId={selectedPageId}
           issues={issues}
           mobileOpen={mobilePageManagerOpen}
-          onCloseMobile={() => setMobilePageManagerOpen(false)}
+          onCloseMobile={closePageManager}
           onSelectPage={(pageId) => {
             navigation.scrollToPage(pageId);
-            setMobilePageManagerOpen(false);
+            closePageManager();
           }}
           onMovePage={onMovePage}
           onDeletePage={onDeletePage}

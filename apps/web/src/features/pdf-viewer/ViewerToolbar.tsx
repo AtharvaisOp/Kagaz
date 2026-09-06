@@ -11,6 +11,7 @@ import {
 import type { FileLoadIssue } from '../pdf-workspace/loading/types';
 import type { WorkspaceLoadingState } from '../pdf-workspace/hooks/usePdfWorkspace';
 import type { PdfExportState } from '../pdf-workspace/hooks/usePdfExport';
+import type { RefObject } from 'react';
 
 interface ViewerToolbarProps {
   readonly sourceLabel: string;
@@ -32,6 +33,8 @@ interface ViewerToolbarProps {
   readonly exportState: PdfExportState;
   readonly onDownloadPdf: () => void;
   readonly onOpenExtract: () => void;
+  readonly extractTriggerRef: RefObject<HTMLButtonElement | null>;
+  readonly pagesTriggerRef: RefObject<HTMLButtonElement | null>;
 }
 
 export function ViewerToolbar({
@@ -51,6 +54,8 @@ export function ViewerToolbar({
   exportState,
   onDownloadPdf,
   onOpenExtract,
+  extractTriggerRef,
+  pagesTriggerRef,
 }: ViewerToolbarProps) {
   const exporting = exportState.status === 'exporting';
   const exportStatus = exportState.progress
@@ -107,6 +112,7 @@ export function ViewerToolbar({
           onSelect={onAddFiles}
         />
         <button
+          ref={extractTriggerRef}
           className="toolbar-button extract-button"
           type="button"
           disabled={exporting}
@@ -126,6 +132,7 @@ export function ViewerToolbar({
           {exporting ? 'Creating…' : 'Download PDF'}
         </button>
         <button
+          ref={pagesTriggerRef}
           className="toolbar-button pages-toggle-button"
           type="button"
           aria-controls="thumbnail-rail"

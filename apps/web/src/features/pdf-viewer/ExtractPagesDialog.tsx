@@ -30,22 +30,45 @@ export function ExtractPagesDialog({
   onExtract,
 }: ExtractPagesDialogProps) {
   const inputRef = useRef<HTMLInputElement>(null);
-  const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const dialogRef = useRef<HTMLElement>(null);
   const [expression, setExpression] = useState('');
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!open) return;
-    const closeButton = closeButtonRef.current;
     const frame = window.requestAnimationFrame(() => inputRef.current?.focus());
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') onClose();
+      if (event.key !== 'Tab') return;
+
+      const dialog = dialogRef.current;
+      if (!dialog) return;
+      const focusable = Array.from(
+        dialog.querySelectorAll<HTMLElement>(
+          'button:not([disabled]), input:not([disabled]), [href], select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+        ),
+      );
+      if (focusable.length === 0) return;
+
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (!first || !last) return;
+
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      } else if (!dialog.contains(document.activeElement)) {
+        event.preventDefault();
+        (event.shiftKey ? last : first).focus();
+      }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => {
       window.cancelAnimationFrame(frame);
       window.removeEventListener('keydown', handleKeyDown);
-      closeButton?.focus();
     };
   }, [onClose, open]);
 
@@ -61,6 +84,7 @@ export function ExtractPagesDialog({
       onMouseDown={onClose}
     >
       <section
+        ref={dialogRef}
         className="extract-dialog"
         role="dialog"
         aria-modal="true"
@@ -74,7 +98,6 @@ export function ExtractPagesDialog({
             <h2 id="extract-dialog-title">Extract pages</h2>
           </div>
           <button
-            ref={closeButtonRef}
             className="icon-button"
             type="button"
             aria-label="Close extract pages"
