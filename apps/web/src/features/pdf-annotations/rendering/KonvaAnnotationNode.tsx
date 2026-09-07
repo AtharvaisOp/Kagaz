@@ -17,6 +17,7 @@ interface KonvaAnnotationNodeProps {
   readonly annotation: PdfAnnotation;
   readonly viewport: AnnotationViewport;
   readonly selected: boolean;
+  readonly interactive?: boolean;
   readonly nodeRef: (node: Konva.Node | null) => void;
   readonly onSelect: () => void;
   readonly onDragStart: (node: Konva.Node) => void;
@@ -37,6 +38,7 @@ export function KonvaAnnotationNode({
   annotation,
   viewport,
   selected,
+  interactive = true,
   nodeRef,
   onSelect,
   onDragStart,
@@ -53,9 +55,12 @@ export function KonvaAnnotationNode({
       <Group
         ref={nodeRef}
         id={annotation.id}
-        draggable={selected}
-        preventDefault={selected}
-        onPointerDown={(event) => selectFromEvent(event, onSelect)}
+        draggable={interactive && selected}
+        listening={interactive}
+        preventDefault={interactive && selected}
+        onPointerDown={(event) =>
+          interactive && selectFromEvent(event, onSelect)
+        }
         onDragStart={(event) => onDragStart(event.target)}
         onDragEnd={(event) => onDragEnd(event.target)}
       >
@@ -79,9 +84,12 @@ export function KonvaAnnotationNode({
       <Group
         ref={nodeRef}
         id={annotation.id}
-        draggable={selected}
-        preventDefault={selected}
-        onPointerDown={(event) => selectFromEvent(event, onSelect)}
+        draggable={interactive && selected}
+        listening={interactive}
+        preventDefault={interactive && selected}
+        onPointerDown={(event) =>
+          interactive && selectFromEvent(event, onSelect)
+        }
         onDragStart={(event) => onDragStart(event.target)}
         onDragEnd={(event) => onDragEnd(event.target)}
       >
@@ -106,17 +114,19 @@ export function KonvaAnnotationNode({
   }
 
   const { bounds } = projection;
-  const interactive = annotation.kind !== 'text' && annotation.kind !== 'image';
+  const boxInteractive =
+    interactive && annotation.kind !== 'text' && annotation.kind !== 'image';
   const common = {
     id: annotation.id,
     x: bounds.x,
     y: bounds.y,
     width: bounds.width,
     height: bounds.height,
-    draggable: interactive && selected,
-    preventDefault: selected && interactive,
+    listening: boxInteractive,
+    draggable: boxInteractive && selected,
+    preventDefault: selected && boxInteractive,
     onPointerDown: (event: Konva.KonvaEventObject<PointerEvent>) =>
-      selectFromEvent(event, onSelect),
+      boxInteractive && selectFromEvent(event, onSelect),
     onDragStart: (event: Konva.KonvaEventObject<DragEvent>) =>
       onDragStart(event.target),
     onDragEnd: (event: Konva.KonvaEventObject<DragEvent>) =>

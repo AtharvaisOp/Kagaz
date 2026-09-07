@@ -3,6 +3,10 @@ import { memo, useEffect, useRef, useState } from 'react';
 import { useNearViewport } from '../../hooks/useNearViewport';
 import { AnnotationOverlay } from '../pdf-annotations/rendering/AnnotationOverlay';
 import type {
+  AnnotationStyleDefaults,
+  AnnotationTool,
+} from '../pdf-annotations/model/editorTypes';
+import type {
   AnnotationId,
   PdfAnnotation,
 } from '../pdf-annotations/model/types';
@@ -32,6 +36,10 @@ interface PdfPageProps {
     annotationId: AnnotationId | null,
   ) => void;
   readonly onCommitAnnotation: (annotation: PdfAnnotation) => void;
+  readonly onCreateAnnotation: (annotation: PdfAnnotation) => void;
+  readonly activeTool: AnnotationTool;
+  readonly styleDefaults: AnnotationStyleDefaults;
+  readonly createAnnotationId: () => string;
   readonly registerPage?: (
     pageId: WorkspacePageId,
     element: HTMLDivElement | null,
@@ -56,6 +64,10 @@ export function PdfPage({
   selectedAnnotationId,
   onSelectAnnotation,
   onCommitAnnotation,
+  onCreateAnnotation,
+  activeTool,
+  styleDefaults,
+  createAnnotationId,
   registerPage,
 }: PdfPageProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -256,6 +268,10 @@ export function PdfPage({
             selectedAnnotationId={selectedAnnotationId}
             onSelectAnnotation={onSelectAnnotation}
             onCommitAnnotation={onCommitAnnotation}
+            onCreateAnnotation={onCreateAnnotation}
+            activeTool={activeTool}
+            styleDefaults={styleDefaults}
+            createAnnotationId={createAnnotationId}
           />
         ) : null}
       </div>

@@ -1116,6 +1116,118 @@ input:focus-visible + * {
   touch-action: pan-y;
 }
 
+.annotation-overlay--creating {
+  cursor: crosshair;
+}
+
+.annotation-toolbar {
+  position: sticky;
+  z-index: 12;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  min-height: 46px;
+  padding: 7px 14px;
+  overflow-x: auto;
+  border-bottom: 1px solid #27272a;
+  background: #1a1a1a;
+  scrollbar-width: thin;
+}
+
+.annotation-tool-group,
+.annotation-style-controls,
+.annotation-color-row {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+}
+
+.annotation-tool-group + .annotation-tool-group,
+.annotation-style-controls {
+  padding-left: 8px;
+  border-left: 1px solid #3f3f46;
+}
+
+.annotation-tool-button {
+  min-height: 30px;
+  padding: 0 9px;
+  border: 1px solid #3f3f46;
+  border-radius: 3px;
+  color: #d4d4d8;
+  background: #202023;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+  transition:
+    border-color 140ms ease,
+    color 140ms ease,
+    background-color 140ms ease;
+}
+
+.annotation-tool-button:hover:not(:disabled) {
+  border-color: #06b6d4;
+  color: #ffffff;
+}
+
+.annotation-tool-button[aria-pressed='true'] {
+  border-color: #f97316;
+  color: #ffffff;
+  background: #3a2116;
+}
+
+.annotation-tool-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+
+.annotation-delete-button {
+  color: #fca5a5;
+}
+
+.annotation-style-controls {
+  gap: 10px;
+  margin-left: auto;
+  color: #a1a1aa;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+.annotation-color-swatch {
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 1px solid #52525b;
+  border-radius: 50%;
+}
+
+.annotation-color-swatch:hover {
+  border-color: #ffffff;
+  transform: scale(1.12);
+}
+
+.annotation-select-label,
+.annotation-opacity-label {
+  display: inline-flex;
+  gap: 5px;
+  align-items: center;
+}
+
+.annotation-select-label select {
+  min-height: 26px;
+  border: 1px solid #3f3f46;
+  border-radius: 2px;
+  color: #ffffff;
+  background: #202023;
+  font-size: 10px;
+}
+
+.annotation-opacity-label input {
+  width: 78px;
+  accent-color: #f97316;
+}
+
 .page-placeholder,
 .page-error {
   position: absolute;
