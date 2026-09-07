@@ -27,7 +27,7 @@ import type {
   TextAnnotation,
 } from '../../../features/pdf-annotations/model/types';
 
-export type ExportablePdfAnnotation = Exclude<PdfAnnotation, { kind: 'image' }>;
+export type ExportablePdfAnnotation = PdfAnnotation;
 
 export type AnnotationExportErrorCode =
   | 'unsupported-text-font'
