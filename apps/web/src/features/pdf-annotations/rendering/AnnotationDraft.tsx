@@ -71,7 +71,16 @@ export function AnnotationDraft({ draft, styles }: AnnotationDraftProps) {
       width={rect.width}
       height={rect.height}
       fill={fill}
-      stroke={draft.tool === 'rectangle' ? stroke : undefined}
+      stroke={
+        draft.tool === 'rectangle' ||
+        draft.tool === 'text' ||
+        draft.tool === 'image'
+          ? stroke
+          : undefined
+      }
+      dash={
+        draft.tool === 'text' || draft.tool === 'image' ? [6, 4] : undefined
+      }
       strokeWidth={strokeWidth}
       listening={false}
     />

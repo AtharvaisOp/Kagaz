@@ -126,6 +126,46 @@ describe('opacity interaction boundary', () => {
 });
 
 describe('discrete style controls', () => {
+  it('applies text controls independently and image opacity only', () => {
+    const text: PdfAnnotation = {
+      id: 'text-1',
+      workspacePageId: 'page-1',
+      kind: 'text',
+      box: { origin: { x: 0, y: 40 }, width: 120, height: 40, rotation: 0 },
+      text: 'Kagaz',
+      fontFamily: 'helvetica',
+      fontSizeUserUnits: 12,
+      lineHeight: 1.2,
+      align: 'left',
+      color: { r: 0, g: 0, b: 0 },
+      opacity: 1,
+    };
+    const image: PdfAnnotation = {
+      id: 'image-1',
+      workspacePageId: 'page-1',
+      kind: 'image',
+      box: { origin: { x: 0, y: 100 }, width: 100, height: 50, rotation: 0 },
+      assetId: 'asset-1',
+      opacity: 1,
+    };
+    const styledText = applyAnnotationStyleDefaults(
+      text,
+      { ...DEFAULT_ANNOTATION_STYLE, fontSize: 24, textAlign: 'right' },
+      { fontSize: 24, textAlign: 'right' },
+    );
+    const styledImage = applyAnnotationStyleDefaults(
+      image,
+      { ...DEFAULT_ANNOTATION_STYLE, opacity: 0.45 },
+      { opacity: 0.45, strokeWidth: 8 },
+    );
+    expect(styledText).toMatchObject({
+      fontSizeUserUnits: 24,
+      align: 'right',
+      opacity: 1,
+    });
+    expect(styledImage).toMatchObject({ opacity: 0.45, assetId: 'asset-1' });
+  });
+
   it('keeps color and width changes as one history edit each', () => {
     let history = annotationReducer(createAnnotationHistoryState(), {
       type: 'ADD_ANNOTATION',
@@ -161,5 +201,46 @@ describe('discrete style controls', () => {
       0.55,
     );
     expect(finish(interaction).commit?.opacity).toBe(0.55);
+  });
+
+  it('coalesces image opacity inputs into one image history edit', () => {
+    const image: PdfAnnotation = {
+      id: 'image-opacity',
+      workspacePageId: 'page-1',
+      kind: 'image',
+      box: { origin: { x: 20, y: 20 }, width: 160, height: 90, rotation: 0 },
+      assetId: 'asset-opacity',
+      opacity: 0.35,
+    };
+    const imageSelection = {
+      workspacePageId: image.workspacePageId,
+      annotationId: image.id,
+    };
+    let history = annotationReducer(createAnnotationHistoryState(), {
+      type: 'ADD_ANNOTATION',
+      annotation: image,
+    });
+    let interaction = beginOpacityInteraction(imageSelection, image.opacity);
+    for (const opacity of [0.45, 0.6, 0.8, 1]) {
+      interaction = updateOpacityInteraction(
+        interaction,
+        imageSelection,
+        opacity,
+      );
+    }
+    const result = finish(interaction);
+    if (result.commit) {
+      history = annotationReducer(history, {
+        type: 'UPDATE_ANNOTATION',
+        pageId: result.commit.target.workspacePageId,
+        annotationId: result.commit.target.annotationId,
+        update: { opacity: result.commit.opacity },
+      });
+    }
+    expect(history.past).toHaveLength(2);
+    expect(history.present.byPage['page-1']?.[0]).toMatchObject({
+      kind: 'image',
+      opacity: 1,
+    });
   });
 });

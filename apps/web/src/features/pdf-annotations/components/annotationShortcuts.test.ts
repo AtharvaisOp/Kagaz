@@ -88,6 +88,7 @@ describe('annotation shortcut context', () => {
   it('allows the complete annotation shortcut set on the viewer background', () => {
     for (const key of [
       'v',
+      't',
       'h',
       'p',
       'r',

@@ -47,6 +47,7 @@ export function shouldHandleAnnotationShortcut(
     key === 'backspace' ||
     key === 'escape' ||
     key === 'v' ||
+    key === 't' ||
     key === 'h' ||
     key === 'p' ||
     key === 'r' ||

@@ -231,6 +231,20 @@ export function PdfViewer({
                   activeTool={annotationController.activeTool}
                   styleDefaults={annotationController.styleDefaults}
                   createAnnotationId={annotationController.createAnnotationId}
+                  assetRegistry={annotationController.assetRegistry}
+                  pendingImage={annotationController.pendingImage}
+                  textEditSession={
+                    annotationController.textEditSession?.workspacePageId ===
+                    page.id
+                      ? annotationController.textEditSession
+                      : null
+                  }
+                  onBeginTextCreation={annotationController.beginTextCreation}
+                  onEditText={annotationController.editTextAnnotation}
+                  onUpdateText={annotationController.updateTextEditSession}
+                  onCommitText={annotationController.commitTextEdit}
+                  onCancelText={annotationController.cancelTextEdit}
+                  onPlaceImage={annotationController.placePendingImage}
                   registerPage={navigation.registerPage}
                 />
               );

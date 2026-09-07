@@ -1,4 +1,5 @@
 import { viewportRectToPdfOrientedBox } from '../geometry/coordinateTransforms';
+import { viewportOrientedFrameToPdfBox } from '../geometry/orientedFrame';
 
 import type { AnnotationViewport } from './annotationProjection';
 import type { PdfAnnotation, PdfOrientedBox } from '../model/types';
@@ -12,6 +13,27 @@ export interface AnnotationNodeGeometry {
   readonly height: number;
   readonly scaleX: number;
   readonly scaleY: number;
+  readonly rotation?: number;
+}
+
+export function transformedOrientedAnnotationBox(
+  annotation: PdfAnnotation,
+  geometry: AnnotationNodeGeometry,
+  viewport: AnnotationViewport,
+): PdfOrientedBox | null {
+  if (!('box' in annotation) || geometry.scaleX <= 0 || geometry.scaleY <= 0) {
+    return null;
+  }
+  return viewportOrientedFrameToPdfBox(
+    {
+      x: geometry.x,
+      y: geometry.y,
+      width: geometry.width * geometry.scaleX,
+      height: geometry.height * geometry.scaleY,
+      angle: geometry.rotation ?? 0,
+    },
+    viewport,
+  );
 }
 
 interface TransformBounds {

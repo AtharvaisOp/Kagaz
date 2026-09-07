@@ -24,13 +24,33 @@ import {
   type AnnotationTool,
 } from '../model/editorTypes';
 import { applyAnnotationStyleDefaults } from '../model/annotationStyle';
+import {
+  createBrowserAnnotationAssetRegistry,
+  type AnnotationAssetRegistry,
+} from '../runtime/annotationAssetRegistry';
+import { collectReachableAnnotationAssetIds } from '../runtime/assetReachability';
+import {
+  canRetainTextEditSession,
+  createTextEditBoundary,
+  textAnnotationFromSession,
+  type TextEditSession,
+  type TextEditSessionPatch,
+} from '../model/textEditSession';
 
 import type {
   AnnotationHistoryState,
   AnnotationId,
   AnnotationSelection,
+  PdfOrientedBox,
   PdfAnnotation,
+  TextAnnotation,
 } from '../model/types';
+
+export interface PendingImagePlacement {
+  readonly assetId: string;
+  readonly width: number;
+  readonly height: number;
+}
 
 export interface PdfAnnotationController {
   readonly state: AnnotationHistoryState;
@@ -49,6 +69,7 @@ export interface PdfAnnotationController {
   readonly addAnnotation: (annotation: PdfAnnotation) => void;
   readonly undo: () => void;
   readonly redo: () => void;
+  readonly resetAnnotations: () => void;
   readonly dispatch: Dispatch<AnnotationAction>;
   readonly activeTool: AnnotationTool;
   readonly setActiveTool: (tool: AnnotationTool) => void;
@@ -64,6 +85,28 @@ export interface PdfAnnotationController {
   readonly canUndo: boolean;
   readonly canRedo: boolean;
   readonly createAnnotationId: () => string;
+  readonly assetRegistry: AnnotationAssetRegistry;
+  readonly pendingImage: PendingImagePlacement | null;
+  readonly imageError: string | null;
+  readonly chooseImage: (file: File) => Promise<void>;
+  readonly cancelPendingImage: () => void;
+  readonly placePendingImage: (
+    pageId: WorkspacePageId,
+    box: PdfOrientedBox,
+  ) => void;
+  readonly textEditSession: TextEditSession | null;
+  readonly beginTextCreation: (
+    pageId: WorkspacePageId,
+    box: PdfOrientedBox,
+  ) => void;
+  readonly editSelectedText: () => void;
+  readonly editTextAnnotation: (annotation: TextAnnotation) => void;
+  readonly updateTextEditSession: (
+    sessionId: string,
+    patch: TextEditSessionPatch,
+  ) => void;
+  readonly commitTextEdit: (sessionId: string) => void;
+  readonly cancelTextEdit: (sessionId: string) => void;
 }
 
 export function usePdfAnnotations(
@@ -75,17 +118,48 @@ export function usePdfAnnotations(
     createAnnotationHistoryState,
   );
   const [selection, setSelection] = useState<AnnotationSelection | null>(null);
-  const [activeTool, setActiveTool] = useState<AnnotationTool>('select');
+  const [activeTool, setActiveToolState] = useState<AnnotationTool>('select');
   const [styleDefaults, setStyleDefaults] = useState(DEFAULT_ANNOTATION_STYLE);
+  const [pendingImage, setPendingImage] =
+    useState<PendingImagePlacement | null>(null);
+  const [imageError, setImageError] = useState<string | null>(null);
+  const [textEditSession, setTextEditSession] =
+    useState<TextEditSession | null>(null);
   const createAnnotationId = useMemo(
     () => createBrowserIdFactory('annotation'),
     [],
   );
+  const createAssetId = useMemo(
+    () => createBrowserIdFactory('annotation-asset'),
+    [],
+  );
+  const createTextSessionId = useMemo(
+    () => createBrowserIdFactory('text-edit'),
+    [],
+  );
+  const assetRegistry = useMemo(
+    () => createBrowserAnnotationAssetRegistry(createAssetId),
+    [createAssetId],
+  );
+  const textEditBoundaryRef = useRef(createTextEditBoundary());
+  const activeToolRef = useRef(activeTool);
+  const imageRequestVersionRef = useRef(0);
   const presentRef = useRef(state.present);
+  const styleDefaultsRef = useRef(styleDefaults);
+  const textEditSessionRef = useRef(textEditSession);
+  const pendingImageRef = useRef(pendingImage);
+  const committedPageIdsRef = useRef<readonly WorkspacePageId[]>([]);
   useLayoutEffect(() => {
     presentRef.current = state.present;
-  }, [state.present]);
+    styleDefaultsRef.current = styleDefaults;
+    textEditSessionRef.current = textEditSession;
+    pendingImageRef.current = pendingImage;
+    activeToolRef.current = activeTool;
+  }, [activeTool, pendingImage, state.present, styleDefaults, textEditSession]);
   const committedPageIds = useMemo(() => pages.map((page) => page.id), [pages]);
+  useLayoutEffect(() => {
+    committedPageIdsRef.current = committedPageIds;
+  }, [committedPageIds]);
 
   useEffect(() => {
     const removedPageIds = findRemovedWorkspacePageIds(state, committedPageIds);
@@ -93,6 +167,20 @@ export function usePdfAnnotations(
       dispatch({ type: 'PRUNE_REMOVED_PAGES', pageIds: removedPageIds });
     }
   }, [committedPageIds, state]);
+
+  useEffect(() => {
+    assetRegistry.reconcile(
+      collectReachableAnnotationAssetIds(state, pendingImage?.assetId ?? null),
+    );
+  }, [assetRegistry, pendingImage?.assetId, state]);
+
+  useEffect(
+    () => () => {
+      imageRequestVersionRef.current += 1;
+      assetRegistry.destroyAll();
+    },
+    [assetRegistry],
+  );
 
   const visibleSelection = useMemo(() => {
     if (!selection) {
@@ -107,6 +195,22 @@ export function usePdfAnnotations(
       ? selection
       : null;
   }, [committedPageIds, selection, state.present]);
+
+  useEffect(() => {
+    const session = textEditSessionRef.current;
+    if (!session) return;
+    if (
+      !canRetainTextEditSession(
+        session,
+        committedPageIds,
+        selectPageAnnotations(state.present, session.workspacePageId),
+      )
+    ) {
+      textEditBoundaryRef.current.cancel();
+      textEditSessionRef.current = null;
+      setTextEditSession(null);
+    }
+  }, [committedPageIds, state.present]);
 
   const getAnnotationsForPage = useCallback(
     (pageId: WorkspacePageId) => selectPageAnnotations(state.present, pageId),
@@ -171,7 +275,7 @@ export function usePdfAnnotations(
         return;
       }
       const nextStyle = { ...styleDefaults, ...patch };
-      const next = applyAnnotationStyleDefaults(current, nextStyle);
+      const next = applyAnnotationStyleDefaults(current, nextStyle, patch);
       dispatch({
         type: 'UPDATE_ANNOTATION',
         pageId: currentSelection.workspacePageId,
@@ -181,6 +285,222 @@ export function usePdfAnnotations(
     },
     [selection, styleDefaults],
   );
+
+  const cancelTextSession = useCallback((sessionId?: string) => {
+    const session = textEditSessionRef.current;
+    if (!session || (sessionId && session.sessionId !== sessionId)) return;
+    textEditBoundaryRef.current.cancel();
+    textEditSessionRef.current = null;
+    setTextEditSession(null);
+  }, []);
+
+  const resetAnnotations = useCallback(() => {
+    imageRequestVersionRef.current += 1;
+    pendingImageRef.current = null;
+    setPendingImage(null);
+    textEditBoundaryRef.current.cancel();
+    textEditSessionRef.current = null;
+    setTextEditSession(null);
+    setSelection(null);
+    activeToolRef.current = 'select';
+    setActiveToolState('select');
+    setImageError(null);
+    dispatch({ type: 'RESET_ANNOTATIONS' });
+  }, []);
+
+  const setActiveTool = useCallback(
+    (tool: AnnotationTool) => {
+      if (tool !== activeToolRef.current) cancelTextSession();
+      if (tool !== 'image') {
+        imageRequestVersionRef.current += 1;
+        pendingImageRef.current = null;
+        setPendingImage(null);
+      }
+      setImageError(null);
+      activeToolRef.current = tool;
+      setActiveToolState(tool);
+    },
+    [cancelTextSession],
+  );
+
+  const chooseImage = useCallback(
+    async (file: File) => {
+      const requestVersion = ++imageRequestVersionRef.current;
+      setImageError(null);
+      try {
+        const asset = await assetRegistry.register(file);
+        if (requestVersion !== imageRequestVersionRef.current) {
+          assetRegistry.destroy(asset.assetId);
+          return;
+        }
+        const next = {
+          assetId: asset.assetId,
+          width: asset.width,
+          height: asset.height,
+        };
+        pendingImageRef.current = next;
+        setPendingImage(next);
+        activeToolRef.current = 'image';
+        setActiveToolState('image');
+      } catch {
+        if (requestVersion !== imageRequestVersionRef.current) return;
+        setImageError('That image could not be opened. Choose a PNG or JPEG.');
+      }
+    },
+    [assetRegistry],
+  );
+
+  const cancelPendingImage = useCallback(() => {
+    imageRequestVersionRef.current += 1;
+    pendingImageRef.current = null;
+    setPendingImage(null);
+    activeToolRef.current = 'select';
+    setActiveToolState('select');
+  }, []);
+
+  const placePendingImage = useCallback(
+    (pageId: WorkspacePageId, box: PdfOrientedBox) => {
+      const pending = pendingImageRef.current;
+      if (!pending || !committedPageIdsRef.current.includes(pageId)) return;
+      const annotation: PdfAnnotation = {
+        id: createAnnotationId(),
+        workspacePageId: pageId,
+        kind: 'image',
+        box,
+        assetId: pending.assetId,
+        opacity: styleDefaultsRef.current.opacity,
+      };
+      dispatch({ type: 'ADD_ANNOTATION', annotation });
+      setSelection({ workspacePageId: pageId, annotationId: annotation.id });
+      pendingImageRef.current = null;
+      setPendingImage(null);
+      activeToolRef.current = 'select';
+      setActiveToolState('select');
+    },
+    [createAnnotationId],
+  );
+
+  const beginTextCreation = useCallback(
+    (pageId: WorkspacePageId, box: PdfOrientedBox) => {
+      if (!committedPageIdsRef.current.includes(pageId)) return;
+      const session: TextEditSession = {
+        sessionId: createTextSessionId(),
+        mode: 'create',
+        workspacePageId: pageId,
+        annotationId: createAnnotationId(),
+        box,
+        text: '',
+        fontSizeUserUnits: styleDefaultsRef.current.fontSize,
+        lineHeight: 1.2,
+        align: styleDefaultsRef.current.textAlign,
+        color: styleDefaultsRef.current.strokeColor,
+        opacity: styleDefaultsRef.current.opacity,
+        original: null,
+      };
+      textEditBoundaryRef.current.begin(session.sessionId);
+      textEditSessionRef.current = session;
+      setTextEditSession(session);
+      setSelection(null);
+      activeToolRef.current = 'select';
+      setActiveToolState('select');
+    },
+    [createAnnotationId, createTextSessionId],
+  );
+
+  const editTextAnnotation = useCallback(
+    (annotation: TextAnnotation) => {
+      const exists = selectPageAnnotations(
+        presentRef.current,
+        annotation.workspacePageId,
+      ).some(
+        (candidate) =>
+          candidate.id === annotation.id && candidate.kind === 'text',
+      );
+      if (!exists) return;
+      const session: TextEditSession = {
+        sessionId: createTextSessionId(),
+        mode: 'edit',
+        workspacePageId: annotation.workspacePageId,
+        annotationId: annotation.id,
+        box: annotation.box,
+        text: annotation.text,
+        fontSizeUserUnits: annotation.fontSizeUserUnits,
+        lineHeight: annotation.lineHeight,
+        align: annotation.align,
+        color: annotation.color,
+        opacity: annotation.opacity,
+        original: annotation,
+      };
+      textEditBoundaryRef.current.begin(session.sessionId);
+      textEditSessionRef.current = session;
+      setTextEditSession(session);
+      setSelection({
+        workspacePageId: annotation.workspacePageId,
+        annotationId: annotation.id,
+      });
+      activeToolRef.current = 'select';
+      setActiveToolState('select');
+    },
+    [createTextSessionId],
+  );
+
+  const editSelectedText = useCallback(() => {
+    const currentSelection = selection;
+    if (!currentSelection) return;
+    const annotation = selectPageAnnotations(
+      presentRef.current,
+      currentSelection.workspacePageId,
+    ).find(
+      (candidate): candidate is TextAnnotation =>
+        candidate.id === currentSelection.annotationId &&
+        candidate.kind === 'text',
+    );
+    if (annotation) editTextAnnotation(annotation);
+  }, [editTextAnnotation, selection]);
+
+  const updateTextEditSession = useCallback(
+    (sessionId: string, patch: TextEditSessionPatch) => {
+      const current = textEditSessionRef.current;
+      if (!current || current.sessionId !== sessionId) return;
+      const next = { ...current, ...patch, sessionId: current.sessionId };
+      textEditSessionRef.current = next;
+      setTextEditSession(next);
+    },
+    [],
+  );
+
+  const commitTextEdit = useCallback((sessionId: string) => {
+    const session = textEditSessionRef.current;
+    if (
+      !session ||
+      session.sessionId !== sessionId ||
+      !textEditBoundaryRef.current.complete(sessionId) ||
+      !committedPageIdsRef.current.includes(session.workspacePageId)
+    ) {
+      return;
+    }
+    textEditSessionRef.current = null;
+    setTextEditSession(null);
+    const annotation = textAnnotationFromSession(session);
+    if (!annotation) return;
+    if (session.mode === 'create') {
+      dispatch({ type: 'ADD_ANNOTATION', annotation });
+    } else {
+      const exists = selectPageAnnotations(
+        presentRef.current,
+        session.workspacePageId,
+      ).some(
+        (candidate) =>
+          candidate.id === session.annotationId && candidate.kind === 'text',
+      );
+      if (!exists) return;
+      dispatch({ type: 'REPLACE_ANNOTATION', annotation });
+    }
+    setSelection({
+      workspacePageId: annotation.workspacePageId,
+      annotationId: annotation.id,
+    });
+  }, []);
 
   const deleteSelected = useCallback(() => {
     const currentSelection = selection;
@@ -224,6 +544,7 @@ export function usePdfAnnotations(
       addAnnotation,
       undo,
       redo,
+      resetAnnotations,
       dispatch,
       activeTool,
       setActiveTool,
@@ -235,25 +556,53 @@ export function usePdfAnnotations(
       canUndo: state.past.length > 0,
       canRedo: state.future.length > 0,
       createAnnotationId,
+      assetRegistry,
+      pendingImage,
+      imageError,
+      chooseImage,
+      cancelPendingImage,
+      placePendingImage,
+      textEditSession,
+      beginTextCreation,
+      editSelectedText,
+      editTextAnnotation,
+      updateTextEditSession,
+      commitTextEdit,
+      cancelTextEdit: cancelTextSession,
     }),
     [
       commitAnnotation,
       addAnnotation,
       activeTool,
+      assetRegistry,
+      beginTextCreation,
+      cancelPendingImage,
+      cancelTextSession,
+      chooseImage,
       clearSelection,
       createAnnotationId,
       deleteSelected,
       dispatch,
       getAnnotationsForPage,
+      imageError,
+      editSelectedText,
+      editTextAnnotation,
+      pendingImage,
+      placePendingImage,
       redo,
+      resetAnnotations,
       selectAnnotation,
       selectedAnnotationIdForPage,
       visibleSelection,
       styleDefaults,
       state,
+      setActiveTool,
+      textEditSession,
       undo,
       updateSelectedStyle,
       updateStyleDefaults,
+      updateTextEditSession,
+      commitTextEdit,
     ],
   );
 }

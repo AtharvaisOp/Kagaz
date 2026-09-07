@@ -6,6 +6,7 @@ import {
   constrainedTransformBox,
   gestureMatchesViewport,
   transformedAnnotationBox,
+  transformedOrientedAnnotationBox,
 } from './annotationGesture';
 
 const viewport: CoordinateViewport = {
@@ -104,6 +105,41 @@ describe('annotation transform gesture boundary', () => {
     expect(constrainedTransformBox(oldBox, { ...oldBox, width: 50 })).toEqual({
       ...oldBox,
       width: 50,
+    });
+  });
+
+  it('resizes oriented text/image frames without changing their cardinal rotation', () => {
+    const image = {
+      id: 'image-1',
+      workspacePageId: 'page-1',
+      kind: 'image' as const,
+      box: {
+        origin: { x: 100, y: 600 },
+        width: 120,
+        height: 60,
+        rotation: 0 as const,
+      },
+      assetId: 'asset-1',
+      opacity: 1,
+    };
+    const box = transformedOrientedAnnotationBox(
+      image,
+      {
+        x: 100,
+        y: 200,
+        width: 120,
+        height: 60,
+        scaleX: 1.5,
+        scaleY: 0.5,
+        rotation: 0,
+      },
+      viewport,
+    );
+    expect(box).toEqual({
+      origin: { x: 100, y: 570 },
+      width: 180,
+      height: 30,
+      rotation: 0,
     });
   });
 });

@@ -19,6 +19,7 @@ import {
   constrainedTransformBox,
   gestureMatchesViewport,
   transformedAnnotationBox,
+  transformedOrientedAnnotationBox,
   type AnnotationGestureSnapshot,
 } from './annotationGesture';
 import { KonvaAnnotationNode } from './KonvaAnnotationNode';
@@ -28,9 +29,21 @@ import {
   createCreationDraftSession,
   type CreationDraft,
 } from './annotationCreation';
+import {
+  createImagePlacementBox,
+  createTextPlacementBox,
+} from './annotationPlacement';
+import { TextEditorOverlay } from './TextEditorOverlay';
 
 import { viewportPointToPdfPoint } from '../geometry/coordinateTransforms';
-import type { PdfAnnotation } from '../model/types';
+import type {
+  PdfAnnotation,
+  PdfOrientedBox,
+  TextAnnotation,
+} from '../model/types';
+import type { TextEditSession } from '../model/textEditSession';
+import type { AnnotationAssetRegistry } from '../runtime/annotationAssetRegistry';
+import type { PendingImagePlacement } from '../hooks/usePdfAnnotations';
 import type {
   AnnotationStyleDefaults,
   AnnotationTool,
@@ -52,14 +65,19 @@ interface AnnotationOverlayProps {
   readonly styleDefaults: AnnotationStyleDefaults;
   readonly createAnnotationId: () => string;
   readonly onCreateAnnotation: (annotation: PdfAnnotation) => void;
+  readonly assetRegistry: AnnotationAssetRegistry;
+  readonly pendingImage: PendingImagePlacement | null;
+  readonly textEditSession: TextEditSession | null;
+  readonly onBeginTextCreation: (pageId: string, box: PdfOrientedBox) => void;
+  readonly onEditText: (annotation: TextAnnotation) => void;
+  readonly onUpdateText: (sessionId: string, text: string) => void;
+  readonly onCommitText: (sessionId: string) => void;
+  readonly onCancelText: (sessionId: string) => void;
+  readonly onPlaceImage: (pageId: string, box: PdfOrientedBox) => void;
 }
 
 function isBoxNode(annotation: PdfAnnotation): boolean {
-  return (
-    isBoxAnnotation(annotation) &&
-    annotation.kind !== 'text' &&
-    annotation.kind !== 'image'
-  );
+  return isBoxAnnotation(annotation);
 }
 
 function pdfDeltaFromViewportDelta(
@@ -84,6 +102,15 @@ export function AnnotationOverlay({
   styleDefaults,
   createAnnotationId,
   onCreateAnnotation,
+  assetRegistry,
+  pendingImage,
+  textEditSession,
+  onBeginTextCreation,
+  onEditText,
+  onUpdateText,
+  onCommitText,
+  onCancelText,
+  onPlaceImage,
 }: AnnotationOverlayProps) {
   const nodeRefs = useRef(new Map<string, Konva.Node>());
   const transformerRef = useRef<Konva.Transformer>(null);
@@ -154,6 +181,7 @@ export function AnnotationOverlay({
         height: node.height(),
         scaleX: node.scaleX(),
         scaleY: node.scaleY(),
+        rotation: node.rotation(),
       },
     );
   };
@@ -173,6 +201,7 @@ export function AnnotationOverlay({
         height: node.height(),
         scaleX: node.scaleX(),
         scaleY: node.scaleY(),
+        rotation: node.rotation(),
       },
     );
   };
@@ -208,18 +237,34 @@ export function AnnotationOverlay({
       return;
     }
 
-    const box = transformedAnnotationBox(
-      gesture.annotation,
-      {
-        x: node.x(),
-        y: node.y(),
-        width: node.width(),
-        height: node.height(),
-        scaleX: node.scaleX(),
-        scaleY: node.scaleY(),
-      },
-      viewport,
-    );
+    const box =
+      gesture.annotation.kind === 'text' || gesture.annotation.kind === 'image'
+        ? transformedOrientedAnnotationBox(
+            gesture.annotation,
+            {
+              x: node.x(),
+              y: node.y(),
+              width: node.width(),
+              height: node.height(),
+              scaleX: node.scaleX(),
+              scaleY: node.scaleY(),
+              rotation: node.rotation(),
+            },
+            viewport,
+          )
+        : transformedAnnotationBox(
+            gesture.annotation,
+            {
+              x: node.x(),
+              y: node.y(),
+              width: node.width(),
+              height: node.height(),
+              scaleX: node.scaleX(),
+              scaleY: node.scaleY(),
+              rotation: node.rotation(),
+            },
+            viewport,
+          );
     node.scale({ x: 1, y: 1 });
     if (!box) {
       return;
@@ -239,6 +284,7 @@ export function AnnotationOverlay({
 
   const handleCreationDown = (event: Konva.KonvaEventObject<PointerEvent>) => {
     if (!creating || event.target !== event.currentTarget) return;
+    if (activeTool === 'image' && !pendingImage) return;
     const point = stagePoint(event);
     if (!point) return;
     const draft: CreationDraft = {
@@ -276,6 +322,26 @@ export function AnnotationOverlay({
     if (!current) return;
     const point = stagePoint(event) ?? current.current;
     const draft = { ...current, current: point };
+    if (draft.tool === 'text') {
+      onBeginTextCreation(
+        workspacePageId,
+        createTextPlacementBox(draft.start, draft.current, draft.viewport),
+      );
+      return;
+    }
+    if (draft.tool === 'image') {
+      if (!pendingImage) return;
+      onPlaceImage(
+        workspacePageId,
+        createImagePlacementBox(
+          draft.start,
+          draft.current,
+          pendingImage.width / pendingImage.height,
+          draft.viewport,
+        ),
+      );
+      return;
+    }
     const annotation = createAnnotationFromDraft(
       draft,
       styleDefaults,
@@ -334,6 +400,10 @@ export function AnnotationOverlay({
                   handleTransformEnd(node);
                 }
               }}
+              onEditText={() =>
+                annotation.kind === 'text' && onEditText(annotation)
+              }
+              assetRegistry={assetRegistry}
             />
           ))}
           {creationDraft &&
@@ -346,7 +416,7 @@ export function AnnotationOverlay({
             visible={!creating && selectedAnnotation !== undefined}
             rotateEnabled={false}
             flipEnabled={false}
-            keepRatio={false}
+            keepRatio={selectedAnnotation?.kind === 'image'}
             enabledAnchors={[
               'top-left',
               'top-center',
@@ -363,6 +433,15 @@ export function AnnotationOverlay({
           />
         </Layer>
       </Stage>
+      {textEditSession ? (
+        <TextEditorOverlay
+          session={textEditSession}
+          viewport={viewport}
+          onChange={onUpdateText}
+          onCommit={onCommitText}
+          onCancel={onCancelText}
+        />
+      ) : null}
     </div>
   );
 }

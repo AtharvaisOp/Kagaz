@@ -1,13 +1,22 @@
 import type { FillStyle, RgbColor, StrokeStyle } from './types';
 
 export type AnnotationTool =
-  'select' | 'highlight' | 'rectangle' | 'ellipse' | 'line' | 'freehand';
+  | 'select'
+  | 'text'
+  | 'highlight'
+  | 'rectangle'
+  | 'ellipse'
+  | 'line'
+  | 'freehand'
+  | 'image';
 
 export interface AnnotationStyleDefaults {
   readonly strokeColor: RgbColor;
   readonly fillColor: RgbColor;
   readonly strokeWidth: number;
   readonly opacity: number;
+  readonly fontSize: number;
+  readonly textAlign: 'left' | 'center' | 'right';
 }
 
 export const DEFAULT_ANNOTATION_STYLE: AnnotationStyleDefaults = {
@@ -15,6 +24,8 @@ export const DEFAULT_ANNOTATION_STYLE: AnnotationStyleDefaults = {
   fillColor: { r: 1, g: 0.84, b: 0.12 },
   strokeWidth: 2,
   opacity: 0.35,
+  fontSize: 14,
+  textAlign: 'left',
 };
 
 export function createStrokeStyle(

@@ -107,6 +107,7 @@ export function createAnnotationFromDraft(
   styles: AnnotationStyleDefaults,
   id: string,
 ): PdfAnnotation | null {
+  if (draft.tool === 'text' || draft.tool === 'image') return null;
   if (!creationHasMinimumSize(draft)) return null;
   const base = { id, workspacePageId: draft.workspacePageId } as const;
   if (draft.tool === 'line') {

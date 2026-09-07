@@ -10,6 +10,13 @@ import type {
   AnnotationId,
   PdfAnnotation,
 } from '../pdf-annotations/model/types';
+import type { TextAnnotation } from '../pdf-annotations/model/types';
+import type { TextEditSession } from '../pdf-annotations/model/textEditSession';
+import type { AnnotationAssetRegistry } from '../pdf-annotations/runtime/annotationAssetRegistry';
+import type {
+  PdfAnnotationController,
+  PendingImagePlacement,
+} from '../pdf-annotations/hooks/usePdfAnnotations';
 import { normalizeRotation } from '../pdf-workspace/model/operations';
 import { adoptResolvedPdfPage } from '../pdf-workspace/runtime/pdfPageLifecycle';
 
@@ -40,6 +47,15 @@ interface PdfPageProps {
   readonly activeTool: AnnotationTool;
   readonly styleDefaults: AnnotationStyleDefaults;
   readonly createAnnotationId: () => string;
+  readonly assetRegistry: AnnotationAssetRegistry;
+  readonly pendingImage: PendingImagePlacement | null;
+  readonly textEditSession: TextEditSession | null;
+  readonly onBeginTextCreation: PdfAnnotationController['beginTextCreation'];
+  readonly onEditText: (annotation: TextAnnotation) => void;
+  readonly onUpdateText: PdfAnnotationController['updateTextEditSession'];
+  readonly onCommitText: PdfAnnotationController['commitTextEdit'];
+  readonly onCancelText: PdfAnnotationController['cancelTextEdit'];
+  readonly onPlaceImage: PdfAnnotationController['placePendingImage'];
   readonly registerPage?: (
     pageId: WorkspacePageId,
     element: HTMLDivElement | null,
@@ -68,6 +84,15 @@ export function PdfPage({
   activeTool,
   styleDefaults,
   createAnnotationId,
+  assetRegistry,
+  pendingImage,
+  textEditSession,
+  onBeginTextCreation,
+  onEditText,
+  onUpdateText,
+  onCommitText,
+  onCancelText,
+  onPlaceImage,
   registerPage,
 }: PdfPageProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -272,6 +297,17 @@ export function PdfPage({
             activeTool={activeTool}
             styleDefaults={styleDefaults}
             createAnnotationId={createAnnotationId}
+            assetRegistry={assetRegistry}
+            pendingImage={pendingImage}
+            textEditSession={textEditSession}
+            onBeginTextCreation={onBeginTextCreation}
+            onEditText={onEditText}
+            onUpdateText={(sessionId, text) =>
+              onUpdateText(sessionId, { text })
+            }
+            onCommitText={onCommitText}
+            onCancelText={onCancelText}
+            onPlaceImage={onPlaceImage}
           />
         ) : null}
       </div>

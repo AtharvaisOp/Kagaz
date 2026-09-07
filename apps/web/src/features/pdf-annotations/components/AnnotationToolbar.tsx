@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react';
 
 import type { PdfAnnotationController } from '../hooks/usePdfAnnotations';
 import type { AnnotationTool } from '../model/editorTypes';
+import type { PdfAnnotation, RgbColor } from '../model/types';
 import { shouldHandleAnnotationShortcut } from './annotationShortcuts';
 import {
   beginOpacityInteraction,
@@ -18,11 +19,12 @@ interface AnnotationToolbarProps {
 }
 
 const tools: readonly {
-  tool: AnnotationTool;
+  tool: Exclude<AnnotationTool, 'image'>;
   label: string;
   shortcut: string;
 }[] = [
   { tool: 'select', label: 'Select', shortcut: 'V' },
+  { tool: 'text', label: 'Text', shortcut: 'T' },
   { tool: 'highlight', label: 'Highlight', shortcut: 'H' },
   { tool: 'freehand', label: 'Pencil', shortcut: 'P' },
   { tool: 'rectangle', label: 'Rectangle', shortcut: 'R' },
@@ -41,6 +43,34 @@ const colors = [
   ['#ffffff', { r: 1, g: 1, b: 1 }],
 ] as const;
 
+function findSelectedAnnotation(
+  controller: PdfAnnotationController,
+): PdfAnnotation | null {
+  const { selection } = controller;
+  return selection
+    ? (controller
+        .getAnnotationsForPage(selection.workspacePageId)
+        .find((annotation) => annotation.id === selection.annotationId) ?? null)
+    : null;
+}
+
+function annotationOpacity(annotation: PdfAnnotation | null): number | null {
+  if (!annotation) return null;
+  switch (annotation.kind) {
+    case 'text':
+    case 'image':
+      return annotation.opacity;
+    case 'highlight':
+      return annotation.fill.opacity;
+    case 'freehand':
+    case 'line':
+      return annotation.stroke.opacity;
+    case 'rectangle':
+    case 'ellipse':
+      return annotation.stroke?.opacity ?? annotation.fill?.opacity ?? null;
+  }
+}
+
 export function AnnotationToolbar({ controller }: AnnotationToolbarProps) {
   const {
     activeTool,
@@ -55,10 +85,32 @@ export function AnnotationToolbar({ controller }: AnnotationToolbarProps) {
     deleteSelected,
     clearSelection,
     selection,
+    pendingImage,
+    cancelPendingImage,
+    chooseImage,
+    imageError,
+    textEditSession,
+    updateTextEditSession,
+    editSelectedText,
   } = controller;
+  const imageInputRef = useRef<HTMLInputElement>(null);
   const opacityInteractionRef = useRef<OpacityInteractionState>(
     IDLE_OPACITY_INTERACTION,
   );
+  const selectedAnnotation = findSelectedAnnotation(controller);
+  const textContext =
+    textEditSession !== null ||
+    selectedAnnotation?.kind === 'text' ||
+    activeTool === 'text';
+  const imageContext =
+    selectedAnnotation?.kind === 'image' ||
+    activeTool === 'image' ||
+    pendingImage !== null;
+  const vectorContext = !textContext && !imageContext;
+  const displayedOpacity =
+    textEditSession?.opacity ??
+    annotationOpacity(selectedAnnotation) ??
+    styleDefaults.opacity;
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -83,8 +135,11 @@ export function AnnotationToolbar({ controller }: AnnotationToolbarProps) {
       }
       if (key === 'escape') {
         event.preventDefault();
-        setActiveTool('select');
-        clearSelection();
+        if (pendingImage) cancelPendingImage();
+        else {
+          setActiveTool('select');
+          clearSelection();
+        }
         return;
       }
       const shortcut = tools.find(
@@ -97,7 +152,15 @@ export function AnnotationToolbar({ controller }: AnnotationToolbarProps) {
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [clearSelection, deleteSelected, redo, setActiveTool, undo]);
+  }, [
+    cancelPendingImage,
+    clearSelection,
+    deleteSelected,
+    pendingImage,
+    redo,
+    setActiveTool,
+    undo,
+  ]);
 
   useEffect(() => {
     const interaction = opacityInteractionRef.current;
@@ -109,19 +172,45 @@ export function AnnotationToolbar({ controller }: AnnotationToolbarProps) {
     }
   }, [selection]);
 
-  const updateColor = (color: (typeof colors)[number][1]) => {
+  const updateTextWorkingStyle = (
+    patch: Partial<{
+      color: RgbColor;
+      fontSizeUserUnits: number;
+      align: 'left' | 'center' | 'right';
+      opacity: number;
+    }>,
+  ) => {
+    if (!textEditSession) return false;
+    updateTextEditSession(textEditSession.sessionId, patch);
+    return true;
+  };
+  const updateColor = (color: RgbColor) => {
     updateStyleDefaults({ strokeColor: color, fillColor: color });
-    updateSelectedStyle({ strokeColor: color, fillColor: color });
+    if (!updateTextWorkingStyle({ color })) {
+      updateSelectedStyle({ strokeColor: color, fillColor: color });
+    }
   };
   const updateWidth = (value: number) => {
     updateStyleDefaults({ strokeWidth: value });
     updateSelectedStyle({ strokeWidth: value });
   };
+  const updateFontSize = (value: number) => {
+    updateStyleDefaults({ fontSize: value });
+    if (!updateTextWorkingStyle({ fontSizeUserUnits: value })) {
+      updateSelectedStyle({ fontSize: value });
+    }
+  };
+  const updateTextAlign = (value: 'left' | 'center' | 'right') => {
+    updateStyleDefaults({ textAlign: value });
+    if (!updateTextWorkingStyle({ align: value })) {
+      updateSelectedStyle({ textAlign: value });
+    }
+  };
   const beginOpacity = () => {
     if (opacityInteractionRef.current.status === 'idle') {
       opacityInteractionRef.current = beginOpacityInteraction(
-        selection,
-        styleDefaults.opacity,
+        textEditSession ? null : selection,
+        displayedOpacity,
       );
     }
   };
@@ -141,23 +230,21 @@ export function AnnotationToolbar({ controller }: AnnotationToolbarProps) {
   const updateOpacity = (value: number) => {
     const wasIdle = opacityInteractionRef.current.status === 'idle';
     updateStyleDefaults({ opacity: value });
+    updateTextWorkingStyle({ opacity: value });
     opacityInteractionRef.current = updateOpacityInteraction(
       opacityInteractionRef.current,
-      selection,
+      textEditSession ? null : selection,
       value,
     );
-    if (wasIdle) {
-      commitOpacity();
-    }
+    if (wasIdle) commitOpacity();
   };
-
   return (
     <div
       className="annotation-toolbar"
       role="toolbar"
       aria-label="Annotation tools"
     >
-      <div className="annotation-tool-group" aria-label="Drawing tools">
+      <div className="annotation-tool-group" aria-label="Annotation tools">
         {tools.map(({ tool, label, shortcut }) => (
           <button
             key={tool}
@@ -171,6 +258,28 @@ export function AnnotationToolbar({ controller }: AnnotationToolbarProps) {
             {label}
           </button>
         ))}
+        <button
+          type="button"
+          className="annotation-tool-button"
+          aria-label="Place image"
+          aria-pressed={activeTool === 'image'}
+          title="Place PNG or JPEG"
+          onClick={() => imageInputRef.current?.click()}
+        >
+          Image
+        </button>
+        <input
+          ref={imageInputRef}
+          className="annotation-file-input"
+          type="file"
+          accept="image/png,image/jpeg"
+          aria-label="Choose annotation image"
+          onChange={(event) => {
+            const file = event.target.files?.[0];
+            event.target.value = '';
+            if (file) void chooseImage(file);
+          }}
+        />
       </div>
       <div
         className="annotation-tool-group annotation-history-group"
@@ -203,34 +312,96 @@ export function AnnotationToolbar({ controller }: AnnotationToolbarProps) {
         >
           Delete
         </button>
+        {selectedAnnotation?.kind === 'text' && !textEditSession ? (
+          <button
+            type="button"
+            className="annotation-tool-button"
+            onClick={editSelectedText}
+          >
+            Edit text
+          </button>
+        ) : null}
+        {pendingImage ? (
+          <span className="annotation-pending">
+            Click or drag a page to place
+          </span>
+        ) : null}
       </div>
       <div className="annotation-style-controls" aria-label="Annotation style">
-        <div className="annotation-color-row" aria-label="Annotation color">
-          {colors.map(([hex, color]) => (
-            <button
-              key={hex}
-              type="button"
-              className="annotation-color-swatch"
-              style={{ backgroundColor: hex }}
-              aria-label={`Use ${hex} annotation color`}
-              title={`Color ${hex}`}
-              onClick={() => updateColor(color)}
-            />
-          ))}
-        </div>
-        <label className="annotation-select-label">
-          <span>Width</span>
-          <select
-            aria-label="Annotation stroke width"
-            value={styleDefaults.strokeWidth}
-            onChange={(event) => updateWidth(Number(event.target.value))}
-          >
-            <option value={1}>1</option>
-            <option value={2}>2</option>
-            <option value={4}>4</option>
-            <option value={8}>8</option>
-          </select>
-        </label>
+        {!imageContext ? (
+          <div className="annotation-color-row" aria-label="Annotation color">
+            {colors.map(([hex, color]) => (
+              <button
+                key={hex}
+                type="button"
+                className="annotation-color-swatch"
+                style={{ backgroundColor: hex }}
+                aria-label={`Use ${hex} annotation color`}
+                title={`Color ${hex}`}
+                onClick={() => updateColor(color)}
+              />
+            ))}
+          </div>
+        ) : null}
+        {vectorContext ? (
+          <label className="annotation-select-label">
+            <span>Width</span>
+            <select
+              aria-label="Annotation stroke width"
+              value={styleDefaults.strokeWidth}
+              onChange={(event) => updateWidth(Number(event.target.value))}
+            >
+              <option value={1}>1</option>
+              <option value={2}>2</option>
+              <option value={4}>4</option>
+              <option value={8}>8</option>
+            </select>
+          </label>
+        ) : null}
+        {textContext ? (
+          <>
+            <label className="annotation-select-label">
+              <span>Size</span>
+              <select
+                aria-label="Text font size"
+                value={
+                  textEditSession?.fontSizeUserUnits ??
+                  (selectedAnnotation?.kind === 'text'
+                    ? selectedAnnotation.fontSizeUserUnits
+                    : styleDefaults.fontSize)
+                }
+                onChange={(event) => updateFontSize(Number(event.target.value))}
+              >
+                {[10, 12, 14, 16, 20, 24, 32].map((size) => (
+                  <option key={size} value={size}>
+                    {size}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="annotation-select-label">
+              <span>Align</span>
+              <select
+                aria-label="Text alignment"
+                value={
+                  textEditSession?.align ??
+                  (selectedAnnotation?.kind === 'text'
+                    ? selectedAnnotation.align
+                    : styleDefaults.textAlign)
+                }
+                onChange={(event) =>
+                  updateTextAlign(
+                    event.target.value as 'left' | 'center' | 'right',
+                  )
+                }
+              >
+                <option value="left">Left</option>
+                <option value="center">Center</option>
+                <option value="right">Right</option>
+              </select>
+            </label>
+          </>
+        ) : null}
         <label className="annotation-opacity-label">
           <span>Opacity</span>
           <input
@@ -239,7 +410,7 @@ export function AnnotationToolbar({ controller }: AnnotationToolbarProps) {
             min={0.1}
             max={1}
             step={0.05}
-            value={styleDefaults.opacity}
+            value={displayedOpacity}
             onChange={(event) => updateOpacity(Number(event.target.value))}
             onPointerDown={beginOpacity}
             onPointerUp={commitOpacity}
@@ -254,6 +425,11 @@ export function AnnotationToolbar({ controller }: AnnotationToolbarProps) {
           />
         </label>
       </div>
+      {imageError ? (
+        <div className="annotation-error" role="alert">
+          {imageError}
+        </div>
+      ) : null}
     </div>
   );
 }

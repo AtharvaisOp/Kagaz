@@ -1,5 +1,5 @@
 import type Konva from 'konva';
-import { Ellipse, Group, Line, Rect, Text } from 'react-konva';
+import { Ellipse, Group, Image, Line, Rect, Text } from 'react-konva';
 
 import {
   annotationStrokeWidth,
@@ -10,8 +10,11 @@ import {
 } from './annotationProjection';
 
 import { pdfUserLengthToViewportPixels } from '../geometry/coordinateTransforms';
+import { projectPdfBoxToOrientedFrame } from '../geometry/orientedFrame';
+import { useAnnotationAsset } from '../runtime/useAnnotationAsset';
 
-import type { PdfAnnotation } from '../model/types';
+import type { AnnotationAssetRegistry } from '../runtime/annotationAssetRegistry';
+import type { ImageAnnotation, PdfAnnotation } from '../model/types';
 
 interface KonvaAnnotationNodeProps {
   readonly annotation: PdfAnnotation;
@@ -24,6 +27,8 @@ interface KonvaAnnotationNodeProps {
   readonly onDragEnd: (node: Konva.Node) => void;
   readonly onTransformStart: (node: Konva.Node) => void;
   readonly onTransformEnd: (node: Konva.Node) => void;
+  readonly onEditText: () => void;
+  readonly assetRegistry: AnnotationAssetRegistry;
 }
 
 function selectFromEvent(
@@ -32,6 +37,31 @@ function selectFromEvent(
 ): void {
   event.cancelBubble = true;
   onSelect();
+}
+
+interface ImageNodeProps {
+  readonly annotation: ImageAnnotation;
+  readonly registry: AnnotationAssetRegistry;
+  readonly common: Record<string, unknown>;
+  readonly nodeRef: (node: Konva.Node | null) => void;
+}
+
+function AnnotationImageNode({
+  annotation,
+  registry,
+  common,
+  nodeRef,
+}: ImageNodeProps) {
+  const asset = useAnnotationAsset(registry, annotation.assetId);
+  if (!asset) return null;
+  return (
+    <Image
+      ref={nodeRef}
+      {...common}
+      image={asset.image}
+      opacity={annotation.opacity}
+    />
+  );
 }
 
 export function KonvaAnnotationNode({
@@ -45,6 +75,8 @@ export function KonvaAnnotationNode({
   onDragEnd,
   onTransformStart,
   onTransformEnd,
+  onEditText,
+  assetRegistry,
 }: KonvaAnnotationNodeProps) {
   const projection = projectAnnotation(annotation, viewport);
   const selectedStroke = selected ? '#06b6d4' : undefined;
@@ -114,8 +146,59 @@ export function KonvaAnnotationNode({
   }
 
   const { bounds } = projection;
-  const boxInteractive =
-    interactive && annotation.kind !== 'text' && annotation.kind !== 'image';
+  if (annotation.kind === 'text' || annotation.kind === 'image') {
+    const frame = projectPdfBoxToOrientedFrame(annotation.box, viewport);
+    const orientedCommon = {
+      id: annotation.id,
+      x: frame.x,
+      y: frame.y,
+      width: frame.width,
+      height: frame.height,
+      rotation: frame.angle,
+      listening: interactive,
+      draggable: interactive && selected,
+      preventDefault: interactive && selected,
+      onPointerDown: (event: Konva.KonvaEventObject<PointerEvent>) =>
+        interactive && selectFromEvent(event, onSelect),
+      onDblClick: () => annotation.kind === 'text' && onEditText(),
+      onDblTap: () => annotation.kind === 'text' && onEditText(),
+      onDragStart: (event: Konva.KonvaEventObject<DragEvent>) =>
+        onDragStart(event.target),
+      onDragEnd: (event: Konva.KonvaEventObject<DragEvent>) =>
+        onDragEnd(event.target),
+      onTransformStart: (event: Konva.KonvaEventObject<Event>) =>
+        onTransformStart(event.target),
+      onTransformEnd: (event: Konva.KonvaEventObject<Event>) =>
+        onTransformEnd(event.target),
+    };
+    if (annotation.kind === 'image') {
+      return (
+        <AnnotationImageNode
+          annotation={annotation}
+          registry={assetRegistry}
+          common={orientedCommon}
+          nodeRef={nodeRef}
+        />
+      );
+    }
+    return (
+      <Text
+        ref={nodeRef}
+        {...orientedCommon}
+        text={annotation.text}
+        fontFamily="Helvetica, Arial, sans-serif"
+        fontSize={Math.max(
+          8,
+          pdfUserLengthToViewportPixels(annotation.fontSizeUserUnits, viewport),
+        )}
+        lineHeight={annotation.lineHeight}
+        align={annotation.align}
+        fill={colorToRgba(annotation.color, annotation.opacity)}
+        padding={2}
+      />
+    );
+  }
+  const boxInteractive = interactive;
   const common = {
     id: annotation.id,
     x: bounds.x,
@@ -162,50 +245,21 @@ export function KonvaAnnotationNode({
     );
   }
 
-  if (annotation.kind === 'text') {
-    return (
-      <Text
-        ref={nodeRef}
-        {...common}
-        text={annotation.text}
-        fontFamily="Inter"
-        fontSize={Math.max(
-          8,
-          pdfUserLengthToViewportPixels(annotation.fontSizeUserUnits, viewport),
-        )}
-        fill={colorToRgba(annotation.color, annotation.opacity)}
-        padding={2}
-      />
-    );
-  }
-
   const fill =
     annotation.kind === 'highlight' || annotation.kind === 'rectangle'
       ? annotation.fill
       : null;
   const stroke = annotation.kind === 'rectangle' ? annotation.stroke : null;
-  const imagePlaceholder = annotation.kind === 'image';
 
   return (
     <Rect
       ref={nodeRef}
       {...common}
-      fill={
-        imagePlaceholder
-          ? 'rgba(6, 182, 212, 0.1)'
-          : fill
-            ? colorToRgba(fill.color, fill.opacity)
-            : undefined
-      }
+      fill={fill ? colorToRgba(fill.color, fill.opacity) : undefined}
       stroke={
         selectedStroke ??
-        (imagePlaceholder
-          ? '#06b6d4'
-          : stroke
-            ? colorToRgba(stroke.color, stroke.opacity)
-            : undefined)
+        (stroke ? colorToRgba(stroke.color, stroke.opacity) : undefined)
       }
-      dash={imagePlaceholder ? [6, 4] : undefined}
       strokeWidth={strokeWidth}
     />
   );

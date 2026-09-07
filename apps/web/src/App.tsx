@@ -49,9 +49,17 @@ export function App() {
 
   const handleStartOver = () => {
     if (startOver()) {
+      annotationController.resetAnnotations();
       pdfExport.cancel();
       setZoom(100);
     }
+  };
+
+  const handleDeletePage = (pageId: string) => {
+    const removesLastPage =
+      workspace.pages.length === 1 && workspace.pages[0]?.id === pageId;
+    deletePage(pageId);
+    if (removesLastPage) annotationController.resetAnnotations();
   };
 
   return (
@@ -90,7 +98,7 @@ export function App() {
           selectedPageId={workspace.selectedPageId}
           onSelectPage={selectPage}
           onMovePage={movePage}
-          onDeletePage={deletePage}
+          onDeletePage={handleDeletePage}
           onRotatePage={rotatePage}
           onZoomIn={() =>
             setZoom((current) => Math.min(MAX_ZOOM, current + ZOOM_STEP))
