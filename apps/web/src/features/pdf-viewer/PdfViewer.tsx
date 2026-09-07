@@ -45,6 +45,7 @@ interface PdfViewerProps {
   readonly exportState: PdfExportState;
   readonly onDownloadPdf: () => void;
   readonly onExtractPages: (pages: readonly WorkspacePage[]) => void;
+  readonly exportBlocked: boolean;
   readonly annotationController: PdfAnnotationController;
 }
 
@@ -89,6 +90,7 @@ export function PdfViewer({
   exportState,
   onDownloadPdf,
   onExtractPages,
+  exportBlocked,
   annotationController,
 }: PdfViewerProps) {
   const [mobilePageManagerOpen, setMobilePageManagerOpen] = useState(false);
@@ -154,6 +156,7 @@ export function PdfViewer({
         onZoomOut={onZoomOut}
         exportState={exportState}
         onDownloadPdf={onDownloadPdf}
+        exportBlocked={exportBlocked}
         onOpenExtract={openExtract}
         extractTriggerRef={extractTriggerRef}
         pagesTriggerRef={pagesTriggerRef}

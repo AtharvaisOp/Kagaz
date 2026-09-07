@@ -32,6 +32,7 @@ interface ViewerToolbarProps {
   readonly onZoomOut: () => void;
   readonly exportState: PdfExportState;
   readonly onDownloadPdf: () => void;
+  readonly exportBlocked: boolean;
   readonly onOpenExtract: () => void;
   readonly extractTriggerRef: RefObject<HTMLButtonElement | null>;
   readonly pagesTriggerRef: RefObject<HTMLButtonElement | null>;
@@ -53,6 +54,7 @@ export function ViewerToolbar({
   onZoomOut,
   exportState,
   onDownloadPdf,
+  exportBlocked,
   onOpenExtract,
   extractTriggerRef,
   pagesTriggerRef,
@@ -115,7 +117,7 @@ export function ViewerToolbar({
           ref={extractTriggerRef}
           className="toolbar-button extract-button"
           type="button"
-          disabled={exporting}
+          disabled={exporting || exportBlocked}
           onClick={onOpenExtract}
         >
           <FileIcon className="size-4" />
@@ -124,7 +126,7 @@ export function ViewerToolbar({
         <button
           className="toolbar-button download-button"
           type="button"
-          disabled={exporting || pageCount === 0}
+          disabled={exporting || exportBlocked || pageCount === 0}
           aria-label={exporting ? 'Creating PDF' : 'Download PDF'}
           onClick={onDownloadPdf}
         >

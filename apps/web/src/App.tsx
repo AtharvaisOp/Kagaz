@@ -30,7 +30,12 @@ export function App() {
     rotatePage,
   } = usePdfWorkspace();
   const annotationController = usePdfAnnotations(workspace.pages);
-  const pdfExport = usePdfExport(workspace, registry);
+  const pdfExport = usePdfExport(
+    workspace,
+    registry,
+    annotationController.state,
+    annotationController.assetRegistry,
+  );
 
   const handleInitialSelection = (
     files: readonly File[],
@@ -48,18 +53,18 @@ export function App() {
   };
 
   const handleStartOver = () => {
-    if (startOver()) {
-      annotationController.resetAnnotations();
-      pdfExport.cancel();
+    if (
+      startOver(annotationController.hasUnsavedWork, () => {
+        pdfExport.cancel();
+        annotationController.resetAnnotations();
+      })
+    ) {
       setZoom(100);
     }
   };
 
   const handleDeletePage = (pageId: string) => {
-    const removesLastPage =
-      workspace.pages.length === 1 && workspace.pages[0]?.id === pageId;
     deletePage(pageId);
-    if (removesLastPage) annotationController.resetAnnotations();
   };
 
   return (
@@ -109,6 +114,7 @@ export function App() {
           exportState={pdfExport.state}
           onDownloadPdf={pdfExport.downloadWorkspace}
           onExtractPages={pdfExport.extractPages}
+          exportBlocked={annotationController.textEditSession !== null}
           annotationController={annotationController}
         />
       ) : null}

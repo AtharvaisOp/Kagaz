@@ -6,12 +6,19 @@ import {
 } from '../../../lib/pdf-export/fileNames';
 import { downloadPdf } from '../../../lib/pdf-export/downloadPdf';
 import { exportWorkspace } from '../../../lib/pdf-export/exportWorkspace';
+import { AnnotationExportError } from '../../../lib/pdf-export/annotations/flattenAnnotations';
+import { snapshotAnnotationImageAssets } from '../../../lib/pdf-export/annotations/imageAssets';
 import {
   PdfExportError,
   type ExportProgress,
   type ExportSource,
 } from '../../../lib/pdf-export/types';
 import { snapshotWorkspacePages } from '../../../lib/pdf-export/exportWorkspace';
+import type {
+  AnnotationHistoryState,
+  PdfAnnotation,
+} from '../../pdf-annotations/model/types';
+import type { AnnotationAssetRegistry } from '../../pdf-annotations/runtime/annotationAssetRegistry';
 import type { SourceDocumentRegistry } from '../runtime/sourceDocumentRegistry';
 import type {
   PdfWorkspaceState,
@@ -38,7 +45,21 @@ const IDLE_EXPORT_STATE: PdfExportState = {
   error: null,
 };
 
-function friendlyExportError(error: unknown): string {
+export function friendlyExportError(error: unknown): string {
+  if (error instanceof AnnotationExportError) {
+    switch (error.code) {
+      case 'unsupported-text-font':
+        return 'This text contains characters unsupported by the PDF export font.';
+      case 'missing-image-asset':
+        return 'An image annotation is no longer available for export.';
+      case 'image-read-failed':
+        return 'Kagaz could not read an image annotation for export.';
+      case 'unsupported-image-format':
+        return 'This image annotation format is not supported for PDF export.';
+      case 'image-embed-failed':
+        return 'Kagaz could not embed an image annotation in the PDF.';
+    }
+  }
   if (error instanceof PdfExportError && error.fileName) {
     return `${error.fileName}: ${error.message}`;
   }
@@ -46,6 +67,34 @@ function friendlyExportError(error: unknown): string {
     return error.message;
   }
   return 'Kagaz could not create the PDF. Your workspace is still intact.';
+}
+
+export interface AnnotationExportSnapshot {
+  readonly annotationsByPage: ReadonlyMap<string, readonly PdfAnnotation[]>;
+  readonly imageAssetIds: readonly string[];
+}
+
+/** Copies only committed annotations attached to the selected page snapshot. */
+export function snapshotAnnotationsForPages(
+  pages: readonly WorkspacePage[],
+  state: AnnotationHistoryState,
+): AnnotationExportSnapshot {
+  const annotationsByPage = new Map<string, readonly PdfAnnotation[]>();
+  const imageAssetIds = new Set<string>();
+
+  for (const page of pages) {
+    const annotations = state.present.byPage[page.id] ?? [];
+    const pageSnapshot = Object.freeze([...annotations]);
+    annotationsByPage.set(page.id, pageSnapshot);
+    for (const annotation of pageSnapshot) {
+      if (annotation.kind === 'image') imageAssetIds.add(annotation.assetId);
+    }
+  }
+
+  return {
+    annotationsByPage,
+    imageAssetIds: [...imageAssetIds],
+  };
 }
 
 function sourceMapForPages(
@@ -91,6 +140,8 @@ function sourceNamesInPageOrder(
 export function usePdfExport(
   workspace: PdfWorkspaceState,
   registry: SourceDocumentRegistry,
+  annotationState: AnnotationHistoryState,
+  annotationAssets: Pick<AnnotationAssetRegistry, 'get'>,
 ): PdfExportController {
   const [state, setState] = useState<PdfExportState>(IDLE_EXPORT_STATE);
   const generationRef = useRef(0);
@@ -129,24 +180,40 @@ export function usePdfExport(
 
       const isCurrent = () =>
         generationRef.current === generation && !controller.signal.aborted;
+      const annotationSnapshot = snapshotAnnotationsForPages(
+        pageSnapshot,
+        annotationState,
+      );
       setState({
         status: 'exporting',
         progress: { phase: 'preparing', current: 0, total: sources.size },
         error: null,
       });
 
-      void exportWorkspace(
-        { pages: pageSnapshot, sources },
-        {
-          signal: controller.signal,
-          onProgress: (progress) => {
-            if (isCurrent())
-              setState({ status: 'exporting', progress, error: null });
+      void (async () => {
+        const imageAssets = await snapshotAnnotationImageAssets(
+          annotationAssets,
+          annotationSnapshot.imageAssetIds,
+        );
+        if (!isCurrent()) return null;
+        return exportWorkspace(
+          {
+            pages: pageSnapshot,
+            sources,
+            annotationsByPage: annotationSnapshot.annotationsByPage,
+            imageAssets,
           },
-        },
-      )
+          {
+            signal: controller.signal,
+            onProgress: (progress) => {
+              if (isCurrent())
+                setState({ status: 'exporting', progress, error: null });
+            },
+          },
+        );
+      })()
         .then((bytes) => {
-          if (!isCurrent()) return;
+          if (!bytes || !isCurrent()) return;
           downloadPdf(bytes, fileName);
           abortRef.current = null;
           setState(IDLE_EXPORT_STATE);
@@ -165,7 +232,7 @@ export function usePdfExport(
           });
         });
     },
-    [registry, state.status],
+    [annotationAssets, annotationState, registry, state.status],
   );
 
   const downloadWorkspace = useCallback(() => {

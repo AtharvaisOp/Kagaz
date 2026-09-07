@@ -36,7 +36,10 @@ export interface PdfWorkspaceController {
     files: readonly File[],
     initialIssues?: readonly FileLoadIssue[],
   ) => void;
-  readonly startOver: () => boolean;
+  readonly startOver: (
+    additionalUnsavedChanges?: boolean,
+    beforeReset?: () => void,
+  ) => boolean;
   readonly selectPage: (pageId: WorkspacePageId) => void;
   readonly movePage: (pageId: WorkspacePageId, toIndex: number) => void;
   readonly deletePage: (pageId: WorkspacePageId) => void;
@@ -60,6 +63,13 @@ function isCurrentResult(
   controller: AbortController,
 ): boolean {
   return generationRef.current === generation && !controller.signal.aborted;
+}
+
+export function shouldConfirmStartOver(
+  workspaceDirty: boolean,
+  additionalUnsavedChanges: boolean,
+): boolean {
+  return workspaceDirty || additionalUnsavedChanges;
 }
 
 export function usePdfWorkspace(): PdfWorkspaceController {
@@ -240,20 +250,24 @@ export function usePdfWorkspace(): PdfWorkspaceController {
     [finishBatch, loading.status, registry, workspace.sessionStatus],
   );
 
-  const startOver = useCallback(() => {
-    if (
-      workspace.dirty &&
-      !window.confirm('Discard your current PDF workspace and start over?')
-    ) {
-      return false;
-    }
+  const startOver = useCallback(
+    (additionalUnsavedChanges = false, beforeReset?: () => void) => {
+      if (
+        shouldConfirmStartOver(workspace.dirty, additionalUnsavedChanges) &&
+        !window.confirm('Discard your current PDF workspace and start over?')
+      ) {
+        return false;
+      }
 
-    invalidateSession();
-    dispatch({ type: 'RESET_WORKSPACE' });
-    setLoading(IDLE_LOADING);
-    setIssues([]);
-    return true;
-  }, [invalidateSession, workspace.dirty]);
+      beforeReset?.();
+      invalidateSession();
+      dispatch({ type: 'RESET_WORKSPACE' });
+      setLoading(IDLE_LOADING);
+      setIssues([]);
+      return true;
+    },
+    [invalidateSession, workspace.dirty],
+  );
 
   const selectPage = useCallback((pageId: WorkspacePageId) => {
     dispatch({ type: 'SELECT_PAGE', pageId });

@@ -36,6 +36,7 @@ import {
   type TextEditSession,
   type TextEditSessionPatch,
 } from '../model/textEditSession';
+import { hasUnsavedAnnotationWork } from '../model/unsavedWork';
 
 import type {
   AnnotationHistoryState,
@@ -54,6 +55,7 @@ export interface PendingImagePlacement {
 
 export interface PdfAnnotationController {
   readonly state: AnnotationHistoryState;
+  readonly hasUnsavedWork: boolean;
   readonly selection: AnnotationSelection | null;
   readonly getAnnotationsForPage: (
     pageId: WorkspacePageId,
@@ -536,6 +538,11 @@ export function usePdfAnnotations(
   return useMemo(
     () => ({
       state,
+      hasUnsavedWork: hasUnsavedAnnotationWork(
+        state.dirty,
+        textEditSession,
+        pendingImage !== null,
+      ),
       selection: visibleSelection,
       getAnnotationsForPage,
       selectedAnnotationIdForPage,

@@ -2,6 +2,8 @@ import type {
   SourceDocumentId,
   WorkspacePage,
 } from '../../features/pdf-workspace/model/types';
+import type { PdfAnnotation } from '../../features/pdf-annotations/model/types';
+import type { AnnotationImageExportSource } from './annotations/flattenAnnotations';
 
 export interface ExportSource {
   readonly id: SourceDocumentId;
@@ -12,6 +14,10 @@ export interface ExportSource {
 export interface ExportWorkspaceRequest {
   readonly pages: readonly WorkspacePage[];
   readonly sources: ReadonlyMap<SourceDocumentId, ExportSource>;
+  /** Immutable page-local annotation snapshot captured at export start. */
+  readonly annotationsByPage: ReadonlyMap<string, readonly PdfAnnotation[]>;
+  /** Immutable image bytes required by the page-local annotation snapshot. */
+  readonly imageAssets: ReadonlyMap<string, AnnotationImageExportSource>;
 }
 
 export type ExportProgress =
