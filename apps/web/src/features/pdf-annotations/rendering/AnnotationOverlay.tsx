@@ -8,13 +8,17 @@ import {
   isBoxAnnotation,
   type AnnotationViewport,
 } from './annotationProjection';
+import {
+  captureAnnotationGesture,
+  constrainedTransformBox,
+  gestureMatchesViewport,
+  transformedAnnotationBox,
+  type AnnotationGestureSnapshot,
+} from './annotationGesture';
 import { KonvaAnnotationNode } from './KonvaAnnotationNode';
 
-import {
-  viewportPointToPdfPoint,
-  viewportRectToPdfOrientedBox,
-} from '../geometry/coordinateTransforms';
-import type { PdfAnnotation, PdfOrientedBox } from '../model/types';
+import { viewportPointToPdfPoint } from '../geometry/coordinateTransforms';
+import type { PdfAnnotation } from '../model/types';
 
 interface AnnotationOverlayProps {
   readonly workspacePageId: string;
@@ -29,47 +33,12 @@ interface AnnotationOverlayProps {
   readonly onCommitAnnotation: (annotation: PdfAnnotation) => void;
 }
 
-interface GestureSnapshot {
-  readonly annotation: PdfAnnotation;
-  readonly signature: string;
-  readonly startX: number;
-  readonly startY: number;
-}
-
 function isBoxNode(annotation: PdfAnnotation): boolean {
   return (
     isBoxAnnotation(annotation) &&
     annotation.kind !== 'text' &&
     annotation.kind !== 'image'
   );
-}
-
-function createBoxFromNode(
-  node: Konva.Node,
-  viewport: AnnotationViewport,
-  isEllipse: boolean,
-): PdfOrientedBox | null {
-  const scaleX = node.scaleX();
-  const scaleY = node.scaleY();
-  const width = node.width() * scaleX;
-  const height = node.height() * scaleY;
-  if (scaleX <= 0 || scaleY <= 0 || width <= 0 || height <= 0) {
-    return null;
-  }
-
-  try {
-    return viewportRectToPdfOrientedBox(
-      {
-        x: isEllipse ? node.x() - width / 2 : node.x(),
-        y: isEllipse ? node.y() - height / 2 : node.y(),
-        width,
-        height,
-      },
-      viewport,
-    );
-  } catch {
-    return null;
-  }
 }
 
 function pdfDeltaFromViewportDelta(
@@ -93,7 +62,7 @@ export function AnnotationOverlay({
 }: AnnotationOverlayProps) {
   const nodeRefs = useRef(new Map<string, Konva.Node>());
   const transformerRef = useRef<Konva.Transformer>(null);
-  const gestureRef = useRef<GestureSnapshot | null>(null);
+  const gestureRef = useRef<AnnotationGestureSnapshot | null>(null);
   const selectedAnnotation = annotations.find(
     (annotation) => annotation.id === selectedAnnotationId,
   );
@@ -126,46 +95,81 @@ export function AnnotationOverlay({
 
   const handleDragStart = (annotation: PdfAnnotation, node: Konva.Node) => {
     onSelectAnnotation(workspacePageId, annotation.id);
-    gestureRef.current = {
+    gestureRef.current = captureAnnotationGesture(
       annotation,
-      signature: viewportSignature,
-      startX: node.x(),
-      startY: node.y(),
-    };
+      viewportSignature,
+      {
+        x: node.x(),
+        y: node.y(),
+        width: node.width(),
+        height: node.height(),
+        scaleX: node.scaleX(),
+        scaleY: node.scaleY(),
+      },
+    );
+  };
+
+  const handleTransformStart = (
+    annotation: PdfAnnotation,
+    node: Konva.Node,
+  ) => {
+    onSelectAnnotation(workspacePageId, annotation.id);
+    gestureRef.current = captureAnnotationGesture(
+      annotation,
+      viewportSignature,
+      {
+        x: node.x(),
+        y: node.y(),
+        width: node.width(),
+        height: node.height(),
+        scaleX: node.scaleX(),
+        scaleY: node.scaleY(),
+      },
+    );
   };
 
   const handleDragEnd = (node: Konva.Node) => {
     const gesture = gestureRef.current;
     gestureRef.current = null;
-    if (!gesture || gesture.signature !== viewportSignature) {
+    if (!gesture || !gestureMatchesViewport(gesture, viewportSignature)) {
       node.position({
-        x: gesture?.startX ?? node.x(),
-        y: gesture?.startY ?? node.y(),
+        x: gesture ? gesture.start.x : node.x(),
+        y: gesture ? gesture.start.y : node.y(),
       });
       return;
     }
 
     const delta = pdfDeltaFromViewportDelta(
-      node.x() - gesture.startX,
-      node.y() - gesture.startY,
+      node.x() - gesture.start.x,
+      node.y() - gesture.start.y,
       viewport,
     );
-    node.position({ x: gesture.startX, y: gesture.startY });
+    node.position({ x: gesture.start.x, y: gesture.start.y });
     onCommitAnnotation(translateAnnotation(gesture.annotation, delta));
   };
 
   const handleTransformEnd = (node: Konva.Node) => {
     const gesture = gestureRef.current;
     gestureRef.current = null;
-    if (!gesture || gesture.signature !== viewportSignature) {
+    if (!gesture || !gestureMatchesViewport(gesture, viewportSignature)) {
       node.scale({ x: 1, y: 1 });
+      if (gesture) {
+        node.position({ x: gesture.start.x, y: gesture.start.y });
+      }
       return;
     }
 
-    const box = createBoxFromNode(
-      node,
+    const box = transformedAnnotationBox(
+      gesture.annotation,
+      {
+        x: node.x(),
+        y: node.y(),
+        width: node.width(),
+        height: node.height(),
+        scaleX: node.scaleX(),
+        scaleY: node.scaleY(),
+      },
       viewport,
-      gesture.annotation.kind === 'ellipse',
     );
     node.scale({ x: 1, y: 1 });
     if (!box) {
@@ -206,6 +210,9 @@ export function AnnotationOverlay({
               }
               onDragStart={(node) => handleDragStart(annotation, node)}
               onDragEnd={handleDragEnd}
+              onTransformStart={(node) =>
+                handleTransformStart(annotation, node)
+              }
               onTransformEnd={(node) => {
                 if (isBoxNode(annotation)) {
                   handleTransformEnd(node);
@@ -229,12 +236,7 @@ export function AnnotationOverlay({
               'bottom-right',
             ]}
             boundBoxFunc={(oldBox, newBox) =>
-              newBox.width < 8 ||
-              newBox.height < 8 ||
-              newBox.width < 0 ||
-              newBox.height < 0
-                ? oldBox
-                : newBox
+              constrainedTransformBox(oldBox, newBox)
             }
           />
         </Layer>

@@ -1,8 +1,10 @@
 import {
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useReducer,
+  useRef,
   useState,
   type Dispatch,
 } from 'react';
@@ -51,6 +53,10 @@ export function usePdfAnnotations(
     createAnnotationHistoryState,
   );
   const [selection, setSelection] = useState<AnnotationSelection | null>(null);
+  const presentRef = useRef(state.present);
+  useLayoutEffect(() => {
+    presentRef.current = state.present;
+  }, [state.present]);
   const committedPageIds = useMemo(() => pages.map((page) => page.id), [pages]);
 
   useEffect(() => {
@@ -89,14 +95,14 @@ export function usePdfAnnotations(
         return;
       }
 
-      const annotation = selectPageAnnotations(state.present, pageId).find(
+      const annotation = selectPageAnnotations(presentRef.current, pageId).find(
         (candidate) => candidate.id === annotationId,
       );
       setSelection(
         annotation ? { workspacePageId: pageId, annotationId } : null,
       );
     },
-    [state.present],
+    [],
   );
 
   const commitAnnotation = useCallback((annotation: PdfAnnotation) => {

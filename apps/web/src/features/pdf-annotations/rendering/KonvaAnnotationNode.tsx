@@ -21,6 +21,7 @@ interface KonvaAnnotationNodeProps {
   readonly onSelect: () => void;
   readonly onDragStart: (node: Konva.Node) => void;
   readonly onDragEnd: (node: Konva.Node) => void;
+  readonly onTransformStart: (node: Konva.Node) => void;
   readonly onTransformEnd: (node: Konva.Node) => void;
 }
 
@@ -40,6 +41,7 @@ export function KonvaAnnotationNode({
   onSelect,
   onDragStart,
   onDragEnd,
+  onTransformStart,
   onTransformEnd,
 }: KonvaAnnotationNodeProps) {
   const projection = projectAnnotation(annotation, viewport);
@@ -51,8 +53,8 @@ export function KonvaAnnotationNode({
       <Group
         ref={nodeRef}
         id={annotation.id}
-        draggable
-        preventDefault={false}
+        draggable={selected}
+        preventDefault={selected}
         onPointerDown={(event) => selectFromEvent(event, onSelect)}
         onDragStart={(event) => onDragStart(event.target)}
         onDragEnd={(event) => onDragEnd(event.target)}
@@ -77,8 +79,8 @@ export function KonvaAnnotationNode({
       <Group
         ref={nodeRef}
         id={annotation.id}
-        draggable
-        preventDefault={false}
+        draggable={selected}
+        preventDefault={selected}
         onPointerDown={(event) => selectFromEvent(event, onSelect)}
         onDragStart={(event) => onDragStart(event.target)}
         onDragEnd={(event) => onDragEnd(event.target)}
@@ -111,14 +113,16 @@ export function KonvaAnnotationNode({
     y: bounds.y,
     width: bounds.width,
     height: bounds.height,
-    draggable: interactive,
-    preventDefault: false,
+    draggable: interactive && selected,
+    preventDefault: selected && interactive,
     onPointerDown: (event: Konva.KonvaEventObject<PointerEvent>) =>
       selectFromEvent(event, onSelect),
     onDragStart: (event: Konva.KonvaEventObject<DragEvent>) =>
       onDragStart(event.target),
     onDragEnd: (event: Konva.KonvaEventObject<DragEvent>) =>
       onDragEnd(event.target),
+    onTransformStart: (event: Konva.KonvaEventObject<Event>) =>
+      onTransformStart(event.target),
     onTransformEnd: (event: Konva.KonvaEventObject<Event>) =>
       onTransformEnd(event.target),
   };
