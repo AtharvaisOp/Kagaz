@@ -1,6 +1,7 @@
 import { useCallback, useLayoutEffect, useRef, useState } from 'react';
 
 import { FileIssueList } from '../../components/FileIssueList';
+import type { PdfAnnotationController } from '../pdf-annotations/hooks/usePdfAnnotations';
 import { MemoizedPdfPage } from './PdfPage';
 import { ViewerToolbar } from './ViewerToolbar';
 import { ExtractPagesDialog } from './ExtractPagesDialog';
@@ -43,6 +44,7 @@ interface PdfViewerProps {
   readonly exportState: PdfExportState;
   readonly onDownloadPdf: () => void;
   readonly onExtractPages: (pages: readonly WorkspacePage[]) => void;
+  readonly annotationController: PdfAnnotationController;
 }
 
 function getSourceLabel(
@@ -86,6 +88,7 @@ export function PdfViewer({
   exportState,
   onDownloadPdf,
   onExtractPages,
+  annotationController,
 }: PdfViewerProps) {
   const [mobilePageManagerOpen, setMobilePageManagerOpen] = useState(false);
   const [extractOpen, setExtractOpen] = useState(false);
@@ -212,6 +215,16 @@ export function PdfViewer({
                   document={document}
                   workspacePosition={workspacePosition}
                   zoom={zoom}
+                  annotations={annotationController.getAnnotationsForPage(
+                    page.id,
+                  )}
+                  selectedAnnotationId={
+                    annotationController.selection?.workspacePageId === page.id
+                      ? annotationController.selection.annotationId
+                      : null
+                  }
+                  onSelectAnnotation={annotationController.selectAnnotation}
+                  onCommitAnnotation={annotationController.commitAnnotation}
                   registerPage={navigation.registerPage}
                 />
               );

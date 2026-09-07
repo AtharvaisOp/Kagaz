@@ -15,10 +15,12 @@
     "@dnd-kit/react": "0.5.0",
     "@fontsource/inter": "^5.2.6",
     "@fontsource/jetbrains-mono": "^5.2.6",
+    "konva": "10.3.3",
     "pdf-lib": "1.17.1",
     "pdfjs-dist": "^6.3.289",
     "react": "^19.2.0",
-    "react-dom": "^19.2.0"
+    "react-dom": "^19.2.0",
+    "react-konva": "19.2.6"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.3.3",

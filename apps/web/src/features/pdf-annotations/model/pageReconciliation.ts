@@ -4,10 +4,10 @@ import { annotationReducer } from './reducer';
 
 import type { AnnotationHistoryState } from './types';
 
-export function reconcileRemovedWorkspacePages(
+export function findRemovedWorkspacePageIds(
   state: AnnotationHistoryState,
   committedPageIds: readonly WorkspacePageId[],
-): AnnotationHistoryState {
+): readonly string[] {
   const committed = new Set(committedPageIds);
   const removed = new Set<string>();
 
@@ -24,13 +24,21 @@ export function reconcileRemovedWorkspacePages(
     }
   }
 
-  if (removed.size === 0) {
+  return [...removed];
+}
+
+export function reconcileRemovedWorkspacePages(
+  state: AnnotationHistoryState,
+  committedPageIds: readonly WorkspacePageId[],
+): AnnotationHistoryState {
+  const removed = findRemovedWorkspacePageIds(state, committedPageIds);
+  if (removed.length === 0) {
     return state;
   }
 
   return annotationReducer(state, {
     type: 'PRUNE_REMOVED_PAGES',
-    pageIds: [...removed],
+    pageIds: removed,
   });
 }
 

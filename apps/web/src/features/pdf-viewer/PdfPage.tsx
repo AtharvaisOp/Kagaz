@@ -1,6 +1,11 @@
 import { memo, useEffect, useRef, useState } from 'react';
 
 import { useNearViewport } from '../../hooks/useNearViewport';
+import { AnnotationOverlay } from '../pdf-annotations/rendering/AnnotationOverlay';
+import type {
+  AnnotationId,
+  PdfAnnotation,
+} from '../pdf-annotations/model/types';
 import { normalizeRotation } from '../pdf-workspace/model/operations';
 import { adoptResolvedPdfPage } from '../pdf-workspace/runtime/pdfPageLifecycle';
 
@@ -8,13 +13,25 @@ import type {
   WorkspacePage,
   WorkspacePageId,
 } from '../pdf-workspace/model/types';
-import type { PDFDocumentProxy, PDFPageProxy, RenderTask } from 'pdfjs-dist';
+import type {
+  PageViewport,
+  PDFDocumentProxy,
+  PDFPageProxy,
+  RenderTask,
+} from 'pdfjs-dist';
 
 interface PdfPageProps {
   readonly page: WorkspacePage;
   readonly document: PDFDocumentProxy;
   readonly workspacePosition: number;
   readonly zoom: number;
+  readonly annotations: readonly PdfAnnotation[];
+  readonly selectedAnnotationId: AnnotationId | null;
+  readonly onSelectAnnotation: (
+    pageId: WorkspacePageId,
+    annotationId: AnnotationId | null,
+  ) => void;
+  readonly onCommitAnnotation: (annotation: PdfAnnotation) => void;
   readonly registerPage?: (
     pageId: WorkspacePageId,
     element: HTMLDivElement | null,
@@ -23,16 +40,29 @@ interface PdfPageProps {
 
 type PageStatus = 'waiting' | 'loading' | 'ready' | 'error';
 
+interface RenderedViewportState {
+  readonly viewport: PageViewport;
+  readonly signature: string;
+  readonly requestSignature: string;
+  readonly document: PDFDocumentProxy;
+}
+
 export function PdfPage({
   page,
   document,
   workspacePosition,
   zoom,
+  annotations,
+  selectedAnnotationId,
+  onSelectAnnotation,
+  onCommitAnnotation,
   registerPage,
 }: PdfPageProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const { elementRef, isNearViewport } = useNearViewport();
   const [status, setStatus] = useState<PageStatus>('waiting');
+  const [renderedViewport, setRenderedViewport] =
+    useState<RenderedViewportState | null>(null);
   const [baseDimensions, setBaseDimensions] = useState({
     width: 612,
     height: 792,
@@ -41,6 +71,12 @@ export function PdfPage({
     width: baseDimensions.width * (zoom / 100),
     height: baseDimensions.height * (zoom / 100),
   };
+  const viewportRequestSignature = [
+    page.id,
+    page.sourcePageIndex,
+    page.rotationDelta,
+    zoom,
+  ].join(':');
 
   const setPageRef = (element: HTMLDivElement | null) => {
     elementRef.current = element;
@@ -62,6 +98,7 @@ export function PdfPage({
     }
 
     setStatus('loading');
+    setRenderedViewport(null);
 
     void document
       .getPage(page.sourcePageIndex + 1)
@@ -107,10 +144,22 @@ export function PdfPage({
           viewport,
         });
 
-        return renderTask.promise;
+        return renderTask.promise.then(() => ({ viewport }));
       })
-      .then(() => {
-        if (active) {
+      .then((result) => {
+        if (active && result) {
+          const { viewport } = result;
+          setRenderedViewport({
+            viewport,
+            signature: [
+              viewportRequestSignature,
+              viewport.width,
+              viewport.height,
+              viewport.rotation,
+            ].join(':'),
+            requestSignature: viewportRequestSignature,
+            document,
+          });
           setStatus('ready');
         }
       })
@@ -122,6 +171,7 @@ export function PdfPage({
             error.name === 'RenderingCancelledException'
           )
         ) {
+          setRenderedViewport(null);
           setStatus('error');
         }
       });
@@ -136,12 +186,24 @@ export function PdfPage({
   }, [
     document,
     isNearViewport,
+    page.id,
     page.rotationDelta,
     page.sourcePageIndex,
+    viewportRequestSignature,
     zoom,
   ]);
 
   const workspacePageNumber = workspacePosition + 1;
+  const surfaceWidth =
+    renderedViewport?.viewport.width ?? displayDimensions.width;
+  const surfaceHeight =
+    renderedViewport?.viewport.height ?? displayDimensions.height;
+  const hasRenderedViewport =
+    isNearViewport &&
+    renderedViewport !== null &&
+    status === 'ready' &&
+    renderedViewport.requestSignature === viewportRequestSignature &&
+    renderedViewport.document === document;
 
   return (
     <article
@@ -150,35 +212,53 @@ export function PdfPage({
       data-workspace-page-id={page.id}
       aria-label={`Page ${workspacePageNumber}`}
       style={{
-        width: displayDimensions.width,
-        minHeight: displayDimensions.height,
+        width: surfaceWidth + 2,
+        minHeight: surfaceHeight + 2,
       }}
     >
       <div className="page-index" aria-hidden="true">
         {String(workspacePageNumber).padStart(2, '0')}
       </div>
-      <canvas
-        ref={canvasRef}
-        className="pdf-canvas"
-        width={0}
-        height={0}
-        data-ready={isNearViewport && status === 'ready' ? true : undefined}
-      />
-      {!isNearViewport || status === 'loading' || status === 'waiting' ? (
-        <div
-          className="page-placeholder"
-          aria-label={`Loading page ${workspacePageNumber}`}
-        >
-          <span className="loading-line" />
-          <span className="loading-line short" />
-          <span className="loading-line" />
-        </div>
-      ) : null}
-      {status === 'error' ? (
-        <div className="page-error" role="alert">
-          Page {workspacePageNumber} could not be rendered.
-        </div>
-      ) : null}
+      <div
+        className="pdf-page-surface"
+        style={{ width: surfaceWidth, height: surfaceHeight }}
+        data-viewport-signature={renderedViewport?.signature}
+      >
+        <canvas
+          ref={canvasRef}
+          className="pdf-canvas"
+          width={0}
+          height={0}
+          data-ready={isNearViewport && status === 'ready' ? true : undefined}
+        />
+        {!isNearViewport || status === 'loading' || status === 'waiting' ? (
+          <div
+            className="page-placeholder"
+            aria-label={`Loading page ${workspacePageNumber}`}
+          >
+            <span className="loading-line" />
+            <span className="loading-line short" />
+            <span className="loading-line" />
+          </div>
+        ) : null}
+        {status === 'error' ? (
+          <div className="page-error" role="alert">
+            Page {workspacePageNumber} could not be rendered.
+          </div>
+        ) : null}
+        {hasRenderedViewport && renderedViewport ? (
+          <AnnotationOverlay
+            key={renderedViewport.signature}
+            workspacePageId={page.id}
+            viewport={renderedViewport.viewport}
+            viewportSignature={renderedViewport.signature}
+            annotations={annotations}
+            selectedAnnotationId={selectedAnnotationId}
+            onSelectAnnotation={onSelectAnnotation}
+            onCommitAnnotation={onCommitAnnotation}
+          />
+        ) : null}
+      </div>
     </article>
   );
 }

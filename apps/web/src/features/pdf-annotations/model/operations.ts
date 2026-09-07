@@ -14,6 +14,8 @@ import type {
   PdfAnnotation,
 } from './types';
 
+export const EMPTY_ANNOTATIONS: readonly PdfAnnotation[] = Object.freeze([]);
+
 export function createEmptyAnnotationDocument(): AnnotationDocument {
   return { byPage: {} };
 }
@@ -22,7 +24,7 @@ export function getPageAnnotations(
   document: AnnotationDocument,
   pageId: WorkspacePageId,
 ): readonly PdfAnnotation[] {
-  return document.byPage[pageId] ?? [];
+  return document.byPage[pageId] ?? EMPTY_ANNOTATIONS;
 }
 
 function withPageAnnotations(

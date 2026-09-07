@@ -4,6 +4,7 @@ import { AppHeader } from './components/AppHeader';
 import { FilePicker } from './components/FilePicker';
 import { LoadingState } from './components/LoadingState';
 import { PdfViewer } from './features/pdf-viewer/PdfViewer';
+import { usePdfAnnotations } from './features/pdf-annotations/hooks/usePdfAnnotations';
 import { usePdfWorkspace } from './features/pdf-workspace/hooks/usePdfWorkspace';
 import { usePdfExport } from './features/pdf-workspace/hooks/usePdfExport';
 
@@ -28,6 +29,7 @@ export function App() {
     deletePage,
     rotatePage,
   } = usePdfWorkspace();
+  const annotationController = usePdfAnnotations(workspace.pages);
   const pdfExport = usePdfExport(workspace, registry);
 
   const handleInitialSelection = (
@@ -99,6 +101,7 @@ export function App() {
           exportState={pdfExport.state}
           onDownloadPdf={pdfExport.downloadWorkspace}
           onExtractPages={pdfExport.extractPages}
+          annotationController={annotationController}
         />
       ) : null}
     </main>
