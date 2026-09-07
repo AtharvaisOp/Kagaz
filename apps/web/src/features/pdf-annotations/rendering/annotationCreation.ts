@@ -24,6 +24,58 @@ export interface CreationDraft {
   readonly points: readonly ViewportPoint[];
 }
 
+export interface CreationDraftContext {
+  readonly tool: AnnotationTool;
+  readonly workspacePageId: string;
+  readonly viewportSignature: string;
+}
+
+export interface CreationDraftSession {
+  readonly current: CreationDraft | null;
+  begin(draft: CreationDraft): void;
+  update(draft: CreationDraft): void;
+  cancel(): void;
+  complete(context: CreationDraftContext): CreationDraft | null;
+}
+
+export function creationDraftMatchesContext(
+  draft: CreationDraft,
+  context: CreationDraftContext,
+): boolean {
+  return (
+    context.tool !== 'select' &&
+    draft.tool === context.tool &&
+    draft.workspacePageId === context.workspacePageId &&
+    draft.viewportSignature === context.viewportSignature
+  );
+}
+
+export function createCreationDraftSession(): CreationDraftSession {
+  let current: CreationDraft | null = null;
+
+  return {
+    get current() {
+      return current;
+    },
+    begin(draft) {
+      current = draft;
+    },
+    update(draft) {
+      if (current) current = draft;
+    },
+    cancel() {
+      current = null;
+    },
+    complete(context) {
+      const completed = current;
+      current = null;
+      return completed && creationDraftMatchesContext(completed, context)
+        ? completed
+        : null;
+    },
+  };
+}
+
 export function normalizeViewportRect(
   start: ViewportPoint,
   end: ViewportPoint,

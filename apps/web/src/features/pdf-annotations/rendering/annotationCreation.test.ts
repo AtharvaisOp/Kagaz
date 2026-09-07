@@ -4,6 +4,7 @@ import type { CoordinateViewport } from '../geometry/coordinateTransforms';
 import { DEFAULT_ANNOTATION_STYLE } from '../model/editorTypes';
 import {
   createAnnotationFromDraft,
+  createCreationDraftSession,
   normalizeViewportRect,
 } from './annotationCreation';
 import { dedupeViewportPoints, simplifyRdp } from './simplifyFreehand';
@@ -92,5 +93,65 @@ describe('annotation creation boundary', () => {
       { x: 0, y: 0 },
       { x: 20, y: 20 },
     ]);
+  });
+
+  it('cancels a draft when the tool changes or returns to Select', () => {
+    const session = createCreationDraftSession();
+    session.begin(draft('rectangle'));
+    expect(
+      session.complete({
+        tool: 'highlight',
+        workspacePageId: 'page-1',
+        viewportSignature: 'page-1:1',
+      }),
+    ).toBeNull();
+    expect(session.current).toBeNull();
+
+    session.begin(draft('freehand'));
+    expect(
+      session.complete({
+        tool: 'select',
+        workspacePageId: 'page-1',
+        viewportSignature: 'page-1:1',
+      }),
+    ).toBeNull();
+  });
+
+  it('rejects stale viewport completion without creating an annotation', () => {
+    const session = createCreationDraftSession();
+    session.begin(draft('ellipse'));
+    const completed = session.complete({
+      tool: 'ellipse',
+      workspacePageId: 'page-1',
+      viewportSignature: 'page-1:2',
+    });
+
+    expect(completed).toBeNull();
+    expect(session.current).toBeNull();
+  });
+
+  it('cancels pointer-aborted creation and accepts a fresh gesture afterward', () => {
+    const session = createCreationDraftSession();
+    session.begin(draft('line'));
+    session.cancel();
+    expect(session.current).toBeNull();
+
+    session.begin(draft('rectangle'));
+    const completed = session.complete({
+      tool: 'rectangle',
+      workspacePageId: 'page-1',
+      viewportSignature: 'page-1:1',
+    });
+    expect(completed).toEqual(draft('rectangle'));
+    expect(
+      completed
+        ? createAnnotationFromDraft(
+            completed,
+            DEFAULT_ANNOTATION_STYLE,
+            'rectangle-after-cancel',
+          )
+        : null,
+    ).toMatchObject({ kind: 'rectangle' });
+    expect(session.current).toBeNull();
   });
 });

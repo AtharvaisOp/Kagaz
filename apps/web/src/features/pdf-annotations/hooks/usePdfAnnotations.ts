@@ -20,11 +20,10 @@ import { findRemovedWorkspacePageIds } from '../model/pageReconciliation';
 import { createBrowserIdFactory } from '../../pdf-workspace/runtime/ids';
 import {
   DEFAULT_ANNOTATION_STYLE,
-  createFillStyle,
-  createStrokeStyle,
   type AnnotationStyleDefaults,
   type AnnotationTool,
 } from '../model/editorTypes';
+import { applyAnnotationStyleDefaults } from '../model/annotationStyle';
 
 import type {
   AnnotationHistoryState,
@@ -172,32 +171,7 @@ export function usePdfAnnotations(
         return;
       }
       const nextStyle = { ...styleDefaults, ...patch };
-      const next = (() => {
-        switch (current.kind) {
-          case 'highlight':
-            return {
-              ...current,
-              fill: createFillStyle(nextStyle),
-            };
-          case 'rectangle':
-          case 'ellipse':
-            return {
-              ...current,
-              stroke: createStrokeStyle(nextStyle),
-              fill: current.fill
-                ? createFillStyle(nextStyle, Math.min(nextStyle.opacity, 0.25))
-                : null,
-            };
-          case 'line':
-          case 'freehand':
-            return {
-              ...current,
-              stroke: createStrokeStyle(nextStyle, nextStyle.opacity),
-            };
-          default:
-            return current;
-        }
-      })();
+      const next = applyAnnotationStyleDefaults(current, nextStyle);
       dispatch({
         type: 'UPDATE_ANNOTATION',
         pageId: currentSelection.workspacePageId,

@@ -1,4 +1,10 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from 'react';
 import type Konva from 'konva';
 import { Layer, Stage, Transformer } from 'react-konva';
 
@@ -19,6 +25,7 @@ import { KonvaAnnotationNode } from './KonvaAnnotationNode';
 import { AnnotationDraft } from './AnnotationDraft';
 import {
   createAnnotationFromDraft,
+  createCreationDraftSession,
   type CreationDraft,
 } from './annotationCreation';
 
@@ -81,25 +88,37 @@ export function AnnotationOverlay({
   const nodeRefs = useRef(new Map<string, Konva.Node>());
   const transformerRef = useRef<Konva.Transformer>(null);
   const gestureRef = useRef<AnnotationGestureSnapshot | null>(null);
-  const creationRef = useRef<CreationDraft | null>(null);
-  const [creationDraft, setCreationDraft] = useState<CreationDraft | null>(
-    null,
-  );
+  const creationRef = useRef(createCreationDraftSession());
+  const creationContextKey = `${workspacePageId}\0${viewportSignature}\0${activeTool}`;
+  const [creationState, setCreationState] = useState<{
+    readonly contextKey: string;
+    readonly draft: CreationDraft | null;
+  }>({ contextKey: creationContextKey, draft: null });
+  if (creationState.contextKey !== creationContextKey) {
+    setCreationState({ contextKey: creationContextKey, draft: null });
+  }
+  const creationDraft = creationState.draft;
   const creating = activeTool !== 'select';
   const selectedAnnotation = annotations.find(
     (annotation) => annotation.id === selectedAnnotationId,
   );
 
-  useEffect(() => {
-    gestureRef.current = null;
-    creationRef.current = null;
-  }, [viewportSignature]);
+  const cancelCreation = useCallback(() => {
+    creationRef.current.cancel();
+    setCreationState({ contextKey: creationContextKey, draft: null });
+  }, [creationContextKey]);
 
-  useEffect(() => {
-    if (activeTool === 'select') {
-      creationRef.current = null;
-    }
-  }, [activeTool]);
+  useLayoutEffect(() => {
+    gestureRef.current = null;
+    creationRef.current.cancel();
+  }, [activeTool, viewportSignature, workspacePageId]);
+
+  useEffect(
+    () => () => {
+      creationRef.current.cancel();
+    },
+    [],
+  );
 
   useLayoutEffect(() => {
     const transformer = transformerRef.current;
@@ -231,27 +250,30 @@ export function AnnotationOverlay({
       current: point,
       points: [point],
     };
-    creationRef.current = draft;
-    setCreationDraft(draft);
+    creationRef.current.begin(draft);
+    setCreationState({ contextKey: creationContextKey, draft });
   };
 
   const handleCreationMove = (event: Konva.KonvaEventObject<PointerEvent>) => {
-    const current = creationRef.current;
+    const current = creationRef.current.current;
     if (!current) return;
     const point = stagePoint(event);
     if (!point) return;
     const points =
       current.tool === 'freehand' ? [...current.points, point] : current.points;
     const next = { ...current, current: point, points };
-    creationRef.current = next;
-    setCreationDraft(next);
+    creationRef.current.update(next);
+    setCreationState({ contextKey: creationContextKey, draft: next });
   };
 
   const handleCreationUp = (event: Konva.KonvaEventObject<PointerEvent>) => {
-    const current = creationRef.current;
-    creationRef.current = null;
-    setCreationDraft(null);
-    if (!current || current.viewportSignature !== viewportSignature) return;
+    const current = creationRef.current.complete({
+      tool: activeTool,
+      workspacePageId,
+      viewportSignature,
+    });
+    setCreationState({ contextKey: creationContextKey, draft: null });
+    if (!current) return;
     const point = stagePoint(event) ?? current.current;
     const draft = { ...current, current: point };
     const annotation = createAnnotationFromDraft(
@@ -287,6 +309,8 @@ export function AnnotationOverlay({
         }}
         onPointerMove={creating ? handleCreationMove : undefined}
         onPointerUp={creating ? handleCreationUp : undefined}
+        onPointerCancel={creating ? cancelCreation : undefined}
+        onPointerLeave={creating ? cancelCreation : undefined}
       >
         <Layer>
           {annotations.map((annotation) => (

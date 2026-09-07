@@ -1,7 +1,17 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 
 import type { PdfAnnotationController } from '../hooks/usePdfAnnotations';
 import type { AnnotationTool } from '../model/editorTypes';
+import { shouldHandleAnnotationShortcut } from './annotationShortcuts';
+import {
+  beginOpacityInteraction,
+  completeOpacityInteraction,
+  IDLE_OPACITY_INTERACTION,
+  isOpacityAdjustmentKey,
+  sameAnnotationSelection,
+  updateOpacityInteraction,
+  type OpacityInteractionState,
+} from './annotationStyleInteraction';
 
 interface AnnotationToolbarProps {
   readonly controller: PdfAnnotationController;
@@ -31,13 +41,6 @@ const colors = [
   ['#ffffff', { r: 1, g: 1, b: 1 }],
 ] as const;
 
-function isEditableTarget(target: EventTarget | null): boolean {
-  return (
-    target instanceof HTMLElement &&
-    Boolean(target.closest('input, textarea, select, [contenteditable="true"]'))
-  );
-}
-
 export function AnnotationToolbar({ controller }: AnnotationToolbarProps) {
   const {
     activeTool,
@@ -53,10 +56,13 @@ export function AnnotationToolbar({ controller }: AnnotationToolbarProps) {
     clearSelection,
     selection,
   } = controller;
+  const opacityInteractionRef = useRef<OpacityInteractionState>(
+    IDLE_OPACITY_INTERACTION,
+  );
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (isEditableTarget(event.target)) return;
+      if (!shouldHandleAnnotationShortcut(event)) return;
       const key = event.key.toLowerCase();
       const modifier = event.metaKey || event.ctrlKey;
       if (modifier && key === 'z') {
@@ -93,6 +99,16 @@ export function AnnotationToolbar({ controller }: AnnotationToolbarProps) {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [clearSelection, deleteSelected, redo, setActiveTool, undo]);
 
+  useEffect(() => {
+    const interaction = opacityInteractionRef.current;
+    if (
+      interaction.status === 'active' &&
+      !sameAnnotationSelection(interaction.target, selection)
+    ) {
+      opacityInteractionRef.current = IDLE_OPACITY_INTERACTION;
+    }
+  }, [selection]);
+
   const updateColor = (color: (typeof colors)[number][1]) => {
     updateStyleDefaults({ strokeColor: color, fillColor: color });
     updateSelectedStyle({ strokeColor: color, fillColor: color });
@@ -101,9 +117,38 @@ export function AnnotationToolbar({ controller }: AnnotationToolbarProps) {
     updateStyleDefaults({ strokeWidth: value });
     updateSelectedStyle({ strokeWidth: value });
   };
+  const beginOpacity = () => {
+    if (opacityInteractionRef.current.status === 'idle') {
+      opacityInteractionRef.current = beginOpacityInteraction(
+        selection,
+        styleDefaults.opacity,
+      );
+    }
+  };
+  const commitOpacity = () => {
+    const result = completeOpacityInteraction(opacityInteractionRef.current);
+    opacityInteractionRef.current = result.state;
+    if (
+      result.commit &&
+      sameAnnotationSelection(result.commit.target, selection)
+    ) {
+      updateSelectedStyle({ opacity: result.commit.opacity });
+    }
+  };
+  const cancelOpacity = () => {
+    opacityInteractionRef.current = IDLE_OPACITY_INTERACTION;
+  };
   const updateOpacity = (value: number) => {
+    const wasIdle = opacityInteractionRef.current.status === 'idle';
     updateStyleDefaults({ opacity: value });
-    updateSelectedStyle({ opacity: value });
+    opacityInteractionRef.current = updateOpacityInteraction(
+      opacityInteractionRef.current,
+      selection,
+      value,
+    );
+    if (wasIdle) {
+      commitOpacity();
+    }
   };
 
   return (
@@ -196,6 +241,16 @@ export function AnnotationToolbar({ controller }: AnnotationToolbarProps) {
             step={0.05}
             value={styleDefaults.opacity}
             onChange={(event) => updateOpacity(Number(event.target.value))}
+            onPointerDown={beginOpacity}
+            onPointerUp={commitOpacity}
+            onPointerCancel={cancelOpacity}
+            onKeyDown={(event) => {
+              if (isOpacityAdjustmentKey(event.key)) beginOpacity();
+            }}
+            onKeyUp={(event) => {
+              if (isOpacityAdjustmentKey(event.key)) commitOpacity();
+            }}
+            onBlur={commitOpacity}
           />
         </label>
       </div>
