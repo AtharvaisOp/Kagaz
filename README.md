@@ -22,7 +22,25 @@ bytes to a server.
 
 The current workspace is intentionally lightweight: zoom is display state,
 while page order, deletion, rotation, and selection are logical workspace
-state. Start Over protects dirty work with a discard confirmation.
+state. Start Over protects workspace, annotation, and meaningful in-progress
+editor work with one discard confirmation.
+
+## Phase 2 annotation capabilities
+
+- Create and edit text, highlight, freehand, rectangle, ellipse, line, and
+  image annotations
+- Move, resize, style, select, delete, and undo/redo annotation edits
+- Add PNG or JPEG images locally without uploading source bytes
+- JPEGs containing non-default camera orientation metadata are rejected until
+  they are saved or rotated normally
+- Preview annotations in the page manager thumbnails and in a compact semantic
+  annotation list for the current page
+- Flatten all seven annotation kinds into browser-local Download and Extract
+  output while preserving page order, rotation, and z-order
+
+Text export currently uses PDF Standard Helvetica. Characters that Helvetica
+cannot encode are rejected with an actionable export error rather than being
+silently replaced.
 
 ## Privacy-first architecture
 
@@ -47,10 +65,12 @@ Backend
 └─ Express /health foundation for future server-heavy work
 ```
 
-PDF.js is responsible for preview and rendering. The workspace reducer stores
-serializable logical edits. The source registry owns browser `File` objects
-and PDF.js runtime resources. The export layer resolves the original Files by
-stable source ID and uses pdf-lib to create output bytes in the browser.
+PDF.js is responsible for preview and rendering. The workspace and annotation
+reducers store serializable logical edits. The source registry owns browser
+`File` objects and PDF.js runtime resources, while the annotation asset
+registry owns decoded PNG/JPEG runtime assets and their object URLs. The export
+layer snapshots the required source files and annotation assets by stable IDs,
+then lazy-loads pdf-lib only when creating output bytes in the browser.
 
 ## Technology
 
@@ -100,7 +120,7 @@ are needed.
 | `PORT`         | `4000`                  | API listening port; hosting platforms may provide it. |
 | `CORS_ORIGINS` | `http://localhost:5173` | Comma-separated API origins.                          |
 
-No secrets are required for the current Phase 1 workflow.
+No secrets are required for the current browser-local workflow.
 
 ## Deployment
 
@@ -142,9 +162,12 @@ that genuinely need native tooling.
 ## Current limitations
 
 - Password-protected PDFs cannot be opened; password entry is not available.
-- There is no undo/redo or persistence yet.
-- Annotations, forms, signatures, OCR, compression, and conversion are not
-  implemented.
+- There is no persistence or cloud collaboration yet.
+- Forms, signatures, OCR, compression, and conversion are not implemented.
+- Canvas annotations are projected visually; the current-page semantic list is
+  the keyboard and screen-reader path for existing annotations.
+- Text export is limited to glyphs supported by Standard Helvetica; custom
+  font embedding is not implemented.
 - There are no accounts, cloud storage, or collaboration features.
 - Very large PDFs may create browser memory pressure.
 - The page-copy export workflow may not preserve every document-level feature,
@@ -152,7 +175,7 @@ that genuinely need native tooling.
 
 ## Roadmap
 
-- Phase 2 — annotations
+- Phase 2 — annotations (complete)
 - Phase 3 — forms and signatures
 - Phase 4 — server-backed heavy processing such as OCR and conversion
 

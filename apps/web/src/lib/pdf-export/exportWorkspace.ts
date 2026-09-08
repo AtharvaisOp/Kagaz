@@ -5,12 +5,7 @@ import {
   type ExportProgress,
   type ExportWorkspaceRequest,
 } from './types';
-import {
-  AnnotationExportError,
-  createAnnotationExportContext,
-  createAnnotationImageResolver,
-  flattenAnnotationsOntoCopiedPage,
-} from './annotations/flattenAnnotations';
+import { AnnotationExportError } from './annotations/exportContracts';
 import type { PDFDocument } from 'pdf-lib';
 
 function throwIfAborted(signal?: AbortSignal): void {
@@ -44,7 +39,10 @@ export async function exportWorkspace(
     total: uniqueSourceIds.length,
   });
 
-  const { PDFDocument, degrees } = await import('pdf-lib');
+  const [{ PDFDocument, degrees }, flattening] = await Promise.all([
+    import('pdf-lib'),
+    import('./annotations/flattenAnnotations'),
+  ]);
 
   try {
     for (const [index, sourceId] of uniqueSourceIds.entries()) {
@@ -89,9 +87,9 @@ export async function exportWorkspace(
     }
 
     const output = await PDFDocument.create();
-    const annotationContext = await createAnnotationExportContext(
+    const annotationContext = await flattening.createAnnotationExportContext(
       output,
-      createAnnotationImageResolver(request.imageAssets),
+      flattening.createAnnotationImageResolver(request.imageAssets),
     );
     for (const [index, workspacePage] of pages.entries()) {
       throwIfAborted(options.signal);
@@ -119,7 +117,7 @@ export async function exportWorkspace(
           throw new Error('The requested source page was not returned.');
         }
 
-        await flattenAnnotationsOntoCopiedPage(
+        await flattening.flattenAnnotationsOntoCopiedPage(
           copiedPage,
           request.annotationsByPage.get(workspacePage.id) ?? [],
           output,

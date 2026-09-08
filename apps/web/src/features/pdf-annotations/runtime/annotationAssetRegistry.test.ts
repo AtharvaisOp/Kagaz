@@ -74,6 +74,7 @@ describe('annotation asset registry', () => {
 
   it('rejects decoded images with invalid dimensions and revokes their URL', async () => {
     const revoked: string[] = [];
+    const close = vi.fn();
     const registry = createAnnotationAssetRegistry({
       createId: () => 'asset-invalid',
       createObjectUrl: () => 'blob:invalid',
@@ -82,7 +83,7 @@ describe('annotation asset registry', () => {
         Promise.resolve({
           width: 0,
           height: 10,
-          image: {} as CanvasImageSource,
+          image: { close } as unknown as CanvasImageSource,
         }),
     });
     await expect(
@@ -90,6 +91,7 @@ describe('annotation asset registry', () => {
     ).rejects.toThrow('invalid dimensions');
     expect(registry.size).toBe(0);
     expect(revoked).toEqual(['blob:invalid']);
+    expect(close).toHaveBeenCalledOnce();
   });
 
   it('notifies only subscribers for the changed asset', async () => {

@@ -632,10 +632,23 @@ input:focus-visible + * {
   background: #fafafa;
 }
 
+.thumbnail-render-surface {
+  position: relative;
+  flex: 0 0 auto;
+}
+
 .thumbnail-canvas {
   display: block;
   opacity: 0;
   transition: opacity 180ms ease;
+}
+
+.thumbnail-annotation-canvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: block;
+  pointer-events: none;
 }
 
 .thumbnail-canvas-shell[data-status='ready'] .thumbnail-canvas {

@@ -11,6 +11,8 @@ import {
   TrashIcon,
 } from '../../../components/icons';
 import { ThumbnailCanvas } from './ThumbnailCanvas';
+import type { AnnotationAssetRegistry } from '../../pdf-annotations/runtime/annotationAssetRegistry';
+import type { PdfAnnotation } from '../../pdf-annotations/model/types';
 
 import type { DragEndEvent } from '@dnd-kit/react';
 import type { MouseEvent } from 'react';
@@ -35,6 +37,10 @@ interface ThumbnailRailProps {
   readonly onMovePage: (pageId: WorkspacePageId, toIndex: number) => void;
   readonly onDeletePage: (pageId: WorkspacePageId) => void;
   readonly onRotatePage: (pageId: WorkspacePageId, delta?: number) => void;
+  readonly getAnnotationsForPage: (
+    pageId: WorkspacePageId,
+  ) => readonly PdfAnnotation[];
+  readonly assetRegistry: AnnotationAssetRegistry;
 }
 
 interface ThumbnailItemProps {
@@ -49,6 +55,8 @@ interface ThumbnailItemProps {
   readonly onMove: (pageId: WorkspacePageId, toIndex: number) => void;
   readonly onDelete: (pageId: WorkspacePageId) => void;
   readonly onRotate: (pageId: WorkspacePageId) => void;
+  readonly annotations: readonly PdfAnnotation[];
+  readonly assetRegistry: AnnotationAssetRegistry;
 }
 
 function ThumbnailItem({
@@ -63,6 +71,8 @@ function ThumbnailItem({
   onMove,
   onDelete,
   onRotate,
+  annotations,
+  assetRegistry,
 }: ThumbnailItemProps) {
   const { isDragging, isDropping, isDropTarget, handleRef, ref } = useSortable({
     id: page.id,
@@ -100,7 +110,13 @@ function ThumbnailItem({
           aria-label={`Page ${position + 1}, ${sourceLabel}, source page ${sourcePageNumber}`}
           onClick={() => onSelect(page.id)}
         >
-          <ThumbnailCanvas page={page} document={document} root={railRoot} />
+          <ThumbnailCanvas
+            page={page}
+            document={document}
+            root={railRoot}
+            annotations={annotations}
+            assetRegistry={assetRegistry}
+          />
           <span className="thumbnail-page-number">
             {String(position + 1).padStart(2, '0')}
           </span>
@@ -189,6 +205,8 @@ export function ThumbnailRail({
   onMovePage,
   onDeletePage,
   onRotatePage,
+  getAnnotationsForPage,
+  assetRegistry,
 }: ThumbnailRailProps) {
   const [railRoot, setRailRoot] = useState<HTMLElement | null>(null);
   const [announcement, setAnnouncement] = useState('');
@@ -300,6 +318,8 @@ export function ThumbnailRail({
                 onMove={handleMove}
                 onDelete={handleDelete}
                 onRotate={handleRotate}
+                annotations={getAnnotationsForPage(page.id)}
+                assetRegistry={assetRegistry}
               />
             ))}
           </ol>

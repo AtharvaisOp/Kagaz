@@ -6,7 +6,7 @@ import {
 } from '../../../lib/pdf-export/fileNames';
 import { downloadPdf } from '../../../lib/pdf-export/downloadPdf';
 import { exportWorkspace } from '../../../lib/pdf-export/exportWorkspace';
-import { AnnotationExportError } from '../../../lib/pdf-export/annotations/flattenAnnotations';
+import { AnnotationExportError } from '../../../lib/pdf-export/annotations/exportContracts';
 import { snapshotAnnotationImageAssets } from '../../../lib/pdf-export/annotations/imageAssets';
 import {
   PdfExportError,

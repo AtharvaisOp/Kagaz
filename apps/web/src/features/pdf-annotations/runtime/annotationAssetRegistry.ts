@@ -87,6 +87,8 @@ export function createAnnotationAssetRegistry(
           !Number.isFinite(decoded.height) ||
           decoded.height <= 0
         ) {
+          const close = (decoded.image as { close?: () => void }).close;
+          close?.call(decoded.image);
           throw new Error('The selected image has invalid dimensions.');
         }
         const asset: AnnotationImageAsset = {

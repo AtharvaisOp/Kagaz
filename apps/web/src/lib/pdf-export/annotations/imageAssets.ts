@@ -2,7 +2,7 @@ import type { AnnotationAssetRegistry } from '../../../features/pdf-annotations/
 import {
   AnnotationExportError,
   type AnnotationImageExportSource,
-} from './flattenAnnotations';
+} from './exportContracts';
 
 /** Snapshots original registry bytes so export is independent of later cleanup. */
 export async function snapshotAnnotationImageAssets(

@@ -80,20 +80,44 @@ function pruneHistoryPages(
 
   const present = pruneDocumentPages(state.present, removed);
   const baseline = pruneDocumentPages(state.baseline, removed);
-  const past = state.past.map((document) =>
-    pruneDocumentPages(document, removed),
+  const past = normalizeAdjacentDocuments(
+    state.past.map((document) => pruneDocumentPages(document, removed)),
   );
-  const future = state.future.map((document) =>
-    pruneDocumentPages(document, removed),
+  const future = normalizeAdjacentDocuments(
+    state.future.map((document) => pruneDocumentPages(document, removed)),
   );
 
+  // The last past state and first future state are adjacent to present in the
+  // undo timeline. Remove either when pruning made it content-identical so a
+  // subsequent undo/redo can never become an invisible transition.
+  const meaningfulPast =
+    past.length > 0 && documentsHaveSameContent(past[past.length - 1]!, present)
+      ? past.slice(0, -1)
+      : past;
+  const meaningfulFuture =
+    future.length > 0 && documentsHaveSameContent(future[0]!, present)
+      ? future.slice(1)
+      : future;
+
   return {
-    past,
+    past: meaningfulPast,
     present,
-    future,
+    future: meaningfulFuture,
     baseline,
     dirty: !documentsHaveSameContent(present, baseline),
   };
+}
+
+function normalizeAdjacentDocuments(
+  documents: readonly AnnotationDocument[],
+): readonly AnnotationDocument[] {
+  const normalized: AnnotationDocument[] = [];
+  for (const document of documents) {
+    const previous = normalized[normalized.length - 1];
+    if (previous && documentsHaveSameContent(previous, document)) continue;
+    normalized.push(document);
+  }
+  return normalized;
 }
 
 export function annotationReducer(

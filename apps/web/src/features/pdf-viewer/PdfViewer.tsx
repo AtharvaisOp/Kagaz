@@ -196,6 +196,8 @@ export function PdfViewer({
           onMovePage={onMovePage}
           onDeletePage={onDeletePage}
           onRotatePage={onRotatePage}
+          getAnnotationsForPage={annotationController.getAnnotationsForPage}
+          assetRegistry={annotationController.assetRegistry}
         />
         <div className="viewer-column">
           <div className="page-stack">

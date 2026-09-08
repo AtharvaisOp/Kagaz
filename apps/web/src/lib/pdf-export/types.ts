@@ -3,7 +3,7 @@ import type {
   WorkspacePage,
 } from '../../features/pdf-workspace/model/types';
 import type { PdfAnnotation } from '../../features/pdf-annotations/model/types';
-import type { AnnotationImageExportSource } from './annotations/flattenAnnotations';
+import type { AnnotationImageExportSource } from './annotations/exportContracts';
 
 export interface ExportSource {
   readonly id: SourceDocumentId;

@@ -1,10 +1,21 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { normalizeRotation } from '../model/operations';
 import { adoptResolvedPdfPage } from '../runtime/pdfPageLifecycle';
+import {
+  drawThumbnailAnnotations,
+  projectThumbnailAnnotations,
+} from './thumbnailAnnotations';
+import type { AnnotationAssetRegistry } from '../../pdf-annotations/runtime/annotationAssetRegistry';
+import type { PdfAnnotation } from '../../pdf-annotations/model/types';
 
 import type { WorkspacePage } from '../model/types';
-import type { PDFDocumentProxy, PDFPageProxy, RenderTask } from 'pdfjs-dist';
+import type {
+  PDFDocumentProxy,
+  PDFPageProxy,
+  PageViewport,
+  RenderTask,
+} from 'pdfjs-dist';
 
 const THUMBNAIL_WIDTH = 112;
 
@@ -12,6 +23,8 @@ interface ThumbnailCanvasProps {
   readonly page: WorkspacePage;
   readonly document: PDFDocumentProxy | null;
   readonly root: HTMLElement | null;
+  readonly annotations: readonly PdfAnnotation[];
+  readonly assetRegistry: AnnotationAssetRegistry;
 }
 
 function isCancelled(error: unknown): boolean {
@@ -22,13 +35,44 @@ export function ThumbnailCanvas({
   page,
   document,
   root,
+  annotations,
+  assetRegistry,
 }: ThumbnailCanvasProps) {
   const shellRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const annotationCanvasRef = useRef<HTMLCanvasElement>(null);
   const [isNearRail, setIsNearRail] = useState(false);
   const [status, setStatus] = useState<
     'waiting' | 'loading' | 'ready' | 'error'
   >('waiting');
+  const [viewport, setViewport] = useState<PageViewport | null>(null);
+  const [surfaceSize, setSurfaceSize] = useState<{
+    readonly width: number;
+    readonly height: number;
+  } | null>(null);
+  const [pixelRatio, setPixelRatio] = useState(1);
+  const [assetVersion, setAssetVersion] = useState(0);
+  const imageAssetIds = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          annotations.flatMap((annotation) =>
+            annotation.kind === 'image' ? [annotation.assetId] : [],
+          ),
+        ),
+      ),
+    [annotations],
+  );
+
+  useEffect(() => {
+    if (imageAssetIds.length === 0) return;
+    const unsubscribers = imageAssetIds.map((assetId) =>
+      assetRegistry.subscribe(assetId, () =>
+        setAssetVersion((current) => current + 1),
+      ),
+    );
+    return () => unsubscribers.forEach((unsubscribe) => unsubscribe());
+  }, [assetRegistry, imageAssetIds]);
 
   useEffect(() => {
     const element = shellRef.current;
@@ -52,9 +96,12 @@ export function ThumbnailCanvas({
     let loadedPage: PDFPageProxy | null = null;
     let renderTask: RenderTask | null = null;
     const canvas = canvasRef.current;
-    if (!canvas) return;
+    const annotationCanvas = annotationCanvasRef.current;
+    if (!canvas || !annotationCanvas) return;
 
     setStatus('loading');
+    setViewport(null);
+    setSurfaceSize(null);
     void document
       .getPage(page.sourcePageIndex + 1)
       .then((pdfPage) => {
@@ -76,6 +123,13 @@ export function ThumbnailCanvas({
         canvas.height = Math.floor(viewport.height * pixelRatio);
         canvas.style.width = `${viewport.width}px`;
         canvas.style.height = `${viewport.height}px`;
+        annotationCanvas.width = Math.floor(viewport.width * pixelRatio);
+        annotationCanvas.height = Math.floor(viewport.height * pixelRatio);
+        annotationCanvas.style.width = `${viewport.width}px`;
+        annotationCanvas.style.height = `${viewport.height}px`;
+        setPixelRatio(pixelRatio);
+        setSurfaceSize({ width: viewport.width, height: viewport.height });
+        setViewport(viewport);
         renderTask = ownedPage.render({
           canvas,
           canvasContext: context,
@@ -98,17 +152,56 @@ export function ThumbnailCanvas({
       loadedPage?.cleanup();
       canvas.width = 0;
       canvas.height = 0;
+      if (annotationCanvas) {
+        annotationCanvas.width = 0;
+        annotationCanvas.height = 0;
+      }
+      setStatus('waiting');
+      setViewport(null);
+      setSurfaceSize(null);
+      setPixelRatio(1);
     };
   }, [document, isNearRail, page.rotationDelta, page.sourcePageIndex]);
 
+  useEffect(() => {
+    const canvas = annotationCanvasRef.current;
+    if (!canvas || !viewport || status !== 'ready') return;
+    const context = canvas.getContext('2d');
+    if (!context) return;
+    context.clearRect(0, 0, canvas.width, canvas.height);
+    drawThumbnailAnnotations(
+      context,
+      projectThumbnailAnnotations(annotations, viewport, {
+        get: (assetId) => assetRegistry.get(assetId),
+      }),
+      pixelRatio,
+    );
+  }, [annotations, assetRegistry, assetVersion, pixelRatio, status, viewport]);
+
   return (
     <div ref={shellRef} className="thumbnail-canvas-shell" data-status={status}>
-      <canvas
-        ref={canvasRef}
-        className="thumbnail-canvas"
-        width={0}
-        height={0}
-      />
+      <div
+        className="thumbnail-render-surface"
+        style={
+          surfaceSize
+            ? { width: surfaceSize.width, height: surfaceSize.height }
+            : undefined
+        }
+      >
+        <canvas
+          ref={canvasRef}
+          className="thumbnail-canvas"
+          width={0}
+          height={0}
+        />
+        <canvas
+          ref={annotationCanvasRef}
+          className="thumbnail-annotation-canvas"
+          aria-hidden="true"
+          width={0}
+          height={0}
+        />
+      </div>
       {status !== 'ready' ? (
         <span className="thumbnail-placeholder" aria-hidden="true" />
       ) : null}
