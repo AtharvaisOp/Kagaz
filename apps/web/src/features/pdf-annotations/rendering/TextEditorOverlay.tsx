@@ -1,9 +1,9 @@
 import { useEffect, useRef } from 'react';
 
 import { projectPdfBoxToOrientedFrame } from '../geometry/orientedFrame';
-import { pdfUserLengthToViewportPixels } from '../geometry/coordinateTransforms';
 import type { TextEditSession } from '../model/textEditSession';
 import type { AnnotationViewport } from './annotationProjection';
+import { projectTextBoxInset, projectTextFontSize } from './textProjection';
 
 interface TextEditorOverlayProps {
   readonly session: TextEditSession;
@@ -60,12 +60,10 @@ export function TextEditorOverlay({
         color: `rgba(${Math.round(session.color.r * 255)}, ${Math.round(
           session.color.g * 255,
         )}, ${Math.round(session.color.b * 255)}, ${session.opacity})`,
-        fontSize: Math.max(
-          8,
-          pdfUserLengthToViewportPixels(session.fontSizeUserUnits, viewport),
-        ),
+        fontSize: projectTextFontSize(session.fontSizeUserUnits, viewport),
         lineHeight: session.lineHeight,
         textAlign: session.align,
+        padding: projectTextBoxInset(viewport),
       }}
     />
   );

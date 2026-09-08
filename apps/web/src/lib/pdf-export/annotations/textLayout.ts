@@ -1,5 +1,10 @@
 import type { PDFFont } from 'pdf-lib';
 
+import {
+  TEXT_BOX_INSET_USER_UNITS,
+  textBoxContentDimensions,
+} from '../../../features/pdf-annotations/model/textLayoutPolicy';
+
 export interface TextLayoutInput {
   readonly text: string;
   readonly font: PDFFont;
@@ -17,25 +22,45 @@ export interface TextLayoutLine {
   readonly baselineY: number;
 }
 
-function splitLongToken(
-  token: string,
+function appendRun(
+  lines: string[],
+  current: string,
+  run: string,
   font: PDFFont,
   fontSize: number,
   maxWidth: number,
-): string[] {
-  const chunks: string[] = [];
+): string {
+  let next = current;
+  for (const character of run) {
+    const candidate = next + character;
+    if (next && font.widthOfTextAtSize(candidate, fontSize) > maxWidth) {
+      lines.push(next);
+      next = character;
+    } else {
+      next = candidate;
+    }
+  }
+  return next;
+}
+
+function splitLongRun(
+  lines: string[],
+  run: string,
+  font: PDFFont,
+  fontSize: number,
+  maxWidth: number,
+): string {
   let current = '';
-  for (const character of token) {
+  for (const character of run) {
     const candidate = current + character;
     if (current && font.widthOfTextAtSize(candidate, fontSize) > maxWidth) {
-      chunks.push(current);
+      lines.push(current);
       current = character;
     } else {
       current = candidate;
     }
   }
-  if (current || chunks.length === 0) chunks.push(current);
-  return chunks;
+  return current;
 }
 
 function wrapParagraph(
@@ -46,44 +71,47 @@ function wrapParagraph(
 ): string[] {
   if (paragraph.length === 0) return [''];
 
-  const words = paragraph.trim().split(/\s+/).filter(Boolean);
-  if (words.length === 0) return [''];
-
   const lines: string[] = [];
   let current = '';
-  for (const word of words) {
-    const pieces = splitLongToken(word, font, fontSize, maxWidth);
-    for (const piece of pieces) {
-      const candidate = current ? `${current} ${piece}` : piece;
-      if (current && font.widthOfTextAtSize(candidate, fontSize) > maxWidth) {
-        lines.push(current);
-        current = piece;
-      } else {
-        current = candidate;
-      }
+
+  for (const run of paragraph.match(/ +|[^ ]+/g) ?? []) {
+    const candidate = current + run;
+    if (font.widthOfTextAtSize(candidate, fontSize) <= maxWidth) {
+      current = candidate;
+      continue;
     }
+
+    if (/^ +$/.test(run)) {
+      current = appendRun(lines, current, run, font, fontSize, maxWidth);
+      continue;
+    }
+
+    if (current) lines.push(current);
+    current = splitLongRun(lines, run, font, fontSize, maxWidth);
   }
-  if (current) lines.push(current);
+
+  if (current || lines.length === 0) lines.push(current);
   return lines;
 }
 
 export function layoutText(input: TextLayoutInput): readonly TextLayoutLine[] {
+  const content = textBoxContentDimensions(input.maxWidth, input.maxHeight);
   const lineAdvance = input.fontSize * input.lineHeight;
   const maxLines =
-    input.maxHeight < input.fontSize
+    content.height < input.fontSize
       ? 0
-      : Math.floor((input.maxHeight - input.fontSize) / lineAdvance) + 1;
+      : Math.floor((content.height - input.fontSize) / lineAdvance) + 1;
   if (maxLines <= 0) return [];
 
   const wrapped = input.text
     .replace(/\r\n?/g, '\n')
     .split('\n')
     .flatMap((paragraph) =>
-      wrapParagraph(paragraph, input.font, input.fontSize, input.maxWidth),
+      wrapParagraph(paragraph, input.font, input.fontSize, content.width),
     );
   return wrapped.slice(0, maxLines).map((text, index) => {
     const width = input.font.widthOfTextAtSize(text, input.fontSize);
-    const remaining = Math.max(0, input.maxWidth - width);
+    const remaining = Math.max(0, content.width - width);
     const xOffset =
       input.align === 'center'
         ? remaining / 2
@@ -93,8 +121,12 @@ export function layoutText(input: TextLayoutInput): readonly TextLayoutLine[] {
     return {
       text,
       width,
-      xOffset,
-      baselineY: input.maxHeight - input.fontSize - index * lineAdvance,
+      xOffset: xOffset + TEXT_BOX_INSET_USER_UNITS,
+      baselineY:
+        input.maxHeight -
+        TEXT_BOX_INSET_USER_UNITS -
+        input.fontSize -
+        index * lineAdvance,
     };
   });
 }

@@ -256,7 +256,7 @@ describe('annotation PDF flattening', () => {
       maxHeight: 40,
       align: 'center',
     });
-    expect(lines.map((line) => line.text)).toEqual(['alpha', 'beta', 'gamma']);
+    expect(lines.map((line) => line.text)).toEqual(['alpha ', 'beta', 'gamma']);
     expect(lines[0]?.xOffset).toBeGreaterThan(0);
     expect(lines.map((line) => line.baselineY)).toEqual([30, 15, 0]);
   });

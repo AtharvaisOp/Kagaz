@@ -30,6 +30,10 @@ import {
 } from '../runtime/annotationAssetRegistry';
 import { collectReachableAnnotationAssetIds } from '../runtime/assetReachability';
 import {
+  UnsupportedJpegOrientationError,
+  UNSUPPORTED_JPEG_ORIENTATION_MESSAGE,
+} from '../runtime/jpegExifOrientation';
+import {
   canRetainTextEditSession,
   createTextEditBoundary,
   textAnnotationFromSession,
@@ -81,6 +85,10 @@ export interface PdfAnnotationController {
   ) => void;
   readonly updateSelectedStyle: (
     patch: Partial<AnnotationStyleDefaults>,
+  ) => void;
+  readonly deleteAnnotation: (
+    pageId: WorkspacePageId,
+    annotationId: AnnotationId,
   ) => void;
   readonly deleteSelected: () => void;
   readonly clearSelection: () => void;
@@ -344,9 +352,13 @@ export function usePdfAnnotations(
         setPendingImage(next);
         activeToolRef.current = 'image';
         setActiveToolState('image');
-      } catch {
+      } catch (error) {
         if (requestVersion !== imageRequestVersionRef.current) return;
-        setImageError('That image could not be opened. Choose a PNG or JPEG.');
+        setImageError(
+          error instanceof UnsupportedJpegOrientationError
+            ? UNSUPPORTED_JPEG_ORIENTATION_MESSAGE
+            : 'That image could not be opened. Choose a PNG or JPEG.',
+        );
       }
     },
     [assetRegistry],
@@ -504,11 +516,30 @@ export function usePdfAnnotations(
     });
   }, []);
 
+  const deleteAnnotation = useCallback(
+    (pageId: WorkspacePageId, annotationId: AnnotationId) => {
+      const exists = selectPageAnnotations(presentRef.current, pageId).some(
+        (annotation) => annotation.id === annotationId,
+      );
+      if (!exists) return;
+      dispatch({
+        type: 'DELETE_ANNOTATION',
+        pageId,
+        annotationId,
+      });
+      if (
+        selection?.workspacePageId === pageId &&
+        selection.annotationId === annotationId
+      ) {
+        setSelection(null);
+      }
+    },
+    [selection],
+  );
+
   const deleteSelected = useCallback(() => {
     const currentSelection = selection;
-    if (!currentSelection) {
-      return;
-    }
+    if (!currentSelection) return;
     const exists = selectPageAnnotations(
       presentRef.current,
       currentSelection.workspacePageId,
@@ -517,13 +548,11 @@ export function usePdfAnnotations(
       setSelection(null);
       return;
     }
-    dispatch({
-      type: 'DELETE_ANNOTATION',
-      pageId: currentSelection.workspacePageId,
-      annotationId: currentSelection.annotationId,
-    });
-    setSelection(null);
-  }, [selection]);
+    deleteAnnotation(
+      currentSelection.workspacePageId,
+      currentSelection.annotationId,
+    );
+  }, [deleteAnnotation, selection]);
 
   const clearSelection = useCallback(() => setSelection(null), []);
 
@@ -558,6 +587,7 @@ export function usePdfAnnotations(
       styleDefaults,
       updateStyleDefaults,
       updateSelectedStyle,
+      deleteAnnotation,
       deleteSelected,
       clearSelection,
       canUndo: state.past.length > 0,
@@ -589,6 +619,7 @@ export function usePdfAnnotations(
       clearSelection,
       createAnnotationId,
       deleteSelected,
+      deleteAnnotation,
       dispatch,
       getAnnotationsForPage,
       imageError,

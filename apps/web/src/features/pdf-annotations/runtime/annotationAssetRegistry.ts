@@ -1,4 +1,5 @@
 import type { AnnotationAssetId } from '../model/types';
+import { rejectUnsupportedJpegOrientation } from './jpegExifOrientation';
 
 export interface AnnotationImageAsset {
   readonly assetId: AnnotationAssetId;
@@ -73,6 +74,9 @@ export function createAnnotationAssetRegistry(
         throw new Error('Choose a PNG or JPEG image.');
       }
       const mimeType = blob.type as AnnotationImageAsset['mimeType'];
+      if (mimeType === 'image/jpeg') {
+        await rejectUnsupportedJpegOrientation(blob);
+      }
       const assetId = dependencies.createId();
       const objectUrl = dependencies.createObjectUrl(blob);
       try {

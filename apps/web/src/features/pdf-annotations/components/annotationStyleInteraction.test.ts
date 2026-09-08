@@ -60,10 +60,14 @@ describe('opacity interaction boundary', () => {
         pageId: result.commit.target.workspacePageId,
         annotationId: result.commit.target.annotationId,
         update: (annotation) =>
-          applyAnnotationStyleDefaults(annotation, {
-            ...DEFAULT_ANNOTATION_STYLE,
-            opacity: result.commit?.opacity ?? 0.35,
-          }),
+          applyAnnotationStyleDefaults(
+            annotation,
+            {
+              ...DEFAULT_ANNOTATION_STYLE,
+              opacity: result.commit?.opacity ?? 0.35,
+            },
+            { opacity: result.commit?.opacity ?? 0.35 },
+          ),
       });
     }
 
@@ -173,21 +177,27 @@ describe('discrete style controls', () => {
     });
     const afterCreation = history.past.length;
     const edits = [
-      {
-        ...DEFAULT_ANNOTATION_STYLE,
-        strokeColor: { r: 1, g: 0, b: 0 },
-        fillColor: { r: 1, g: 0, b: 0 },
-      },
-      { ...DEFAULT_ANNOTATION_STYLE, strokeWidth: 8 },
-    ];
+      [
+        {
+          ...DEFAULT_ANNOTATION_STYLE,
+          strokeColor: { r: 1, g: 0, b: 0 },
+          fillColor: { r: 1, g: 0, b: 0 },
+        },
+        {
+          strokeColor: { r: 1, g: 0, b: 0 },
+          fillColor: { r: 1, g: 0, b: 0 },
+        },
+      ],
+      [{ ...DEFAULT_ANNOTATION_STYLE, strokeWidth: 8 }, { strokeWidth: 8 }],
+    ] as const;
 
-    for (const styles of edits) {
+    for (const [styles, patch] of edits) {
       history = annotationReducer(history, {
         type: 'UPDATE_ANNOTATION',
         pageId: selectionA.workspacePageId,
         annotationId: selectionA.annotationId,
         update: (annotation) =>
-          applyAnnotationStyleDefaults(annotation, styles),
+          applyAnnotationStyleDefaults(annotation, styles, patch),
       });
     }
 
@@ -242,5 +252,67 @@ describe('discrete style controls', () => {
       kind: 'image',
       opacity: 1,
     });
+  });
+
+  it('commits one patch-local opacity edit for a line with non-default style', () => {
+    const line: PdfAnnotation = {
+      id: 'wide-black-line',
+      workspacePageId: 'page-1',
+      kind: 'line',
+      start: { x: 10, y: 10 },
+      end: { x: 100, y: 100 },
+      stroke: {
+        color: { r: 0, g: 0, b: 0 },
+        widthUserUnits: 8,
+        opacity: 1,
+      },
+    };
+    const target = {
+      workspacePageId: line.workspacePageId,
+      annotationId: line.id,
+    };
+    let history = annotationReducer(createAnnotationHistoryState(), {
+      type: 'ADD_ANNOTATION',
+      annotation: line,
+    });
+    let interaction = beginOpacityInteraction(target, 1);
+    for (const opacity of [0.8, 0.6, 0.4]) {
+      interaction = updateOpacityInteraction(interaction, target, opacity);
+    }
+    const result = finish(interaction);
+    expect(result.commit).not.toBeNull();
+    if (result.commit) {
+      const committedOpacity = result.commit.opacity;
+      history = annotationReducer(history, {
+        type: 'UPDATE_ANNOTATION',
+        pageId: target.workspacePageId,
+        annotationId: target.annotationId,
+        update: (annotation) =>
+          applyAnnotationStyleDefaults(
+            annotation,
+            {
+              ...DEFAULT_ANNOTATION_STYLE,
+              strokeColor: { r: 1, g: 0, b: 0 },
+              strokeWidth: 2,
+              opacity: committedOpacity,
+            },
+            { opacity: committedOpacity },
+          ),
+      });
+    }
+
+    expect(history.past).toHaveLength(2);
+    expect(history.present.byPage['page-1']?.[0]).toMatchObject({
+      stroke: {
+        color: { r: 0, g: 0, b: 0 },
+        widthUserUnits: 8,
+        opacity: 0.4,
+      },
+    });
+    expect(
+      annotationReducer(history, { type: 'UNDO' }).present.byPage[
+        'page-1'
+      ]?.[0],
+    ).toEqual(line);
   });
 });

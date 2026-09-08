@@ -5,6 +5,7 @@ import type { PdfAnnotationController } from '../pdf-annotations/hooks/usePdfAnn
 import { MemoizedPdfPage } from './PdfPage';
 import { ViewerToolbar } from './ViewerToolbar';
 import { AnnotationToolbar } from '../pdf-annotations/components/AnnotationToolbar';
+import { AnnotationSummary } from '../pdf-annotations/components/AnnotationSummaryPanel';
 import { ExtractPagesDialog } from './ExtractPagesDialog';
 import { ThumbnailRail } from '../pdf-workspace/components/ThumbnailRail';
 import { useWorkspaceNavigation } from '../pdf-workspace/hooks/useWorkspaceNavigation';
@@ -162,6 +163,10 @@ export function PdfViewer({
         pagesTriggerRef={pagesTriggerRef}
       />
       <AnnotationToolbar controller={annotationController} />
+      <AnnotationSummary
+        controller={annotationController}
+        pageId={selectedPageId}
+      />
       <ExtractPagesDialog
         key={extractSession}
         pageCount={pages.length}

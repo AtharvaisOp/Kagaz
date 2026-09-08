@@ -9,9 +9,9 @@ import {
   type AnnotationViewport,
 } from './annotationProjection';
 
-import { pdfUserLengthToViewportPixels } from '../geometry/coordinateTransforms';
 import { projectPdfBoxToOrientedFrame } from '../geometry/orientedFrame';
 import { useAnnotationAsset } from '../runtime/useAnnotationAsset';
+import { projectTextBoxInset, projectTextFontSize } from './textProjection';
 
 import type { AnnotationAssetRegistry } from '../runtime/annotationAssetRegistry';
 import type { ImageAnnotation, PdfAnnotation } from '../model/types';
@@ -187,14 +187,11 @@ export function KonvaAnnotationNode({
         {...orientedCommon}
         text={annotation.text}
         fontFamily="Helvetica, Arial, sans-serif"
-        fontSize={Math.max(
-          8,
-          pdfUserLengthToViewportPixels(annotation.fontSizeUserUnits, viewport),
-        )}
+        fontSize={projectTextFontSize(annotation.fontSizeUserUnits, viewport)}
         lineHeight={annotation.lineHeight}
         align={annotation.align}
         fill={colorToRgba(annotation.color, annotation.opacity)}
-        padding={2}
+        padding={projectTextBoxInset(viewport)}
       />
     );
   }

@@ -1,15 +1,11 @@
-import {
-  createFillStyle,
-  createStrokeStyle,
-  type AnnotationStyleDefaults,
-} from './editorTypes';
+import type { AnnotationStyleDefaults } from './editorTypes';
 
 import type { PdfAnnotation } from './types';
 
 export function applyAnnotationStyleDefaults(
   annotation: PdfAnnotation,
   styles: AnnotationStyleDefaults,
-  patch: Partial<AnnotationStyleDefaults> = styles,
+  patch: Partial<AnnotationStyleDefaults>,
 ): PdfAnnotation {
   switch (annotation.kind) {
     case 'text':
@@ -33,21 +29,87 @@ export function applyAnnotationStyleDefaults(
         ? annotation
         : { ...annotation, opacity: styles.opacity };
     case 'highlight':
-      return { ...annotation, fill: createFillStyle(styles) };
+      return patch.fillColor === undefined && patch.opacity === undefined
+        ? annotation
+        : {
+            ...annotation,
+            fill: {
+              color:
+                patch.fillColor === undefined
+                  ? annotation.fill.color
+                  : styles.fillColor,
+              opacity:
+                patch.opacity === undefined
+                  ? annotation.fill.opacity
+                  : styles.opacity,
+            },
+          };
     case 'rectangle':
     case 'ellipse':
+      if (
+        patch.strokeColor === undefined &&
+        patch.strokeWidth === undefined &&
+        patch.fillColor === undefined &&
+        patch.opacity === undefined
+      ) {
+        return annotation;
+      }
       return {
         ...annotation,
-        stroke: createStrokeStyle(styles),
+        stroke: annotation.stroke
+          ? {
+              color:
+                patch.strokeColor === undefined
+                  ? annotation.stroke.color
+                  : styles.strokeColor,
+              widthUserUnits:
+                patch.strokeWidth === undefined
+                  ? annotation.stroke.widthUserUnits
+                  : styles.strokeWidth,
+              opacity:
+                patch.opacity === undefined
+                  ? annotation.stroke.opacity
+                  : styles.opacity,
+            }
+          : null,
         fill: annotation.fill
-          ? createFillStyle(styles, Math.min(styles.opacity, 0.25))
+          ? {
+              color:
+                patch.fillColor === undefined
+                  ? annotation.fill.color
+                  : styles.fillColor,
+              opacity:
+                patch.opacity === undefined
+                  ? annotation.fill.opacity
+                  : Math.min(styles.opacity, 0.25),
+            }
           : null,
       };
     case 'line':
     case 'freehand':
+      if (
+        patch.strokeColor === undefined &&
+        patch.strokeWidth === undefined &&
+        patch.opacity === undefined
+      ) {
+        return annotation;
+      }
       return {
         ...annotation,
-        stroke: createStrokeStyle(styles, styles.opacity),
+        stroke: {
+          color:
+            patch.strokeColor === undefined
+              ? annotation.stroke.color
+              : styles.strokeColor,
+          widthUserUnits:
+            patch.strokeWidth === undefined
+              ? annotation.stroke.widthUserUnits
+              : styles.strokeWidth,
+          opacity:
+            patch.opacity === undefined
+              ? annotation.stroke.opacity
+              : styles.opacity,
+        },
       };
     default:
       return annotation;
