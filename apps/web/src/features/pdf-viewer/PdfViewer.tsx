@@ -9,6 +9,8 @@ import { AnnotationSummary } from '../pdf-annotations/components/AnnotationSumma
 import { ExtractPagesDialog } from './ExtractPagesDialog';
 import { ThumbnailRail } from '../pdf-workspace/components/ThumbnailRail';
 import { useWorkspaceNavigation } from '../pdf-workspace/hooks/useWorkspaceNavigation';
+import { FormStatusNotice } from '../pdf-forms/components/FormStatusNotice';
+import type { PdfFormsController } from '../pdf-forms/hooks/usePdfForms';
 
 import type { FileLoadIssue } from '../pdf-workspace/loading/types';
 import type { WorkspaceLoadingState } from '../pdf-workspace/hooks/usePdfWorkspace';
@@ -47,7 +49,9 @@ interface PdfViewerProps {
   readonly onDownloadPdf: () => void;
   readonly onExtractPages: (pages: readonly WorkspacePage[]) => void;
   readonly exportBlocked: boolean;
+  readonly exportBlockReason: string | null;
   readonly annotationController: PdfAnnotationController;
+  readonly formController: PdfFormsController;
 }
 
 function getSourceLabel(
@@ -92,7 +96,9 @@ export function PdfViewer({
   onDownloadPdf,
   onExtractPages,
   exportBlocked,
+  exportBlockReason,
   annotationController,
+  formController,
 }: PdfViewerProps) {
   const [mobilePageManagerOpen, setMobilePageManagerOpen] = useState(false);
   const [extractOpen, setExtractOpen] = useState(false);
@@ -158,6 +164,7 @@ export function PdfViewer({
         exportState={exportState}
         onDownloadPdf={onDownloadPdf}
         exportBlocked={exportBlocked}
+        exportBlockReason={exportBlockReason}
         onOpenExtract={openExtract}
         extractTriggerRef={extractTriggerRef}
         pagesTriggerRef={pagesTriggerRef}
@@ -179,7 +186,28 @@ export function PdfViewer({
               .filter((page): page is WorkspacePage => Boolean(page)),
           );
         }}
+        getExportBlockReason={(indexes) =>
+          formController.getExportBlockReason(
+            indexes
+              .map((index) => pages[index])
+              .filter((page): page is WorkspacePage => Boolean(page)),
+          )
+        }
       />
+      <div className="form-status-notices" aria-label="Form status">
+        {sourceOrder.map((sourceId) => {
+          const definition = formController.sources.get(sourceId);
+          const source = sources[sourceId];
+          if (!definition || !source) return null;
+          return (
+            <FormStatusNotice
+              key={sourceId}
+              sourceName={source.fileName}
+              definition={definition}
+            />
+          );
+        })}
+      </div>
       <div className="workspace-layout">
         <ThumbnailRail
           pages={pages}
@@ -255,6 +283,13 @@ export function PdfViewer({
                   onCommitText={annotationController.commitTextEdit}
                   onCancelText={annotationController.cancelTextEdit}
                   onPlaceImage={annotationController.placePendingImage}
+                  formWidgets={formController.getWidgetsForWorkspacePage(page)}
+                  formFields={formController
+                    .getWidgetsForWorkspacePage(page)
+                    .map((widget) => formController.getField(widget.fieldId))
+                    .filter((field): field is NonNullable<typeof field> =>
+                      Boolean(field),
+                    )}
                   registerPage={navigation.registerPage}
                 />
               );

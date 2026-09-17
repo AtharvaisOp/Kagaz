@@ -1121,6 +1121,127 @@ input:focus-visible + * {
   opacity: 1;
 }
 
+.form-widget-layer {
+  position: absolute;
+  z-index: 1;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.form-widget-frame {
+  position: absolute;
+  box-sizing: border-box;
+  display: grid;
+  place-items: stretch;
+  min-width: 1px;
+  min-height: 1px;
+  border: 1px solid rgb(6 182 212 / 36%);
+  background: rgb(6 182 212 / 5%);
+  pointer-events: none;
+}
+
+.form-widget-control,
+.form-widget-placeholder {
+  box-sizing: border-box;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  margin: 0;
+  padding: 2px 5px;
+  overflow: hidden;
+  border: 0;
+  border-radius: 0;
+  outline: 0;
+  color: #18181b;
+  background: rgb(255 255 255 / 78%);
+  font:
+    10px/1.2 Inter,
+    Arial,
+    sans-serif;
+  resize: none;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.form-widget-control--multiline {
+  overflow: hidden;
+  white-space: pre-wrap;
+}
+
+.form-widget-control--check {
+  width: min(100%, 18px);
+  height: min(100%, 18px);
+  justify-self: center;
+  align-self: center;
+  padding: 0;
+  accent-color: #06b6d4;
+}
+
+.form-widget-control--choice {
+  padding: 0 3px;
+  font-size: 9px;
+}
+
+.form-widget-control:disabled,
+.form-widget-control[readonly] {
+  opacity: 0.92;
+  color: #27272a;
+  background: rgb(255 255 255 / 80%);
+}
+
+.form-widget-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 3px 5px;
+  color: #155e75;
+  background: rgb(207 250 254 / 62%);
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 8px;
+  letter-spacing: 0.02em;
+  text-align: center;
+  white-space: normal;
+}
+
+.form-status-notices {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 14px 0;
+}
+
+.form-status-notice {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+  min-height: 28px;
+  padding: 6px 9px;
+  border-left: 2px solid #06b6d4;
+  color: #a5f3fc;
+  background: #10252b;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 9px;
+  line-height: 1.45;
+}
+
+.form-status-notice-source {
+  flex: 0 1 auto;
+  max-width: 30%;
+  overflow: hidden;
+  color: #ffffff;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.form-status-notice--unsupported-xfa,
+.form-status-notice--error {
+  border-left-color: #f97316;
+  color: #fed7aa;
+  background: #2a1912;
+}
+
 .annotation-overlay {
   position: absolute;
   z-index: 2;

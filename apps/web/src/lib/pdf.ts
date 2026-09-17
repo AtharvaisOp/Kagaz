@@ -24,7 +24,10 @@ export async function loadPdf(
   }
 
   GlobalWorkerOptions.workerSrc = workerUrl;
-  const loadingTask = getDocument({ data });
+  // XFA detection is intentionally enabled at the PDF.js boundary. Form
+  // discovery can then classify pure XFA before showing AcroForm controls;
+  // the form feature still never calls pdf-lib for detection.
+  const loadingTask = getDocument({ data, enableXfa: true });
   const cancelLoading = () => {
     void loadingTask.destroy();
   };

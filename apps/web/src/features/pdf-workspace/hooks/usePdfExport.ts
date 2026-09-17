@@ -26,6 +26,8 @@ import type {
   WorkspacePage,
 } from '../model/types';
 
+type ExportBlockReason = (pages: readonly WorkspacePage[]) => string | null;
+
 export interface PdfExportState {
   readonly status: 'idle' | 'exporting' | 'error';
   readonly progress: ExportProgress | null;
@@ -142,6 +144,7 @@ export function usePdfExport(
   registry: SourceDocumentRegistry,
   annotationState: AnnotationHistoryState,
   annotationAssets: Pick<AnnotationAssetRegistry, 'get'>,
+  getExportBlockReason?: ExportBlockReason,
 ): PdfExportController {
   const [state, setState] = useState<PdfExportState>(IDLE_EXPORT_STATE);
   const generationRef = useRef(0);
@@ -157,6 +160,16 @@ export function usePdfExport(
   const run = useCallback(
     (pages: readonly WorkspacePage[], fileName: string) => {
       if (state.status === 'exporting' || pages.length === 0) {
+        return;
+      }
+
+      const exportBlockReason = getExportBlockReason?.(pages);
+      if (exportBlockReason) {
+        setState({
+          status: 'error',
+          progress: null,
+          error: exportBlockReason,
+        });
         return;
       }
 
@@ -232,7 +245,13 @@ export function usePdfExport(
           });
         });
     },
-    [annotationAssets, annotationState, registry, state.status],
+    [
+      annotationAssets,
+      annotationState,
+      getExportBlockReason,
+      registry,
+      state.status,
+    ],
   );
 
   const downloadWorkspace = useCallback(() => {

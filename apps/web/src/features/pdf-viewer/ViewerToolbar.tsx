@@ -33,6 +33,7 @@ interface ViewerToolbarProps {
   readonly exportState: PdfExportState;
   readonly onDownloadPdf: () => void;
   readonly exportBlocked: boolean;
+  readonly exportBlockReason: string | null;
   readonly onOpenExtract: () => void;
   readonly extractTriggerRef: RefObject<HTMLButtonElement | null>;
   readonly pagesTriggerRef: RefObject<HTMLButtonElement | null>;
@@ -55,6 +56,7 @@ export function ViewerToolbar({
   exportState,
   onDownloadPdf,
   exportBlocked,
+  exportBlockReason,
   onOpenExtract,
   extractTriggerRef,
   pagesTriggerRef,
@@ -69,6 +71,7 @@ export function ViewerToolbar({
           ? 'Saving PDF…'
           : 'Preparing PDF…'
     : null;
+  const downloadBlocked = Boolean(exportBlockReason);
 
   return (
     <div
@@ -126,7 +129,13 @@ export function ViewerToolbar({
         <button
           className="toolbar-button download-button"
           type="button"
-          disabled={exporting || exportBlocked || pageCount === 0}
+          disabled={
+            exporting || exportBlocked || downloadBlocked || pageCount === 0
+          }
+          aria-describedby={
+            exportBlockReason ? 'export-block-reason' : undefined
+          }
+          title={exportBlockReason ?? undefined}
           aria-label={exporting ? 'Creating PDF' : 'Download PDF'}
           onClick={onDownloadPdf}
         >
@@ -157,6 +166,16 @@ export function ViewerToolbar({
         <div className="export-status" role="status" aria-live="polite">
           <span className="export-status-dot" aria-hidden="true" />
           {exportStatus}
+        </div>
+      ) : null}
+      {exportBlockReason ? (
+        <div
+          id="export-block-reason"
+          className="export-safety-notice"
+          role="status"
+          aria-live="polite"
+        >
+          Download blocked: {exportBlockReason}
         </div>
       ) : null}
       {exportState.status === 'error' && exportState.error ? (

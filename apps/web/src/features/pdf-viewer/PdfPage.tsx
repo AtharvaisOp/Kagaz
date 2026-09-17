@@ -19,6 +19,11 @@ import type {
 } from '../pdf-annotations/hooks/usePdfAnnotations';
 import { normalizeRotation } from '../pdf-workspace/model/operations';
 import { adoptResolvedPdfPage } from '../pdf-workspace/runtime/pdfPageLifecycle';
+import { FormWidgetLayer } from '../pdf-forms/rendering/FormWidgetLayer';
+import type {
+  FormFieldDefinition,
+  FormWidgetDefinition,
+} from '../pdf-forms/model/types';
 
 import type {
   WorkspacePage,
@@ -56,6 +61,8 @@ interface PdfPageProps {
   readonly onCommitText: PdfAnnotationController['commitTextEdit'];
   readonly onCancelText: PdfAnnotationController['cancelTextEdit'];
   readonly onPlaceImage: PdfAnnotationController['placePendingImage'];
+  readonly formFields: readonly FormFieldDefinition[];
+  readonly formWidgets: readonly FormWidgetDefinition[];
   readonly registerPage?: (
     pageId: WorkspacePageId,
     element: HTMLDivElement | null,
@@ -70,6 +77,11 @@ interface RenderedViewportState {
   readonly requestSignature: string;
   readonly document: PDFDocumentProxy;
 }
+
+// PDF.js 6.3.289 documents AnnotationMode.ENABLE_FORMS as value 2. Keeping
+// this small runtime constant avoids statically importing the lazy PDF.js
+// runtime just for an enum value.
+const PDFJS_ENABLE_FORMS_ANNOTATION_MODE = 2;
 
 export function PdfPage({
   page,
@@ -93,6 +105,8 @@ export function PdfPage({
   onCommitText,
   onCancelText,
   onPlaceImage,
+  formFields,
+  formWidgets,
   registerPage,
 }: PdfPageProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -176,6 +190,7 @@ export function PdfPage({
         renderTask = ownedPage.render({
           canvas,
           canvasContext: context,
+          annotationMode: PDFJS_ENABLE_FORMS_ANNOTATION_MODE,
           transform:
             pixelRatio === 1 ? undefined : [pixelRatio, 0, 0, pixelRatio, 0, 0],
           viewport,
@@ -282,6 +297,15 @@ export function PdfPage({
           <div className="page-error" role="alert">
             Page {workspacePageNumber} could not be rendered.
           </div>
+        ) : null}
+        {hasRenderedViewport && renderedViewport ? (
+          formWidgets.length > 0 ? (
+            <FormWidgetLayer
+              viewport={renderedViewport.viewport}
+              fields={formFields}
+              widgets={formWidgets}
+            />
+          ) : null
         ) : null}
         {hasRenderedViewport && renderedViewport ? (
           <AnnotationOverlay

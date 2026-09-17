@@ -21,6 +21,7 @@ interface ExtractPagesDialogProps {
   readonly open: boolean;
   readonly onClose: () => void;
   readonly onExtract: (indexes: readonly number[]) => void;
+  readonly getExportBlockReason?: (indexes: readonly number[]) => string | null;
 }
 
 export function ExtractPagesDialog({
@@ -28,6 +29,7 @@ export function ExtractPagesDialog({
   open,
   onClose,
   onExtract,
+  getExportBlockReason,
 }: ExtractPagesDialogProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const dialogRef = useRef<HTMLElement>(null);
@@ -112,6 +114,11 @@ export function ExtractPagesDialog({
             const result = parsePageRange(expression, pageCount);
             if (!result.ok) {
               setError(RANGE_ERROR_MESSAGES[result.error]);
+              return;
+            }
+            const blockReason = getExportBlockReason?.(result.indexes);
+            if (blockReason) {
+              setError(blockReason);
               return;
             }
             onExtract(result.indexes);

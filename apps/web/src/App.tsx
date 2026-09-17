@@ -7,6 +7,7 @@ import { PdfViewer } from './features/pdf-viewer/PdfViewer';
 import { usePdfAnnotations } from './features/pdf-annotations/hooks/usePdfAnnotations';
 import { usePdfWorkspace } from './features/pdf-workspace/hooks/usePdfWorkspace';
 import { usePdfExport } from './features/pdf-workspace/hooks/usePdfExport';
+import { usePdfForms } from './features/pdf-forms/hooks/usePdfForms';
 
 import type { FileLoadIssue } from './features/pdf-workspace/loading/types';
 
@@ -30,11 +31,13 @@ export function App() {
     rotatePage,
   } = usePdfWorkspace();
   const annotationController = usePdfAnnotations(workspace.pages);
+  const formController = usePdfForms(workspace, registry);
   const pdfExport = usePdfExport(
     workspace,
     registry,
     annotationController.state,
     annotationController.assetRegistry,
+    formController.getExportBlockReason,
   );
 
   const handleInitialSelection = (
@@ -115,7 +118,11 @@ export function App() {
           onDownloadPdf={pdfExport.downloadWorkspace}
           onExtractPages={pdfExport.extractPages}
           exportBlocked={annotationController.textEditSession !== null}
+          exportBlockReason={formController.getExportBlockReason(
+            workspace.pages,
+          )}
           annotationController={annotationController}
+          formController={formController}
         />
       ) : null}
     </main>
