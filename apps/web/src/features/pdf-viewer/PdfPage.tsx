@@ -24,6 +24,7 @@ import type {
   FormFieldDefinition,
   FormWidgetDefinition,
 } from '../pdf-forms/model/types';
+import type { PdfFormsController } from '../pdf-forms/hooks/usePdfForms';
 
 import type {
   WorkspacePage,
@@ -63,6 +64,7 @@ interface PdfPageProps {
   readonly onPlaceImage: PdfAnnotationController['placePendingImage'];
   readonly formFields: readonly FormFieldDefinition[];
   readonly formWidgets: readonly FormWidgetDefinition[];
+  readonly formController: PdfFormsController;
   readonly registerPage?: (
     pageId: WorkspacePageId,
     element: HTMLDivElement | null,
@@ -107,6 +109,7 @@ export function PdfPage({
   onPlaceImage,
   formFields,
   formWidgets,
+  formController,
   registerPage,
 }: PdfPageProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -304,6 +307,16 @@ export function PdfPage({
               viewport={renderedViewport.viewport}
               fields={formFields}
               widgets={formWidgets}
+              getValue={formController.getValue}
+              textEditSession={formController.textEditSession}
+              onBeginTextEdit={formController.beginTextEdit}
+              onUpdateTextDraft={formController.updateTextDraft}
+              onCommitTextEdit={formController.commitTextEdit}
+              onCancelTextEdit={formController.cancelTextEdit}
+              onSetCheckbox={formController.setCheckbox}
+              onSelectRadio={formController.selectRadio}
+              onSelectChoice={formController.selectChoice}
+              annotationTool={activeTool}
             />
           ) : null
         ) : null}

@@ -62,7 +62,7 @@ function widget(kind: string): FormWidgetDefinition {
 }
 
 describe('FormWidgetLayer', () => {
-  it('renders native preview controls with labels and masked passwords', () => {
+  it('renders editable native controls and keeps passwords/signatures non-editable', () => {
     const fields = [
       field('text', { kind: 'text', current: 'Ada', defaultValue: null }),
       field('multiline-text', {
@@ -102,5 +102,7 @@ describe('FormWidgetLayer', () => {
     expect(markup).toContain('Signature field');
     expect(markup).toContain('autoComplete="off"');
     expect(markup).toContain('viewing only');
+    expect(markup).toContain('data-form-editable="true"');
+    expect(markup).toContain('not editable in Kagaz');
   });
 });

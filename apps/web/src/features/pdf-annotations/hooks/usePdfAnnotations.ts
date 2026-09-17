@@ -41,6 +41,10 @@ import {
   type TextEditSessionPatch,
 } from '../model/textEditSession';
 import { hasUnsavedAnnotationWork } from '../model/unsavedWork';
+import type {
+  EditorHistoryBridge,
+  EditorHistoryParticipant,
+} from '../../editor-history/types';
 
 import type {
   AnnotationHistoryState,
@@ -117,10 +121,12 @@ export interface PdfAnnotationController {
   ) => void;
   readonly commitTextEdit: (sessionId: string) => void;
   readonly cancelTextEdit: (sessionId: string) => void;
+  readonly historyParticipant: EditorHistoryParticipant;
 }
 
 export function usePdfAnnotations(
   pages: readonly WorkspacePage[],
+  history?: EditorHistoryBridge,
 ): PdfAnnotationController {
   const [state, dispatch] = useReducer(
     annotationReducer,
@@ -158,14 +164,33 @@ export function usePdfAnnotations(
   const styleDefaultsRef = useRef(styleDefaults);
   const textEditSessionRef = useRef(textEditSession);
   const pendingImageRef = useRef(pendingImage);
+  const stateRef = useRef(state);
   const committedPageIdsRef = useRef<readonly WorkspacePageId[]>([]);
   useLayoutEffect(() => {
+    stateRef.current = state;
     presentRef.current = state.present;
     styleDefaultsRef.current = styleDefaults;
     textEditSessionRef.current = textEditSession;
     pendingImageRef.current = pendingImage;
     activeToolRef.current = activeTool;
-  }, [activeTool, pendingImage, state.present, styleDefaults, textEditSession]);
+  }, [activeTool, pendingImage, state, styleDefaults, textEditSession]);
+
+  const dispatchTracked = useCallback(
+    (action: AnnotationAction) => {
+      const next = annotationReducer(stateRef.current, action);
+      if (next === stateRef.current) return;
+      dispatch(action);
+      if (
+        action.type !== 'UNDO' &&
+        action.type !== 'REDO' &&
+        action.type !== 'PRUNE_REMOVED_PAGES' &&
+        action.type !== 'RESET_ANNOTATIONS'
+      ) {
+        history?.record();
+      }
+    },
+    [history],
+  );
   const committedPageIds = useMemo(() => pages.map((page) => page.id), [pages]);
   useLayoutEffect(() => {
     committedPageIdsRef.current = committedPageIds;
@@ -175,8 +200,9 @@ export function usePdfAnnotations(
     const removedPageIds = findRemovedWorkspacePageIds(state, committedPageIds);
     if (removedPageIds.length > 0) {
       dispatch({ type: 'PRUNE_REMOVED_PAGES', pageIds: removedPageIds });
+      history?.prune();
     }
-  }, [committedPageIds, state]);
+  }, [committedPageIds, history, state]);
 
   useEffect(() => {
     assetRegistry.reconcile(
@@ -252,17 +278,23 @@ export function usePdfAnnotations(
     [],
   );
 
-  const commitAnnotation = useCallback((annotation: PdfAnnotation) => {
-    dispatch({ type: 'REPLACE_ANNOTATION', annotation });
-  }, []);
+  const commitAnnotation = useCallback(
+    (annotation: PdfAnnotation) => {
+      dispatchTracked({ type: 'REPLACE_ANNOTATION', annotation });
+    },
+    [dispatchTracked],
+  );
 
-  const addAnnotation = useCallback((annotation: PdfAnnotation) => {
-    dispatch({ type: 'ADD_ANNOTATION', annotation });
-    setSelection({
-      workspacePageId: annotation.workspacePageId,
-      annotationId: annotation.id,
-    });
-  }, []);
+  const addAnnotation = useCallback(
+    (annotation: PdfAnnotation) => {
+      dispatchTracked({ type: 'ADD_ANNOTATION', annotation });
+      setSelection({
+        workspacePageId: annotation.workspacePageId,
+        annotationId: annotation.id,
+      });
+    },
+    [dispatchTracked],
+  );
 
   const updateStyleDefaults = useCallback(
     (patch: Partial<AnnotationStyleDefaults>) => {
@@ -286,14 +318,14 @@ export function usePdfAnnotations(
       }
       const nextStyle = { ...styleDefaults, ...patch };
       const next = applyAnnotationStyleDefaults(current, nextStyle, patch);
-      dispatch({
+      dispatchTracked({
         type: 'UPDATE_ANNOTATION',
         pageId: currentSelection.workspacePageId,
         annotationId: currentSelection.annotationId,
         update: next,
       });
     },
-    [selection, styleDefaults],
+    [dispatchTracked, selection, styleDefaults],
   );
 
   const cancelTextSession = useCallback((sessionId?: string) => {
@@ -384,14 +416,14 @@ export function usePdfAnnotations(
         assetId: pending.assetId,
         opacity: styleDefaultsRef.current.opacity,
       };
-      dispatch({ type: 'ADD_ANNOTATION', annotation });
+      dispatchTracked({ type: 'ADD_ANNOTATION', annotation });
       setSelection({ workspacePageId: pageId, annotationId: annotation.id });
       pendingImageRef.current = null;
       setPendingImage(null);
       activeToolRef.current = 'select';
       setActiveToolState('select');
     },
-    [createAnnotationId],
+    [createAnnotationId, dispatchTracked],
   );
 
   const beginTextCreation = useCallback(
@@ -483,38 +515,41 @@ export function usePdfAnnotations(
     [],
   );
 
-  const commitTextEdit = useCallback((sessionId: string) => {
-    const session = textEditSessionRef.current;
-    if (
-      !session ||
-      session.sessionId !== sessionId ||
-      !textEditBoundaryRef.current.complete(sessionId) ||
-      !committedPageIdsRef.current.includes(session.workspacePageId)
-    ) {
-      return;
-    }
-    textEditSessionRef.current = null;
-    setTextEditSession(null);
-    const annotation = textAnnotationFromSession(session);
-    if (!annotation) return;
-    if (session.mode === 'create') {
-      dispatch({ type: 'ADD_ANNOTATION', annotation });
-    } else {
-      const exists = selectPageAnnotations(
-        presentRef.current,
-        session.workspacePageId,
-      ).some(
-        (candidate) =>
-          candidate.id === session.annotationId && candidate.kind === 'text',
-      );
-      if (!exists) return;
-      dispatch({ type: 'REPLACE_ANNOTATION', annotation });
-    }
-    setSelection({
-      workspacePageId: annotation.workspacePageId,
-      annotationId: annotation.id,
-    });
-  }, []);
+  const commitTextEdit = useCallback(
+    (sessionId: string) => {
+      const session = textEditSessionRef.current;
+      if (
+        !session ||
+        session.sessionId !== sessionId ||
+        !textEditBoundaryRef.current.complete(sessionId) ||
+        !committedPageIdsRef.current.includes(session.workspacePageId)
+      ) {
+        return;
+      }
+      textEditSessionRef.current = null;
+      setTextEditSession(null);
+      const annotation = textAnnotationFromSession(session);
+      if (!annotation) return;
+      if (session.mode === 'create') {
+        dispatchTracked({ type: 'ADD_ANNOTATION', annotation });
+      } else {
+        const exists = selectPageAnnotations(
+          presentRef.current,
+          session.workspacePageId,
+        ).some(
+          (candidate) =>
+            candidate.id === session.annotationId && candidate.kind === 'text',
+        );
+        if (!exists) return;
+        dispatchTracked({ type: 'REPLACE_ANNOTATION', annotation });
+      }
+      setSelection({
+        workspacePageId: annotation.workspacePageId,
+        annotationId: annotation.id,
+      });
+    },
+    [dispatchTracked],
+  );
 
   const deleteAnnotation = useCallback(
     (pageId: WorkspacePageId, annotationId: AnnotationId) => {
@@ -522,7 +557,7 @@ export function usePdfAnnotations(
         (annotation) => annotation.id === annotationId,
       );
       if (!exists) return;
-      dispatch({
+      dispatchTracked({
         type: 'DELETE_ANNOTATION',
         pageId,
         annotationId,
@@ -534,7 +569,7 @@ export function usePdfAnnotations(
         setSelection(null);
       }
     },
-    [selection],
+    [dispatchTracked, selection],
   );
 
   const deleteSelected = useCallback(() => {
@@ -556,13 +591,43 @@ export function usePdfAnnotations(
 
   const clearSelection = useCallback(() => setSelection(null), []);
 
-  const undo = useCallback(() => {
+  const domainUndo = useCallback(() => {
+    if (stateRef.current.past.length === 0) return false;
     dispatch({ type: 'UNDO' });
+    return true;
   }, []);
 
-  const redo = useCallback(() => {
+  const domainRedo = useCallback(() => {
+    if (stateRef.current.future.length === 0) return false;
     dispatch({ type: 'REDO' });
+    return true;
   }, []);
+
+  const historyParticipant = useMemo<EditorHistoryParticipant>(
+    () => ({
+      get canUndo() {
+        return stateRef.current.past.length > 0;
+      },
+      get canRedo() {
+        return stateRef.current.future.length > 0;
+      },
+      undo: domainUndo,
+      redo: domainRedo,
+      discardFuture: () => dispatch({ type: 'DISCARD_FUTURE' }),
+    }),
+    [domainRedo, domainUndo],
+  );
+
+  const undo = useMemo(
+    () => history?.undo ?? (() => void domainUndo()),
+    [domainUndo, history],
+  );
+  const redo = useMemo(
+    () => history?.redo ?? (() => void domainRedo()),
+    [domainRedo, history],
+  );
+  const historyCanUndo = history?.canUndo;
+  const historyCanRedo = history?.canRedo;
 
   return useMemo(
     () => ({
@@ -581,7 +646,7 @@ export function usePdfAnnotations(
       undo,
       redo,
       resetAnnotations,
-      dispatch,
+      dispatch: dispatchTracked,
       activeTool,
       setActiveTool,
       styleDefaults,
@@ -590,8 +655,8 @@ export function usePdfAnnotations(
       deleteAnnotation,
       deleteSelected,
       clearSelection,
-      canUndo: state.past.length > 0,
-      canRedo: state.future.length > 0,
+      canUndo: historyCanUndo ?? state.past.length > 0,
+      canRedo: historyCanRedo ?? state.future.length > 0,
       createAnnotationId,
       assetRegistry,
       pendingImage,
@@ -606,6 +671,7 @@ export function usePdfAnnotations(
       updateTextEditSession,
       commitTextEdit,
       cancelTextEdit: cancelTextSession,
+      historyParticipant,
     }),
     [
       commitAnnotation,
@@ -620,7 +686,7 @@ export function usePdfAnnotations(
       createAnnotationId,
       deleteSelected,
       deleteAnnotation,
-      dispatch,
+      dispatchTracked,
       getAnnotationsForPage,
       imageError,
       editSelectedText,
@@ -641,6 +707,9 @@ export function usePdfAnnotations(
       updateStyleDefaults,
       updateTextEditSession,
       commitTextEdit,
+      historyParticipant,
+      historyCanUndo,
+      historyCanRedo,
     ],
   );
 }

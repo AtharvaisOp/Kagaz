@@ -13,7 +13,7 @@ export function FormStatusNotice({
 
   const message =
     definition.status === 'acroform'
-      ? 'Form fields detected — viewing only for now.'
+      ? 'Form fields can be filled here. Form-safe Download and Extract are still being added.'
       : definition.status === 'unsupported-xfa'
         ? 'This PDF uses XFA forms, which Kagaz cannot support yet. Standard AcroForm PDFs are supported.'
         : definition.status === 'discovering'

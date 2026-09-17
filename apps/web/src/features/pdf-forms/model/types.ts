@@ -7,6 +7,20 @@ import type {
 export type FormFieldId = string;
 export type FormWidgetId = string;
 
+export type FormValue = string | boolean | readonly string[] | null;
+
+export interface FormValueDocument {
+  readonly byField: Partial<Record<FormFieldId, FormValue>>;
+}
+
+export interface FormHistoryState {
+  readonly past: readonly FormValueDocument[];
+  readonly present: FormValueDocument;
+  readonly future: readonly FormValueDocument[];
+  readonly baseline: FormValueDocument;
+  readonly dirty: boolean;
+}
+
 export type FormFieldKind =
   | 'text'
   | 'multiline-text'

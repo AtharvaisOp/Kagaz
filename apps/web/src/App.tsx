@@ -8,6 +8,7 @@ import { usePdfAnnotations } from './features/pdf-annotations/hooks/usePdfAnnota
 import { usePdfWorkspace } from './features/pdf-workspace/hooks/usePdfWorkspace';
 import { usePdfExport } from './features/pdf-workspace/hooks/usePdfExport';
 import { usePdfForms } from './features/pdf-forms/hooks/usePdfForms';
+import { useEditorHistory } from './features/editor-history/useEditorHistory';
 
 import type { FileLoadIssue } from './features/pdf-workspace/loading/types';
 
@@ -30,8 +31,16 @@ export function App() {
     deletePage,
     rotatePage,
   } = usePdfWorkspace();
-  const annotationController = usePdfAnnotations(workspace.pages);
-  const formController = usePdfForms(workspace, registry);
+  const editorHistory = useEditorHistory();
+  const annotationController = usePdfAnnotations(
+    workspace.pages,
+    editorHistory.annotation,
+  );
+  const formController = usePdfForms(workspace, registry, editorHistory.form);
+  editorHistory.bind({
+    annotation: annotationController.historyParticipant,
+    form: formController.historyParticipant,
+  });
   const pdfExport = usePdfExport(
     workspace,
     registry,
@@ -57,10 +66,15 @@ export function App() {
 
   const handleStartOver = () => {
     if (
-      startOver(annotationController.hasUnsavedWork, () => {
-        pdfExport.cancel();
-        annotationController.resetAnnotations();
-      })
+      startOver(
+        annotationController.hasUnsavedWork || formController.hasUnsavedWork,
+        () => {
+          pdfExport.cancel();
+          annotationController.resetAnnotations();
+          formController.resetForms();
+          editorHistory.reset();
+        },
+      )
     ) {
       setZoom(100);
     }

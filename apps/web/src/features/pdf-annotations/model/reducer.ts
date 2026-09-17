@@ -9,6 +9,7 @@ import {
 } from './operations';
 import {
   commitAnnotationEdit,
+  discardAnnotationFuture,
   redoAnnotationEdit,
   resetAnnotationHistory,
   undoAnnotationEdit,
@@ -48,6 +49,7 @@ export type AnnotationAction =
     }
   | { readonly type: 'UNDO' }
   | { readonly type: 'REDO' }
+  | { readonly type: 'DISCARD_FUTURE' }
   | {
       readonly type: 'RESET_ANNOTATIONS';
       readonly document?: AnnotationDocument;
@@ -166,6 +168,8 @@ export function annotationReducer(
       return undoAnnotationEdit(state);
     case 'REDO':
       return redoAnnotationEdit(state);
+    case 'DISCARD_FUTURE':
+      return discardAnnotationFuture(state);
     case 'RESET_ANNOTATIONS': {
       const document = action.document ?? createEmptyAnnotationDocument();
       if (!isAnnotationDocument(document)) {

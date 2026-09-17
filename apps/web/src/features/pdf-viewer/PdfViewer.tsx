@@ -290,6 +290,7 @@ export function PdfViewer({
                     .filter((field): field is NonNullable<typeof field> =>
                       Boolean(field),
                     )}
+                  formController={formController}
                   registerPage={navigation.registerPage}
                 />
               );

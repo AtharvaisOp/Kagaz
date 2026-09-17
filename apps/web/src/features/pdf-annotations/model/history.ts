@@ -81,3 +81,9 @@ export function resetAnnotationHistory(
 ): AnnotationHistoryState {
   return createAnnotationHistoryState(document);
 }
+
+export function discardAnnotationFuture(
+  state: AnnotationHistoryState,
+): AnnotationHistoryState {
+  return state.future.length === 0 ? state : { ...state, future: [] };
+}
