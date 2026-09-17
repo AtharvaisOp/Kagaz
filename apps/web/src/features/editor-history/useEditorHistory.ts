@@ -4,6 +4,7 @@ import { EditorHistoryTimeline } from './model/timeline';
 import type {
   EditorHistoryBridge,
   EditorHistoryDomain,
+  EditorHistoryEntityId,
   EditorHistoryParticipant,
 } from './types';
 
@@ -15,7 +16,10 @@ export interface EditorHistoryController {
       Record<EditorHistoryDomain, EditorHistoryParticipant>
     >,
   ) => void;
-  readonly pruneDomain: (domain: EditorHistoryDomain) => void;
+  readonly pruneDomain: (
+    domain: EditorHistoryDomain,
+    removedEntityIds?: readonly EditorHistoryEntityId[],
+  ) => void;
   readonly reset: () => void;
   readonly canUndo: boolean;
   readonly canRedo: boolean;
@@ -39,8 +43,11 @@ export function useEditorHistory(): EditorHistoryController {
     [],
   );
   const record = useCallback(
-    (domain: EditorHistoryDomain) => {
-      timelineRef.current.record(domain);
+    (
+      domain: EditorHistoryDomain,
+      affectedEntityIds?: readonly EditorHistoryEntityId[],
+    ) => {
+      timelineRef.current.record(domain, affectedEntityIds);
       signal();
     },
     [signal],
@@ -54,8 +61,11 @@ export function useEditorHistory(): EditorHistoryController {
     signal();
   }, [signal]);
   const pruneDomain = useCallback(
-    (domain: EditorHistoryDomain) => {
-      timelineRef.current.pruneDomain(domain);
+    (
+      domain: EditorHistoryDomain,
+      removedEntityIds?: readonly EditorHistoryEntityId[],
+    ) => {
+      timelineRef.current.pruneDomain(domain, removedEntityIds);
       signal();
     },
     [signal],
@@ -72,8 +82,8 @@ export function useEditorHistory(): EditorHistoryController {
       get canRedo() {
         return timelineRef.current.canRedo;
       },
-      record: () => record(domain),
-      prune: () => pruneDomain(domain),
+      record: (affectedEntityIds) => record(domain, affectedEntityIds),
+      prune: (removedEntityIds) => pruneDomain(domain, removedEntityIds),
       undo,
       redo,
     }),

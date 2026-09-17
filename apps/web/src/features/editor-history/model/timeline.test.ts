@@ -57,4 +57,19 @@ describe('editor history timeline', () => {
     timeline.undo();
     expect(annotation.edits).toEqual(['undo']);
   });
+
+  it('prunes only transactions tied to removed entities', () => {
+    const timeline = new EditorHistoryTimeline();
+    const form = participant();
+    timeline.bind({ form });
+    timeline.record('form', ['field-a']);
+    timeline.record('form', ['field-b']);
+
+    timeline.pruneDomain('form', ['field-b']);
+
+    expect(timeline.canUndo).toBe(true);
+    timeline.undo();
+    expect(form.edits).toEqual(['undo']);
+    expect(timeline.canUndo).toBe(false);
+  });
 });

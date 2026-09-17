@@ -244,12 +244,12 @@ export function usePdfForms(
     const previous = activeFieldIdsRef.current;
     const active = new Set(activeFieldIds);
     dispatch({ type: 'PRUNE_FIELDS', fieldIds: activeFieldIds });
-    if (
-      history &&
-      previous &&
-      [...previous].some((fieldId) => !active.has(fieldId))
-    )
-      history.prune();
+    if (history && previous) {
+      const removedFieldIds = [...previous].filter(
+        (fieldId) => !active.has(fieldId),
+      );
+      if (removedFieldIds.length > 0) history.prune(removedFieldIds);
+    }
     activeFieldIdsRef.current = active;
   }, [activeFieldIds, history]);
 
@@ -295,7 +295,7 @@ export function usePdfForms(
       });
       if (next === stateRef.current) return;
       dispatch({ type: 'COMMIT_FIELD_VALUE', fieldId, value });
-      history?.record();
+      history?.record([fieldId]);
     },
     [fields, history],
   );
