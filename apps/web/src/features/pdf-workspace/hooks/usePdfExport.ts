@@ -13,6 +13,10 @@ import {
   type ExportProgress,
   type ExportSource,
 } from '../../../lib/pdf-export/types';
+import {
+  FormExportError,
+  type FormExportSnapshot,
+} from '../../../lib/pdf-export/forms/types';
 import { snapshotWorkspacePages } from '../../../lib/pdf-export/exportWorkspace';
 import type {
   AnnotationHistoryState,
@@ -62,6 +66,10 @@ export function friendlyExportError(error: unknown): string {
         return 'Kagaz could not embed an image annotation in the PDF.';
     }
   }
+  if (error instanceof FormExportError && error.fileName) {
+    return `${error.fileName}: ${error.message}`;
+  }
+  if (error instanceof FormExportError) return error.message;
   if (error instanceof PdfExportError && error.fileName) {
     return `${error.fileName}: ${error.message}`;
   }
@@ -144,7 +152,8 @@ export function usePdfExport(
   registry: SourceDocumentRegistry,
   annotationState: AnnotationHistoryState,
   annotationAssets: Pick<AnnotationAssetRegistry, 'get'>,
-  getExportBlockReason?: ExportBlockReason,
+  getExportBlockReason: ExportBlockReason,
+  snapshotForms: (pages: readonly WorkspacePage[]) => FormExportSnapshot,
 ): PdfExportController {
   const [state, setState] = useState<PdfExportState>(IDLE_EXPORT_STATE);
   const generationRef = useRef(0);
@@ -163,7 +172,7 @@ export function usePdfExport(
         return;
       }
 
-      const exportBlockReason = getExportBlockReason?.(pages);
+      const exportBlockReason = getExportBlockReason(pages);
       if (exportBlockReason) {
         setState({
           status: 'error',
@@ -178,6 +187,7 @@ export function usePdfExport(
       const controller = new AbortController();
       abortRef.current = controller;
       const pageSnapshot = snapshotWorkspacePages(pages);
+      const formSnapshot = snapshotForms(pageSnapshot);
       let sources: Map<SourceDocumentId, ExportSource>;
 
       try {
@@ -215,6 +225,7 @@ export function usePdfExport(
             sources,
             annotationsByPage: annotationSnapshot.annotationsByPage,
             imageAssets,
+            forms: formSnapshot,
           },
           {
             signal: controller.signal,
@@ -250,6 +261,7 @@ export function usePdfExport(
       annotationState,
       getExportBlockReason,
       registry,
+      snapshotForms,
       state.status,
     ],
   );

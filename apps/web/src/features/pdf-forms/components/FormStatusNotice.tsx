@@ -1,4 +1,8 @@
 import type { FormSourceDefinition } from '../model/types';
+import {
+  getFormExportCapability,
+  getFormExportCapabilityMessage,
+} from '../model/exportSafety';
 
 interface FormStatusNoticeProps {
   readonly sourceName: string;
@@ -11,14 +15,16 @@ export function FormStatusNotice({
 }: FormStatusNoticeProps) {
   if (definition.status === 'none' || definition.status === 'idle') return null;
 
+  const capability = getFormExportCapability(definition);
   const message =
-    definition.status === 'acroform'
-      ? 'Form fields can be filled here. Form-safe Download and Extract are still being added.'
-      : definition.status === 'unsupported-xfa'
+    capability === 'safe-acroform'
+      ? 'Form fields can be filled here. Exported PDFs flatten filled fields.'
+      : capability === 'unsupported-xfa'
         ? 'This PDF uses XFA forms, which Kagaz cannot support yet. Standard AcroForm PDFs are supported.'
-        : definition.status === 'discovering'
+        : capability === 'discovering'
           ? 'Checking this PDF for form fields…'
-          : (definition.error ?? 'Form discovery could not be completed.');
+          : (getFormExportCapabilityMessage(capability, definition.error) ??
+            'Form discovery could not be completed.');
 
   return (
     <div

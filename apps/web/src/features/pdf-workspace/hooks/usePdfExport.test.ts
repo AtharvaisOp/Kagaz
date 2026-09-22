@@ -7,6 +7,7 @@ import {
   snapshotAnnotationsForPages,
 } from './usePdfExport';
 import { AnnotationExportError } from '../../../lib/pdf-export/annotations/flattenAnnotations';
+import { FormExportError } from '../../../lib/pdf-export/forms/types';
 
 const pageA = {
   id: 'page-a',
@@ -88,5 +89,27 @@ describe('friendlyExportError', () => {
     );
     expect(message).not.toContain('asset-id');
     expect(message).not.toContain('annotation-id');
+  });
+
+  it('maps form failures to actionable source-specific messages', () => {
+    expect(
+      friendlyExportError(
+        new FormExportError(
+          'unsupported-text-font',
+          'A filled form value contains characters unsupported by Standard Helvetica.',
+          'form.pdf',
+        ),
+      ),
+    ).toBe(
+      'form.pdf: A filled form value contains characters unsupported by Standard Helvetica.',
+    );
+    expect(
+      friendlyExportError(
+        new FormExportError(
+          'active-draft',
+          'Finish or cancel the active form text edit before exporting.',
+        ),
+      ),
+    ).toBe('Finish or cancel the active form text edit before exporting.');
   });
 });

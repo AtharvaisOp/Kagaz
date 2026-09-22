@@ -42,6 +42,19 @@ Text export currently uses PDF Standard Helvetica. Characters that Helvetica
 cannot encode are rejected with an actionable export error rather than being
 silently replaced.
 
+## Phase 3 form capabilities
+
+- Discover and fill standard AcroForm text, multiline text, checkbox, radio,
+  dropdown, option-list, and multiselect fields in the browser
+- Keep repeated widgets synchronized while preserving independent values for
+  duplicate PDF source instances
+- Download or Extract supported form pages as flattened, non-interactive PDF
+  content alongside Kagaz annotations
+- Keep XFA, signature fields, password fields, push buttons, and unknown form
+  structures blocked from export with source-specific guidance
+- Reject form appearance text that Standard Helvetica cannot encode instead
+  of corrupting the exported PDF
+
 ## Privacy-first architecture
 
 PDF source files stay in the browser for current Phase 1 operations. The
@@ -163,7 +176,11 @@ that genuinely need native tooling.
 
 - Password-protected PDFs cannot be opened; password entry is not available.
 - There is no persistence or cloud collaboration yet.
-- Forms, signatures, OCR, compression, and conversion are not implemented.
+- Exported AcroForms are flattened and cannot be edited as forms afterward.
+- XFA and signature-field export are unsupported; cryptographic signing is not
+  implemented.
+- Password fields and push-button or PDF JavaScript behavior are not exported.
+- OCR, compression, and conversion are not implemented.
 - Canvas annotations are projected visually; the current-page semantic list is
   the keyboard and screen-reader path for existing annotations.
 - Text export is limited to glyphs supported by Standard Helvetica; custom

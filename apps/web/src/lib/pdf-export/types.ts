@@ -4,6 +4,7 @@ import type {
 } from '../../features/pdf-workspace/model/types';
 import type { PdfAnnotation } from '../../features/pdf-annotations/model/types';
 import type { AnnotationImageExportSource } from './annotations/exportContracts';
+import type { FormExportSnapshot } from './forms/types';
 
 export interface ExportSource {
   readonly id: SourceDocumentId;
@@ -18,6 +19,8 @@ export interface ExportWorkspaceRequest {
   readonly annotationsByPage: ReadonlyMap<string, readonly PdfAnnotation[]>;
   /** Immutable image bytes required by the page-local annotation snapshot. */
   readonly imageAssets: ReadonlyMap<string, AnnotationImageExportSource>;
+  /** Immutable, serializable form metadata and committed values. */
+  readonly forms: FormExportSnapshot;
 }
 
 export type ExportProgress =

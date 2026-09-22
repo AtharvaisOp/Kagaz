@@ -13,6 +13,7 @@ import {
   createDiscoveryError,
 } from '../discovery/discoverPdfForms';
 import { getFormExportBlockReason } from '../model/exportSafety';
+import { snapshotFormsForPages } from '../model/exportSnapshot';
 import { createFormHistoryState } from '../model/history';
 import { initialFormValue } from '../model/formValues';
 import { formReducer } from '../model/reducer';
@@ -34,6 +35,7 @@ import type {
   WorkspacePage,
 } from '../../pdf-workspace/model/types';
 import type { SourceDocumentRegistry } from '../../pdf-workspace/runtime/sourceDocumentRegistry';
+import type { FormExportSnapshot } from '../../../lib/pdf-export/forms/types';
 
 export interface FormTextEditSession {
   readonly sessionId: string;
@@ -57,6 +59,9 @@ export interface PdfFormsController {
   readonly getExportBlockReason: (
     pages: readonly WorkspacePage[],
   ) => string | null;
+  readonly snapshotForExport: (
+    pages: readonly WorkspacePage[],
+  ) => FormExportSnapshot;
   readonly beginTextEdit: (fieldId: FormFieldId) => void;
   readonly updateTextDraft: (fieldId: FormFieldId, draft: string) => void;
   readonly commitTextEdit: (fieldId: FormFieldId) => void;
@@ -144,12 +149,14 @@ export function usePdfForms(
   const sessionRef = useRef(textEditSession);
   const sessionCounterRef = useRef(0);
   const activeFieldIdsRef = useRef<ReadonlySet<FormFieldId> | null>(null);
+  const sourceDefinitionsRef = useRef(sourceDefinitions);
   const signature = sourceSignature(workspace);
 
   useLayoutEffect(() => {
     stateRef.current = state;
     sessionRef.current = textEditSession;
-  }, [state, textEditSession]);
+    sourceDefinitionsRef.current = sourceDefinitions;
+  }, [sourceDefinitions, state, textEditSession]);
 
   useEffect(() => {
     generationRef.current += 1;
@@ -279,8 +286,23 @@ export function usePdfForms(
   );
   const getExportBlockReason = useCallback(
     (pages: readonly WorkspacePage[]) =>
-      getFormExportBlockReason(pages, sourceDefinitions),
-    [sourceDefinitions],
+      getFormExportBlockReason(
+        pages,
+        sourceDefinitions,
+        textEditSession !== null &&
+          textEditSession.draft !== textEditSession.initial,
+      ),
+    [sourceDefinitions, textEditSession],
+  );
+  const snapshotForExport = useCallback(
+    (pages: readonly WorkspacePage[]) =>
+      snapshotFormsForPages(
+        pages,
+        sourceDefinitionsRef.current,
+        stateRef.current,
+        sessionRef.current,
+      ),
+    [],
   );
 
   const commitValue = useCallback(
@@ -435,6 +457,7 @@ export function usePdfForms(
       getWidgetsForWorkspacePage,
       hasFormsForSource,
       getExportBlockReason,
+      snapshotForExport,
       beginTextEdit,
       updateTextDraft,
       commitTextEdit,
@@ -466,6 +489,7 @@ export function usePdfForms(
       selectChoice,
       selectRadio,
       setCheckbox,
+      snapshotForExport,
       sourceDefinitions,
       state,
       textEditSession,

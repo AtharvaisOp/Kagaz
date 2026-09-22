@@ -4,6 +4,7 @@ import { parsePageRange } from '../../features/pdf-workspace/model/rangeParser';
 import { exportWorkspace } from './exportWorkspace';
 import type { ExportSource } from './types';
 import type { PdfAnnotation } from '../../features/pdf-annotations/model/types';
+import type { FormExportSnapshot } from './forms/types';
 
 const pdfLib = await import('pdf-lib');
 
@@ -33,6 +34,19 @@ function page(
 
 function source(id: string, file: File): ExportSource {
   return { id, file, fileName: file.name };
+}
+
+function plainForms(
+  ...sourceDocumentIds: readonly string[]
+): FormExportSnapshot {
+  return {
+    sources: [...new Set(sourceDocumentIds)].map((sourceDocumentId) => ({
+      sourceDocumentId,
+      capability: 'plain',
+      fields: [],
+    })),
+    hasChangedTextDraft: false,
+  };
 }
 
 describe('exportWorkspace', () => {
@@ -80,6 +94,7 @@ describe('exportWorkspace', () => {
 
     const result = await exportWorkspace({
       pages: [page('annotated-page', 'source', 0)],
+      forms: plainForms('source'),
       sources: new Map([['source', source('source', sourceFile)]]),
       annotationsByPage: new Map([['annotated-page', annotations]]),
       imageAssets: new Map([
@@ -102,6 +117,7 @@ describe('exportWorkspace', () => {
     await expect(
       exportWorkspace({
         pages: [page('page', 'source', 0)],
+        forms: plainForms('source'),
         sources: new Map([['source', source('source', sourceFile)]]),
         annotationsByPage: new Map([
           [
@@ -134,6 +150,7 @@ describe('exportWorkspace', () => {
     ]);
     const result = await exportWorkspace({
       pages: [page('rotated-page', 'source', 0, 90)],
+      forms: plainForms('source'),
       sources: new Map([['source', source('source', sourceFile)]]),
       annotationsByPage: new Map([
         [
@@ -171,6 +188,7 @@ describe('exportWorkspace', () => {
     ]);
     const result = await exportWorkspace({
       pages: [page('b1', 'b', 0), page('a2', 'a', 1), page('b2', 'b', 1)],
+      forms: plainForms('a', 'b'),
       sources: new Map([
         ['a', source('a', a)],
         ['b', source('b', b)],
@@ -205,6 +223,7 @@ describe('exportWorkspace', () => {
     });
     const result = await exportWorkspace({
       pages: [page('b-page', 'b', 0), page('a-page', 'a', 0)],
+      forms: plainForms('a', 'b'),
       sources: new Map([
         ['a', source('a', a)],
         ['b', source('b', b)],
@@ -226,6 +245,7 @@ describe('exportWorkspace', () => {
     const spy = vi.spyOn(file, 'arrayBuffer');
     const result = await exportWorkspace({
       pages: [page('first', 'same', 0), page('second', 'same', 0)],
+      forms: plainForms('same'),
       sources: new Map([['same', source('same', file)]]),
       annotationsByPage: new Map(),
       imageAssets: new Map(),
@@ -242,6 +262,7 @@ describe('exportWorkspace', () => {
     ]);
     const result = await exportWorkspace({
       pages: [page('one', 'rotated', 0, 90), page('two', 'rotated', 1, 90)],
+      forms: plainForms('rotated'),
       sources: new Map([['rotated', source('rotated', file)]]),
       annotationsByPage: new Map(),
       imageAssets: new Map(),
@@ -271,6 +292,7 @@ describe('exportWorkspace', () => {
       .filter((item): item is (typeof pages)[number] => Boolean(item));
     const result = await exportWorkspace({
       pages: selectedPages,
+      forms: plainForms('source'),
       sources: new Map([['source', source('source', file)]]),
       annotationsByPage: new Map(),
       imageAssets: new Map(),
@@ -285,6 +307,7 @@ describe('exportWorkspace', () => {
     await expect(
       exportWorkspace({
         pages: [page('missing', 'gone', 0)],
+        forms: plainForms('gone'),
         sources: new Map(),
         annotationsByPage: new Map(),
         imageAssets: new Map(),
@@ -299,6 +322,7 @@ describe('exportWorkspace', () => {
       exportWorkspace(
         {
           pages: [page('p', 'source', 0)],
+          forms: plainForms('source'),
           sources: new Map(),
           annotationsByPage: new Map(),
           imageAssets: new Map(),
@@ -315,6 +339,7 @@ describe('exportWorkspace', () => {
       exportWorkspace(
         {
           pages: [page('p', 'source', 0)],
+          forms: plainForms('source'),
           sources: new Map([['source', source('source', file)]]),
           annotationsByPage: new Map(),
           imageAssets: new Map(),

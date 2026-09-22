@@ -7,10 +7,33 @@ import {
 } from './types';
 import { AnnotationExportError } from './annotations/exportContracts';
 import type { PDFDocument } from 'pdf-lib';
+import { FormExportError, type FormExportCapability } from './forms/types';
 
 function throwIfAborted(signal?: AbortSignal): void {
   if (signal?.aborted) {
     throw new PdfExportError('aborted', 'PDF export was cancelled.');
+  }
+}
+
+function unsupportedSourceMessage(capability: FormExportCapability): string {
+  switch (capability) {
+    case 'unsupported-xfa':
+      return 'This PDF uses XFA forms, which Kagaz cannot support yet.';
+    case 'unsupported-signature':
+      return 'This PDF contains a signature field. Signature-field export support is still being added.';
+    case 'unsupported-password':
+      return 'This PDF contains a password field, so Kagaz cannot safely flatten it for export yet.';
+    case 'unsupported-button':
+      return 'This PDF contains a push button. Button actions cannot be safely flattened for export.';
+    case 'unsupported-field':
+      return 'This PDF contains a form field that Kagaz cannot safely flatten yet.';
+    case 'discovering':
+      return 'Kagaz is still checking this PDF for form fields. Try again in a moment.';
+    case 'error':
+      return 'Kagaz could not verify that this PDF form is safe to export.';
+    case 'plain':
+    case 'safe-acroform':
+      return '';
   }
 }
 
@@ -31,18 +54,32 @@ export async function exportWorkspace(
     ...new Set(pages.map((page) => page.sourceDocumentId)),
   ];
   const sourceDocuments = new Map<string, PDFDocument>();
+  const formSnapshots = new Map(
+    request.forms.sources.map((snapshot) => [
+      snapshot.sourceDocumentId,
+      snapshot,
+    ]),
+  );
 
   throwIfAborted(options.signal);
+  if (request.forms.hasChangedTextDraft) {
+    throw new FormExportError(
+      'active-draft',
+      'Finish or cancel the active form text edit before exporting.',
+    );
+  }
   options.onProgress?.({
     phase: 'preparing',
     current: 0,
     total: uniqueSourceIds.length,
   });
 
-  const [{ PDFDocument, degrees }, flattening] = await Promise.all([
+  const [pdfLib, flattening, formPreparation] = await Promise.all([
     import('pdf-lib'),
     import('./annotations/flattenAnnotations'),
+    import('./forms/prepareFormSource'),
   ]);
+  const { PDFDocument, degrees } = pdfLib;
 
   try {
     for (const [index, sourceId] of uniqueSourceIds.entries()) {
@@ -52,6 +89,24 @@ export async function exportWorkspace(
         throw new PdfExportError(
           'missing-source',
           'A source PDF required by this workspace is no longer available.',
+        );
+      }
+      const formSnapshot = formSnapshots.get(sourceId);
+      if (!formSnapshot) {
+        throw new FormExportError(
+          'missing-source-snapshot',
+          'Form safety information is missing for a source PDF.',
+          source.fileName,
+        );
+      }
+      if (
+        formSnapshot.capability !== 'plain' &&
+        formSnapshot.capability !== 'safe-acroform'
+      ) {
+        throw new FormExportError(
+          'unsupported-source',
+          unsupportedSourceMessage(formSnapshot.capability),
+          source.fileName,
         );
       }
 
@@ -75,8 +130,9 @@ export async function exportWorkspace(
 
       throwIfAborted(options.signal);
 
+      let sourceDocument: PDFDocument;
       try {
-        sourceDocuments.set(sourceId, await PDFDocument.load(bytes));
+        sourceDocument = await PDFDocument.load(bytes);
       } catch {
         throw new PdfExportError(
           'source-pdf-invalid',
@@ -84,6 +140,18 @@ export async function exportWorkspace(
           source.fileName,
         );
       }
+
+      if (formSnapshot.capability === 'safe-acroform') {
+        await formPreparation.prepareFormSource(
+          sourceDocument,
+          formSnapshot,
+          pdfLib,
+          source.fileName,
+          () => throwIfAborted(options.signal),
+        );
+      }
+      throwIfAborted(options.signal);
+      sourceDocuments.set(sourceId, sourceDocument);
     }
 
     const output = await PDFDocument.create();

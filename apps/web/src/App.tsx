@@ -47,6 +47,7 @@ export function App() {
     annotationController.state,
     annotationController.assetRegistry,
     formController.getExportBlockReason,
+    formController.snapshotForExport,
   );
 
   const handleInitialSelection = (
