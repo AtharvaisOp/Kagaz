@@ -43,7 +43,10 @@ import type {
 } from '../model/types';
 import type { TextEditSession } from '../model/textEditSession';
 import type { AnnotationAssetRegistry } from '../runtime/annotationAssetRegistry';
-import type { PendingImagePlacement } from '../hooks/usePdfAnnotations';
+import type {
+  PendingImagePlacement,
+  PendingSignaturePlacement,
+} from '../hooks/usePdfAnnotations';
 import type {
   AnnotationStyleDefaults,
   AnnotationTool,
@@ -67,6 +70,7 @@ interface AnnotationOverlayProps {
   readonly onCreateAnnotation: (annotation: PdfAnnotation) => void;
   readonly assetRegistry: AnnotationAssetRegistry;
   readonly pendingImage: PendingImagePlacement | null;
+  readonly pendingSignature: PendingSignaturePlacement | null;
   readonly textEditSession: TextEditSession | null;
   readonly onBeginTextCreation: (pageId: string, box: PdfOrientedBox) => void;
   readonly onEditText: (annotation: TextAnnotation) => void;
@@ -74,6 +78,7 @@ interface AnnotationOverlayProps {
   readonly onCommitText: (sessionId: string) => void;
   readonly onCancelText: (sessionId: string) => void;
   readonly onPlaceImage: (pageId: string, box: PdfOrientedBox) => void;
+  readonly onPlaceSignature: (pageId: string, box: PdfOrientedBox) => void;
 }
 
 function isBoxNode(annotation: PdfAnnotation): boolean {
@@ -104,6 +109,7 @@ export function AnnotationOverlay({
   onCreateAnnotation,
   assetRegistry,
   pendingImage,
+  pendingSignature,
   textEditSession,
   onBeginTextCreation,
   onEditText,
@@ -111,6 +117,7 @@ export function AnnotationOverlay({
   onCommitText,
   onCancelText,
   onPlaceImage,
+  onPlaceSignature,
 }: AnnotationOverlayProps) {
   const nodeRefs = useRef(new Map<string, Konva.Node>());
   const transformerRef = useRef<Konva.Transformer>(null);
@@ -238,7 +245,9 @@ export function AnnotationOverlay({
     }
 
     const box =
-      gesture.annotation.kind === 'text' || gesture.annotation.kind === 'image'
+      gesture.annotation.kind === 'text' ||
+      gesture.annotation.kind === 'image' ||
+      gesture.annotation.kind === 'signature'
         ? transformedOrientedAnnotationBox(
             gesture.annotation,
             {
@@ -285,6 +294,7 @@ export function AnnotationOverlay({
   const handleCreationDown = (event: Konva.KonvaEventObject<PointerEvent>) => {
     if (!creating || event.target !== event.currentTarget) return;
     if (activeTool === 'image' && !pendingImage) return;
+    if (activeTool === 'signature' && !pendingSignature) return;
     const point = stagePoint(event);
     if (!point) return;
     const draft: CreationDraft = {
@@ -337,6 +347,19 @@ export function AnnotationOverlay({
           draft.start,
           draft.current,
           pendingImage.width / pendingImage.height,
+          draft.viewport,
+        ),
+      );
+      return;
+    }
+    if (draft.tool === 'signature') {
+      if (!pendingSignature) return;
+      onPlaceSignature(
+        workspacePageId,
+        createImagePlacementBox(
+          draft.start,
+          draft.current,
+          pendingSignature.width / pendingSignature.height,
           draft.viewport,
         ),
       );
@@ -416,7 +439,10 @@ export function AnnotationOverlay({
             visible={!creating && selectedAnnotation !== undefined}
             rotateEnabled={false}
             flipEnabled={false}
-            keepRatio={selectedAnnotation?.kind === 'image'}
+            keepRatio={
+              selectedAnnotation?.kind === 'image' ||
+              selectedAnnotation?.kind === 'signature'
+            }
             enabledAnchors={[
               'top-left',
               'top-center',

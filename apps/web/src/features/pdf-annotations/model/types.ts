@@ -13,7 +13,8 @@ export type AnnotationKind =
   | 'rectangle'
   | 'ellipse'
   | 'line'
-  | 'image';
+  | 'image'
+  | 'signature';
 
 export interface PdfPoint {
   readonly x: number;
@@ -95,6 +96,15 @@ export interface ImageAnnotation extends AnnotationBase<'image'> {
   readonly opacity: number;
 }
 
+export type SignatureMethod = 'draw' | 'type' | 'upload';
+
+export interface SignatureAnnotation extends AnnotationBase<'signature'> {
+  readonly box: PdfOrientedBox;
+  readonly assetId: AnnotationAssetId;
+  readonly method: SignatureMethod;
+  readonly opacity: number;
+}
+
 export type PdfAnnotation =
   | TextAnnotation
   | HighlightAnnotation
@@ -102,7 +112,8 @@ export type PdfAnnotation =
   | RectangleAnnotation
   | EllipseAnnotation
   | LineAnnotation
-  | ImageAnnotation;
+  | ImageAnnotation
+  | SignatureAnnotation;
 
 export interface AnnotationDocument {
   readonly byPage: Partial<Record<WorkspacePageId, readonly PdfAnnotation[]>>;

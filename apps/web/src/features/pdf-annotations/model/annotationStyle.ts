@@ -25,6 +25,7 @@ export function applyAnnotationStyleDefaults(
           patch.textAlign === undefined ? annotation.align : styles.textAlign,
       };
     case 'image':
+    case 'signature':
       return patch.opacity === undefined
         ? annotation
         : { ...annotation, opacity: styles.opacity };

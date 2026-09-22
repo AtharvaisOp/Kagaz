@@ -187,11 +187,15 @@ export function PdfViewer({
           );
         }}
         getExportBlockReason={(indexes) =>
-          formController.getExportBlockReason(
-            indexes
+          (() => {
+            const selectedPages = indexes
               .map((index) => pages[index])
-              .filter((page): page is WorkspacePage => Boolean(page)),
-          )
+              .filter((page): page is WorkspacePage => Boolean(page));
+            return (
+              formController.getExportBlockReason(selectedPages) ??
+              annotationController.getExportBlockReason(selectedPages)
+            );
+          })()
         }
       />
       <div className="form-status-notices" aria-label="Form status">
@@ -271,6 +275,7 @@ export function PdfViewer({
                   createAnnotationId={annotationController.createAnnotationId}
                   assetRegistry={annotationController.assetRegistry}
                   pendingImage={annotationController.pendingImage}
+                  pendingSignature={annotationController.pendingSignature}
                   textEditSession={
                     annotationController.textEditSession?.workspacePageId ===
                     page.id
@@ -283,6 +288,7 @@ export function PdfViewer({
                   onCommitText={annotationController.commitTextEdit}
                   onCancelText={annotationController.cancelTextEdit}
                   onPlaceImage={annotationController.placePendingImage}
+                  onPlaceSignature={annotationController.placePendingSignature}
                   formWidgets={formController.getWidgetsForWorkspacePage(page)}
                   formFields={formController
                     .getWidgetsForWorkspacePage(page)

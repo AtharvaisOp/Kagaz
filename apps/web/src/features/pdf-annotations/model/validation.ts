@@ -13,6 +13,7 @@ import type {
   PdfPoint,
   RectangleAnnotation,
   RgbColor,
+  SignatureAnnotation,
   StrokeStyle,
   TextAnnotation,
 } from './types';
@@ -203,6 +204,19 @@ function isImageAnnotation(value: unknown): value is ImageAnnotation {
   );
 }
 
+function isSignatureAnnotation(value: unknown): value is SignatureAnnotation {
+  if (!isRecord(value)) return false;
+  return (
+    value.kind === 'signature' &&
+    isPdfOrientedBox(value.box) &&
+    isNonEmptyString(value.assetId) &&
+    (value.method === 'draw' ||
+      value.method === 'type' ||
+      value.method === 'upload') &&
+    isOpacity(value.opacity)
+  );
+}
+
 export function isPdfAnnotation(value: unknown): value is PdfAnnotation {
   if (!isRecord(value)) {
     return false;
@@ -227,6 +241,8 @@ export function isPdfAnnotation(value: unknown): value is PdfAnnotation {
       return isLineAnnotation(value);
     case 'image':
       return isImageAnnotation(value);
+    case 'signature':
+      return isSignatureAnnotation(value);
     default:
       return false;
   }

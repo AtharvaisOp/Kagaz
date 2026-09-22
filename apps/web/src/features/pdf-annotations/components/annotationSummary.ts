@@ -35,6 +35,8 @@ export function annotationSummaryLabel(
       return textPreview(annotation.text) || 'Text annotation';
     case 'image':
       return fileName ? `Image: ${fileName}` : 'Image';
+    case 'signature':
+      return `${annotation.method === 'draw' ? 'Drawn' : annotation.method === 'type' ? 'Typed' : 'Uploaded'} signature`;
     case 'highlight':
       return 'Highlight';
     case 'rectangle':
@@ -132,7 +134,7 @@ export function resizeAnnotationByKeyboard(
 ): PdfAnnotation {
   if (!canResizeAnnotation(annotation)) return annotation;
   const box = annotation.box;
-  if (annotation.kind === 'image') {
+  if (annotation.kind === 'image' || annotation.kind === 'signature') {
     const resized = resizeImageBox(box, action, step);
     return resized === box ? annotation : { ...annotation, box: resized };
   }

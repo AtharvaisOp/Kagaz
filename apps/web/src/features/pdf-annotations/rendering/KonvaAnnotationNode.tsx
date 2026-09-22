@@ -14,7 +14,11 @@ import { useAnnotationAsset } from '../runtime/useAnnotationAsset';
 import { projectTextBoxInset, projectTextFontSize } from './textProjection';
 
 import type { AnnotationAssetRegistry } from '../runtime/annotationAssetRegistry';
-import type { ImageAnnotation, PdfAnnotation } from '../model/types';
+import type {
+  ImageAnnotation,
+  PdfAnnotation,
+  SignatureAnnotation,
+} from '../model/types';
 
 interface KonvaAnnotationNodeProps {
   readonly annotation: PdfAnnotation;
@@ -40,7 +44,7 @@ function selectFromEvent(
 }
 
 interface ImageNodeProps {
-  readonly annotation: ImageAnnotation;
+  readonly annotation: ImageAnnotation | SignatureAnnotation;
   readonly registry: AnnotationAssetRegistry;
   readonly common: Record<string, unknown>;
   readonly nodeRef: (node: Konva.Node | null) => void;
@@ -146,7 +150,11 @@ export function KonvaAnnotationNode({
   }
 
   const { bounds } = projection;
-  if (annotation.kind === 'text' || annotation.kind === 'image') {
+  if (
+    annotation.kind === 'text' ||
+    annotation.kind === 'image' ||
+    annotation.kind === 'signature'
+  ) {
     const frame = projectPdfBoxToOrientedFrame(annotation.box, viewport);
     const orientedCommon = {
       id: annotation.id,
@@ -171,7 +179,7 @@ export function KonvaAnnotationNode({
       onTransformEnd: (event: Konva.KonvaEventObject<Event>) =>
         onTransformEnd(event.target),
     };
-    if (annotation.kind === 'image') {
+    if (annotation.kind === 'image' || annotation.kind === 'signature') {
       return (
         <AnnotationImageNode
           annotation={annotation}

@@ -18,4 +18,8 @@ describe('hasUnsavedAnnotationWork', () => {
       );
     },
   );
+
+  it('treats a pending signature as meaningful unsaved work', () => {
+    expect(hasUnsavedAnnotationWork(false, null, false, true)).toBe(true);
+  });
 });

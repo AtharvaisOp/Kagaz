@@ -68,6 +68,19 @@ export async function exportWorkspace(
       'Finish or cancel the active form text edit before exporting.',
     );
   }
+  for (const annotations of request.annotationsByPage.values()) {
+    const signature = annotations.find(
+      (annotation) => annotation.kind === 'signature',
+    );
+    if (signature?.kind === 'signature') {
+      throw new AnnotationExportError(
+        'unsupported-signature',
+        'Visual signatures cannot be included in PDF export yet.',
+        signature.id,
+        signature.assetId,
+      );
+    }
+  }
   options.onProgress?.({
     phase: 'preparing',
     current: 0,

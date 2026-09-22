@@ -4,6 +4,7 @@ import type { PdfAnnotationController } from '../hooks/usePdfAnnotations';
 import type { AnnotationTool } from '../model/editorTypes';
 import type { PdfAnnotation, RgbColor } from '../model/types';
 import { shouldHandleAnnotationShortcut } from './annotationShortcuts';
+import { SignatureCreator } from './SignatureCreator';
 import {
   beginOpacityInteraction,
   completeOpacityInteraction,
@@ -59,6 +60,7 @@ function annotationOpacity(annotation: PdfAnnotation | null): number | null {
   switch (annotation.kind) {
     case 'text':
     case 'image':
+    case 'signature':
       return annotation.opacity;
     case 'highlight':
       return annotation.fill.opacity;
@@ -86,6 +88,12 @@ export function AnnotationToolbar({ controller }: AnnotationToolbarProps) {
     clearSelection,
     selection,
     pendingImage,
+    pendingSignature,
+    signatureCreatorOpen,
+    openSignatureCreator,
+    closeSignatureCreator,
+    beginSignatureAsset,
+    chooseSignatureUpload,
     cancelPendingImage,
     chooseImage,
     imageError,
@@ -105,7 +113,10 @@ export function AnnotationToolbar({ controller }: AnnotationToolbarProps) {
   const imageContext =
     selectedAnnotation?.kind === 'image' ||
     activeTool === 'image' ||
-    pendingImage !== null;
+    pendingImage !== null ||
+    selectedAnnotation?.kind === 'signature' ||
+    activeTool === 'signature' ||
+    pendingSignature !== null;
   const vectorContext = !textContext && !imageContext;
   const displayedOpacity =
     textEditSession?.opacity ??
@@ -128,6 +139,11 @@ export function AnnotationToolbar({ controller }: AnnotationToolbarProps) {
         redo();
         return;
       }
+      if (key === 's') {
+        event.preventDefault();
+        openSignatureCreator();
+        return;
+      }
       if (key === 'delete' || key === 'backspace') {
         event.preventDefault();
         deleteSelected();
@@ -136,7 +152,10 @@ export function AnnotationToolbar({ controller }: AnnotationToolbarProps) {
       if (key === 'escape') {
         event.preventDefault();
         if (pendingImage) cancelPendingImage();
-        else {
+        else if (pendingSignature || signatureCreatorOpen) {
+          closeSignatureCreator();
+          setActiveTool('select');
+        } else {
           setActiveTool('select');
           clearSelection();
         }
@@ -157,6 +176,10 @@ export function AnnotationToolbar({ controller }: AnnotationToolbarProps) {
     clearSelection,
     deleteSelected,
     pendingImage,
+    pendingSignature,
+    signatureCreatorOpen,
+    closeSignatureCreator,
+    openSignatureCreator,
     redo,
     setActiveTool,
     undo,
@@ -268,6 +291,17 @@ export function AnnotationToolbar({ controller }: AnnotationToolbarProps) {
         >
           Image
         </button>
+        <button
+          type="button"
+          className="annotation-tool-button"
+          aria-label="Create visual signature"
+          aria-keyshortcuts="S"
+          aria-pressed={activeTool === 'signature' || pendingSignature !== null}
+          title="Create visual signature"
+          onClick={openSignatureCreator}
+        >
+          Sign
+        </button>
         <input
           ref={imageInputRef}
           className="annotation-file-input"
@@ -321,9 +355,10 @@ export function AnnotationToolbar({ controller }: AnnotationToolbarProps) {
             Edit text
           </button>
         ) : null}
-        {pendingImage ? (
-          <span className="annotation-pending">
-            Click or drag a page to place
+        {pendingImage || pendingSignature ? (
+          <span className="annotation-pending" role="status" aria-live="polite">
+            Click or drag a page to place{' '}
+            {pendingSignature ? 'signature' : 'image'}
           </span>
         ) : null}
       </div>
@@ -429,6 +464,15 @@ export function AnnotationToolbar({ controller }: AnnotationToolbarProps) {
         <div className="annotation-error" role="alert">
           {imageError}
         </div>
+      ) : null}
+      {signatureCreatorOpen ? (
+        <SignatureCreator
+          open
+          error={imageError}
+          onClose={closeSignatureCreator}
+          onCreate={beginSignatureAsset}
+          onUpload={chooseSignatureUpload}
+        />
       ) : null}
     </div>
   );

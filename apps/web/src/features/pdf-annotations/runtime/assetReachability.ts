@@ -10,7 +10,9 @@ function collectDocumentAssets(
 ): void {
   for (const annotations of Object.values(document.byPage)) {
     for (const annotation of annotations ?? []) {
-      if (annotation.kind === 'image') result.add(annotation.assetId);
+      if (annotation.kind === 'image' || annotation.kind === 'signature') {
+        result.add(annotation.assetId);
+      }
     }
   }
 }

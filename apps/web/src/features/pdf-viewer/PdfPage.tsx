@@ -16,6 +16,7 @@ import type { AnnotationAssetRegistry } from '../pdf-annotations/runtime/annotat
 import type {
   PdfAnnotationController,
   PendingImagePlacement,
+  PendingSignaturePlacement,
 } from '../pdf-annotations/hooks/usePdfAnnotations';
 import { normalizeRotation } from '../pdf-workspace/model/operations';
 import { adoptResolvedPdfPage } from '../pdf-workspace/runtime/pdfPageLifecycle';
@@ -55,6 +56,7 @@ interface PdfPageProps {
   readonly createAnnotationId: () => string;
   readonly assetRegistry: AnnotationAssetRegistry;
   readonly pendingImage: PendingImagePlacement | null;
+  readonly pendingSignature: PendingSignaturePlacement | null;
   readonly textEditSession: TextEditSession | null;
   readonly onBeginTextCreation: PdfAnnotationController['beginTextCreation'];
   readonly onEditText: (annotation: TextAnnotation) => void;
@@ -62,6 +64,7 @@ interface PdfPageProps {
   readonly onCommitText: PdfAnnotationController['commitTextEdit'];
   readonly onCancelText: PdfAnnotationController['cancelTextEdit'];
   readonly onPlaceImage: PdfAnnotationController['placePendingImage'];
+  readonly onPlaceSignature: PdfAnnotationController['placePendingSignature'];
   readonly formFields: readonly FormFieldDefinition[];
   readonly formWidgets: readonly FormWidgetDefinition[];
   readonly formController: PdfFormsController;
@@ -100,6 +103,7 @@ export function PdfPage({
   createAnnotationId,
   assetRegistry,
   pendingImage,
+  pendingSignature,
   textEditSession,
   onBeginTextCreation,
   onEditText,
@@ -107,6 +111,7 @@ export function PdfPage({
   onCommitText,
   onCancelText,
   onPlaceImage,
+  onPlaceSignature,
   formFields,
   formWidgets,
   formController,
@@ -336,6 +341,7 @@ export function PdfPage({
             createAnnotationId={createAnnotationId}
             assetRegistry={assetRegistry}
             pendingImage={pendingImage}
+            pendingSignature={pendingSignature}
             textEditSession={textEditSession}
             onBeginTextCreation={onBeginTextCreation}
             onEditText={onEditText}
@@ -345,6 +351,7 @@ export function PdfPage({
             onCommitText={onCommitText}
             onCancelText={onCancelText}
             onPlaceImage={onPlaceImage}
+            onPlaceSignature={onPlaceSignature}
           />
         ) : null}
       </div>

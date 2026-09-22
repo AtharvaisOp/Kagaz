@@ -334,6 +334,13 @@ export function drawAnnotationsOnPage(
           });
         }
         break;
+      case 'signature':
+        throw new AnnotationExportError(
+          'unsupported-signature',
+          'Visual signatures cannot be included in PDF export yet.',
+          annotation.id,
+          annotation.assetId,
+        );
     }
   }
 }

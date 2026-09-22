@@ -227,6 +227,7 @@ export function projectThumbnailAnnotations(
           },
         ];
       case 'image':
+      case 'signature':
         if (projection.kind !== 'box') return [];
         return [
           {

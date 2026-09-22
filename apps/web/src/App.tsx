@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
 
 import { AppHeader } from './components/AppHeader';
 import { FilePicker } from './components/FilePicker';
@@ -41,12 +41,18 @@ export function App() {
     annotation: annotationController.historyParticipant,
     form: formController.historyParticipant,
   });
+  const getExportBlockReason = useCallback(
+    (pages: Parameters<typeof formController.getExportBlockReason>[0]) =>
+      formController.getExportBlockReason(pages) ??
+      annotationController.getExportBlockReason(pages),
+    [annotationController, formController],
+  );
   const pdfExport = usePdfExport(
     workspace,
     registry,
     annotationController.state,
     annotationController.assetRegistry,
-    formController.getExportBlockReason,
+    getExportBlockReason,
     formController.snapshotForExport,
   );
 
@@ -133,9 +139,7 @@ export function App() {
           onDownloadPdf={pdfExport.downloadWorkspace}
           onExtractPages={pdfExport.extractPages}
           exportBlocked={annotationController.textEditSession !== null}
-          exportBlockReason={formController.getExportBlockReason(
-            workspace.pages,
-          )}
+          exportBlockReason={getExportBlockReason(workspace.pages)}
           annotationController={annotationController}
           formController={formController}
         />

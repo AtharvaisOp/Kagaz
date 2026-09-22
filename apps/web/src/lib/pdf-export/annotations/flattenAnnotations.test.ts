@@ -346,6 +346,20 @@ describe('annotation PDF flattening', () => {
         context,
       ),
     ).toThrowError(expect.objectContaining({ code: 'missing-image-asset' }));
+    expect(() =>
+      drawAnnotationsOnPage(
+        page,
+        [
+          annotation('signature', {
+            box,
+            assetId: 'asset-signature',
+            method: 'draw',
+            opacity: 1,
+          }),
+        ],
+        context,
+      ),
+    ).toThrowError(expect.objectContaining({ code: 'unsupported-signature' }));
   });
 
   it('embeds PNG bytes, preserves image opacity/rotation, and reopens the PDF', async () => {

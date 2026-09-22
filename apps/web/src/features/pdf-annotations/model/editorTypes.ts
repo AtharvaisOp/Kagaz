@@ -8,7 +8,8 @@ export type AnnotationTool =
   | 'ellipse'
   | 'line'
   | 'freehand'
-  | 'image';
+  | 'image'
+  | 'signature';
 
 export interface AnnotationStyleDefaults {
   readonly strokeColor: RgbColor;

@@ -52,6 +52,7 @@ import type {
   AnnotationSelection,
   PdfOrientedBox,
   PdfAnnotation,
+  SignatureMethod,
   TextAnnotation,
 } from '../model/types';
 
@@ -59,6 +60,10 @@ export interface PendingImagePlacement {
   readonly assetId: string;
   readonly width: number;
   readonly height: number;
+}
+
+export interface PendingSignaturePlacement extends PendingImagePlacement {
+  readonly method: SignatureMethod;
 }
 
 export interface PdfAnnotationController {
@@ -101,6 +106,15 @@ export interface PdfAnnotationController {
   readonly createAnnotationId: () => string;
   readonly assetRegistry: AnnotationAssetRegistry;
   readonly pendingImage: PendingImagePlacement | null;
+  readonly pendingSignature: PendingSignaturePlacement | null;
+  readonly signatureCreatorOpen: boolean;
+  readonly openSignatureCreator: () => void;
+  readonly closeSignatureCreator: () => void;
+  readonly beginSignatureAsset: (
+    blob: Blob,
+    method: SignatureMethod,
+  ) => Promise<void>;
+  readonly chooseSignatureUpload: (file: File) => Promise<void>;
   readonly imageError: string | null;
   readonly chooseImage: (file: File) => Promise<void>;
   readonly cancelPendingImage: () => void;
@@ -108,6 +122,13 @@ export interface PdfAnnotationController {
     pageId: WorkspacePageId,
     box: PdfOrientedBox,
   ) => void;
+  readonly placePendingSignature: (
+    pageId: WorkspacePageId,
+    box: PdfOrientedBox,
+  ) => void;
+  readonly getExportBlockReason: (
+    pages: readonly WorkspacePage[],
+  ) => string | null;
   readonly textEditSession: TextEditSession | null;
   readonly beginTextCreation: (
     pageId: WorkspacePageId,
@@ -138,6 +159,9 @@ export function usePdfAnnotations(
   const [styleDefaults, setStyleDefaults] = useState(DEFAULT_ANNOTATION_STYLE);
   const [pendingImage, setPendingImage] =
     useState<PendingImagePlacement | null>(null);
+  const [pendingSignature, setPendingSignature] =
+    useState<PendingSignaturePlacement | null>(null);
+  const [signatureCreatorOpen, setSignatureCreatorOpen] = useState(false);
   const [imageError, setImageError] = useState<string | null>(null);
   const [textEditSession, setTextEditSession] =
     useState<TextEditSession | null>(null);
@@ -164,6 +188,7 @@ export function usePdfAnnotations(
   const styleDefaultsRef = useRef(styleDefaults);
   const textEditSessionRef = useRef(textEditSession);
   const pendingImageRef = useRef(pendingImage);
+  const pendingSignatureRef = useRef(pendingSignature);
   const stateRef = useRef(state);
   const committedPageIdsRef = useRef<readonly WorkspacePageId[]>([]);
   useLayoutEffect(() => {
@@ -172,8 +197,16 @@ export function usePdfAnnotations(
     styleDefaultsRef.current = styleDefaults;
     textEditSessionRef.current = textEditSession;
     pendingImageRef.current = pendingImage;
+    pendingSignatureRef.current = pendingSignature;
     activeToolRef.current = activeTool;
-  }, [activeTool, pendingImage, state, styleDefaults, textEditSession]);
+  }, [
+    activeTool,
+    pendingImage,
+    pendingSignature,
+    state,
+    styleDefaults,
+    textEditSession,
+  ]);
 
   const dispatchTracked = useCallback(
     (action: AnnotationAction) => {
@@ -206,9 +239,12 @@ export function usePdfAnnotations(
 
   useEffect(() => {
     assetRegistry.reconcile(
-      collectReachableAnnotationAssetIds(state, pendingImage?.assetId ?? null),
+      collectReachableAnnotationAssetIds(
+        state,
+        pendingImage?.assetId ?? pendingSignature?.assetId ?? null,
+      ),
     );
-  }, [assetRegistry, pendingImage?.assetId, state]);
+  }, [assetRegistry, pendingImage?.assetId, pendingSignature?.assetId, state]);
 
   useEffect(
     () => () => {
@@ -340,6 +376,9 @@ export function usePdfAnnotations(
     imageRequestVersionRef.current += 1;
     pendingImageRef.current = null;
     setPendingImage(null);
+    pendingSignatureRef.current = null;
+    setPendingSignature(null);
+    setSignatureCreatorOpen(false);
     textEditBoundaryRef.current.cancel();
     textEditSessionRef.current = null;
     setTextEditSession(null);
@@ -357,6 +396,12 @@ export function usePdfAnnotations(
         imageRequestVersionRef.current += 1;
         pendingImageRef.current = null;
         setPendingImage(null);
+      }
+      if (tool !== 'signature') {
+        imageRequestVersionRef.current += 1;
+        pendingSignatureRef.current = null;
+        setPendingSignature(null);
+        setSignatureCreatorOpen(false);
       }
       setImageError(null);
       activeToolRef.current = tool;
@@ -404,6 +449,61 @@ export function usePdfAnnotations(
     setActiveToolState('select');
   }, []);
 
+  const openSignatureCreator = useCallback(() => {
+    setImageError(null);
+    setSignatureCreatorOpen(true);
+    activeToolRef.current = 'signature';
+    setActiveToolState('signature');
+  }, []);
+
+  const closeSignatureCreator = useCallback(() => {
+    setSignatureCreatorOpen(false);
+    if (!pendingSignatureRef.current) {
+      activeToolRef.current = 'select';
+      setActiveToolState('select');
+    }
+  }, []);
+
+  const beginSignatureAsset = useCallback(
+    async (blob: Blob, method: SignatureMethod) => {
+      const requestVersion = ++imageRequestVersionRef.current;
+      setImageError(null);
+      try {
+        const asset = await assetRegistry.register(blob);
+        if (requestVersion !== imageRequestVersionRef.current) {
+          assetRegistry.destroy(asset.assetId);
+          return;
+        }
+        pendingImageRef.current = null;
+        setPendingImage(null);
+        const next: PendingSignaturePlacement = {
+          assetId: asset.assetId,
+          width: asset.width,
+          height: asset.height,
+          method,
+        };
+        pendingSignatureRef.current = next;
+        setPendingSignature(next);
+        setSignatureCreatorOpen(false);
+        activeToolRef.current = 'signature';
+        setActiveToolState('signature');
+      } catch (error) {
+        if (requestVersion !== imageRequestVersionRef.current) return;
+        setImageError(
+          error instanceof UnsupportedJpegOrientationError
+            ? UNSUPPORTED_JPEG_ORIENTATION_MESSAGE
+            : 'That signature image could not be opened. Choose a PNG or JPEG.',
+        );
+      }
+    },
+    [assetRegistry],
+  );
+
+  const chooseSignatureUpload = useCallback(
+    (file: File) => beginSignatureAsset(file, 'upload'),
+    [beginSignatureAsset],
+  );
+
   const placePendingImage = useCallback(
     (pageId: WorkspacePageId, box: PdfOrientedBox) => {
       const pending = pendingImageRef.current;
@@ -424,6 +524,50 @@ export function usePdfAnnotations(
       setActiveToolState('select');
     },
     [createAnnotationId, dispatchTracked],
+  );
+
+  const placePendingSignature = useCallback(
+    (pageId: WorkspacePageId, box: PdfOrientedBox) => {
+      const pending = pendingSignatureRef.current;
+      if (!pending || !committedPageIdsRef.current.includes(pageId)) return;
+      const annotation: PdfAnnotation = {
+        id: createAnnotationId(),
+        workspacePageId: pageId,
+        kind: 'signature',
+        box,
+        assetId: pending.assetId,
+        method: pending.method,
+        opacity: 1,
+      };
+      dispatchTracked({ type: 'ADD_ANNOTATION', annotation });
+      setSelection({ workspacePageId: pageId, annotationId: annotation.id });
+      pendingSignatureRef.current = null;
+      setPendingSignature(null);
+      activeToolRef.current = 'select';
+      setActiveToolState('select');
+    },
+    [createAnnotationId, dispatchTracked],
+  );
+
+  const getExportBlockReason = useCallback(
+    (exportPages: readonly WorkspacePage[]) => {
+      if (pendingSignatureRef.current) {
+        return 'Finish placing or cancel the pending visual signature before exporting.';
+      }
+      const exportPageIds = new Set(exportPages.map((page) => page.id));
+      const hasSignature = Object.values(stateRef.current.present.byPage).some(
+        (annotations) =>
+          annotations?.some(
+            (annotation) =>
+              annotation.kind === 'signature' &&
+              exportPageIds.has(annotation.workspacePageId),
+          ),
+      );
+      return hasSignature
+        ? 'Visual signatures cannot be included in PDF export yet. Remove the signature or keep this workspace in the browser.'
+        : null;
+    },
+    [],
   );
 
   const beginTextCreation = useCallback(
@@ -636,6 +780,7 @@ export function usePdfAnnotations(
         state.dirty,
         textEditSession,
         pendingImage !== null,
+        pendingSignature !== null,
       ),
       selection: visibleSelection,
       getAnnotationsForPage,
@@ -660,10 +805,18 @@ export function usePdfAnnotations(
       createAnnotationId,
       assetRegistry,
       pendingImage,
+      pendingSignature,
+      signatureCreatorOpen,
+      openSignatureCreator,
+      closeSignatureCreator,
+      beginSignatureAsset,
+      chooseSignatureUpload,
       imageError,
       chooseImage,
       cancelPendingImage,
       placePendingImage,
+      placePendingSignature,
+      getExportBlockReason,
       textEditSession,
       beginTextCreation,
       editSelectedText,
@@ -692,7 +845,15 @@ export function usePdfAnnotations(
       editSelectedText,
       editTextAnnotation,
       pendingImage,
+      pendingSignature,
+      signatureCreatorOpen,
+      openSignatureCreator,
+      closeSignatureCreator,
+      beginSignatureAsset,
+      chooseSignatureUpload,
       placePendingImage,
+      placePendingSignature,
+      getExportBlockReason,
       redo,
       resetAnnotations,
       selectAnnotation,

@@ -57,7 +57,9 @@ export function ThumbnailCanvas({
       Array.from(
         new Set(
           annotations.flatMap((annotation) =>
-            annotation.kind === 'image' ? [annotation.assetId] : [],
+            annotation.kind === 'image' || annotation.kind === 'signature'
+              ? [annotation.assetId]
+              : [],
           ),
         ),
       ),

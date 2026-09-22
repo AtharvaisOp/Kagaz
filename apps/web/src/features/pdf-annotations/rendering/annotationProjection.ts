@@ -36,7 +36,7 @@ export interface BoxAnnotationProjection {
   readonly kind: 'box';
   readonly annotationKind: Extract<
     AnnotationKind,
-    'text' | 'highlight' | 'rectangle' | 'ellipse' | 'image'
+    'text' | 'highlight' | 'rectangle' | 'ellipse' | 'image' | 'signature'
   >;
   readonly quad: ViewportQuad;
   readonly bounds: ViewportRect;
@@ -87,7 +87,8 @@ export function projectAnnotation(
     case 'highlight':
     case 'rectangle':
     case 'ellipse':
-    case 'image': {
+    case 'image':
+    case 'signature': {
       const projection = projectPdfBox(annotation.box, viewport);
       return {
         kind: 'box',
@@ -135,6 +136,7 @@ export function translateAnnotation(
     case 'rectangle':
     case 'ellipse':
     case 'image':
+    case 'signature':
       return {
         ...annotation,
         box: {

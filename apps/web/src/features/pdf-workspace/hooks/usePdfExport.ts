@@ -56,6 +56,8 @@ export function friendlyExportError(error: unknown): string {
     switch (error.code) {
       case 'unsupported-text-font':
         return 'This text contains characters unsupported by the PDF export font.';
+      case 'unsupported-signature':
+        return 'Visual signatures cannot be included in PDF export yet. Remove the signature or keep this workspace in the browser.';
       case 'missing-image-asset':
         return 'An image annotation is no longer available for export.';
       case 'image-read-failed':
@@ -97,7 +99,9 @@ export function snapshotAnnotationsForPages(
     const pageSnapshot = Object.freeze([...annotations]);
     annotationsByPage.set(page.id, pageSnapshot);
     for (const annotation of pageSnapshot) {
-      if (annotation.kind === 'image') imageAssetIds.add(annotation.assetId);
+      if (annotation.kind === 'image' || annotation.kind === 'signature') {
+        imageAssetIds.add(annotation.assetId);
+      }
     }
   }
 
