@@ -289,6 +289,9 @@ export function PdfViewer({
                   onCancelText={annotationController.cancelTextEdit}
                   onPlaceImage={annotationController.placePendingImage}
                   onPlaceSignature={annotationController.placePendingSignature}
+                  onPlaceSignatureField={
+                    annotationController.openSignatureCreatorForField
+                  }
                   formWidgets={formController.getWidgetsForWorkspacePage(page)}
                   formFields={formController
                     .getWidgetsForWorkspacePage(page)

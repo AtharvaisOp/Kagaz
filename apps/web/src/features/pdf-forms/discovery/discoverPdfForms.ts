@@ -85,6 +85,13 @@ function asNumber(value: unknown): number | null {
   return typeof value === 'number' && Number.isFinite(value) ? value : null;
 }
 
+function asMaxLength(value: unknown): number | null {
+  const length = asNumber(value);
+  return length !== null && Number.isInteger(length) && length > 0
+    ? length
+    : null;
+}
+
 function asStringArray(value: unknown): string[] {
   if (Array.isArray(value)) {
     return value.filter((entry): entry is string => typeof entry === 'string');
@@ -237,7 +244,9 @@ function createField(
     alternativeText: asString(annotation.alternativeText),
     options: asOptions(annotation.options),
     multiSelect: asBoolean(annotation.multiSelect),
-    maxLength: asNumber(annotation.maxLen),
+    // PDF.js uses zero when /MaxLen is absent; zero means unconstrained,
+    // not a text input that silently truncates every edit to an empty string.
+    maxLength: asMaxLength(annotation.maxLen),
     widgetIds: [widgetId],
     metadataWarnings: [],
   };
@@ -299,7 +308,7 @@ function mergeField(
       'Repeated widgets expose incompatible choice flags.',
     );
   }
-  if (field.maxLength !== asNumber(annotation.maxLen)) {
+  if (field.maxLength !== asMaxLength(annotation.maxLen)) {
     next = addWarning(
       next,
       'Repeated widgets expose incompatible max lengths.',
@@ -340,12 +349,14 @@ function widgetDefinition(
 
 function sourceResult(
   sourceDocumentId: string,
+  hasDigitalSignature: boolean,
   fields: readonly FormFieldDefinition[],
   widgets: readonly FormWidgetDefinition[],
 ): FormSourceDefinition {
   return {
     sourceDocumentId,
     status: widgets.length > 0 ? 'acroform' : 'none',
+    hasDigitalSignature,
     fields,
     widgets,
     error: null,
@@ -379,18 +390,23 @@ export async function discoverPdfForms(
     return {
       sourceDocumentId,
       status: 'unsupported-xfa',
+      hasDigitalSignature: false,
       fields: [],
       widgets: [],
       error: null,
     };
   }
 
-  const metadataInfo = await readMetadataInfo(document);
+  const [metadataInfo, signatures] = await Promise.all([
+    readMetadataInfo(document),
+    document.getSignatures(),
+  ]);
   const xfa = detectXfa({ metadataInfo });
   if (xfa.detected) {
     return {
       sourceDocumentId,
       status: 'unsupported-xfa',
+      hasDigitalSignature: false,
       fields: [],
       widgets: [],
       error: null,
@@ -434,7 +450,12 @@ export async function discoverPdfForms(
     }
   }
 
-  return sourceResult(sourceDocumentId, [...fields.values()], widgets);
+  return sourceResult(
+    sourceDocumentId,
+    (signatures?.length ?? 0) > 0,
+    [...fields.values()],
+    widgets,
+  );
 }
 
 export function createDiscoveryError(
@@ -444,6 +465,7 @@ export function createDiscoveryError(
   return {
     sourceDocumentId,
     status: 'error',
+    hasDigitalSignature: false,
     fields: [],
     widgets: [],
     error:

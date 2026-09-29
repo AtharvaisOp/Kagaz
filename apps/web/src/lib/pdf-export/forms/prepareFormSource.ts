@@ -6,6 +6,7 @@ import type {
   PDFFont,
   PDFForm,
   PDFRef,
+  PDFSignature,
 } from 'pdf-lib';
 import type * as PdfLibModule from 'pdf-lib';
 
@@ -23,6 +24,7 @@ type PdfLibRuntime = Pick<
   | 'PDFOptionList'
   | 'PDFDict'
   | 'PDFName'
+  | 'PDFNull'
   | 'PDFRadioGroup'
   | 'PDFRef'
   | 'PDFSignature'
@@ -77,15 +79,30 @@ function validateActualFieldInventory(
   snapshot: FormExportSourceSnapshot,
   pdfLib: PdfLibRuntime,
   fileName: string,
-): void {
+): readonly PDFSignature[] {
   const snapshotNames = new Set(snapshot.fields.map((field) => field.name));
+  const unsignedSignatures: PDFSignature[] = [];
   for (const field of form.getFields()) {
     if (field instanceof pdfLib.PDFSignature) {
-      throw formError(
-        'unsupported-source',
-        'This PDF contains a signature field. Signature-field export support is still being added.',
-        fileName,
-      );
+      let value: ReturnType<PDFSignature['acroField']['V']>;
+      try {
+        value = field.acroField.V();
+      } catch {
+        throw formError(
+          'existing-digital-signature',
+          'This PDF contains a digital-signature value that Kagaz cannot safely inspect. Kagaz does not modify digitally signed PDFs.',
+          fileName,
+        );
+      }
+      if (value !== undefined && value !== pdfLib.PDFNull) {
+        throw formError(
+          'existing-digital-signature',
+          'This PDF already contains a digital signature. Kagaz does not modify digitally signed PDFs because changes can invalidate that signature.',
+          fileName,
+        );
+      }
+      unsignedSignatures.push(field);
+      continue;
     }
     if (field instanceof pdfLib.PDFButton) {
       throw formError(
@@ -121,6 +138,44 @@ function validateActualFieldInventory(
         fileName,
       );
     }
+  }
+  return unsignedSignatures;
+}
+
+/**
+ * pdf-lib 1.17.1 removeField() requires an appearance ref even for unsigned
+ * signature widgets. Supply a temporary empty appearance so the public field
+ * removal path can clean the field tree; stale page /Annots refs are removed
+ * by the shared cleanup captured before this call.
+ */
+function removeUnsignedSignatureFields(
+  document: PDFDocument,
+  form: PDFForm,
+  fields: readonly PDFSignature[],
+  fileName: string,
+): void {
+  const temporaryAppearances: PDFRef[] = [];
+  try {
+    for (const field of fields) {
+      for (const widget of field.acroField.getWidgets()) {
+        const { width, height } = widget.getRectangle();
+        const appearance = document.context.formXObject([], {
+          BBox: document.context.obj([0, 0, width, height]),
+        });
+        const appearanceRef = document.context.register(appearance);
+        temporaryAppearances.push(appearanceRef);
+        widget.setNormalAppearance(appearanceRef);
+      }
+      form.removeField(field);
+    }
+  } catch {
+    throw formError(
+      'signature-field-removal-failed',
+      'Kagaz could not safely remove an unsigned signature field for export.',
+      fileName,
+    );
+  } finally {
+    for (const ref of temporaryAppearances) document.context.delete(ref);
   }
 }
 
@@ -404,8 +459,19 @@ export async function prepareFormSource(
       fileName,
     );
   }
-  validateActualFieldInventory(form, snapshot, pdfLib, fileName);
+  const unsignedSignatureFields = validateActualFieldInventory(
+    form,
+    snapshot,
+    pdfLib,
+    fileName,
+  );
   const widgetAnnotationRefs = collectWidgetAnnotationRefs(document, pdfLib);
+  removeUnsignedSignatureFields(
+    document,
+    form,
+    unsignedSignatureFields,
+    fileName,
+  );
   const font = await document.embedFont(pdfLib.StandardFonts.Helvetica);
   const fields = validateFields(form, snapshot, font, pdfLib, fileName);
   throwIfAborted();
@@ -433,6 +499,17 @@ export async function prepareFormSource(
     // serialize dangling annotations.
     for (const { page, ref } of widgetAnnotationRefs) {
       page.node.removeAnnot(ref);
+    }
+    if (form.getFields().length !== 0) throw new Error('Form fields remain.');
+    for (const page of document.getPages()) {
+      for (const ref of page.node.Annots()?.asArray() ?? []) {
+        const annotation = document.context.lookup(ref);
+        if (
+          !(annotation instanceof pdfLib.PDFDict) ||
+          annotation.get(pdfLib.PDFName.of('Subtype'))?.toString() === '/Widget'
+        )
+          throw new Error('A widget or unresolved annotation remains.');
+      }
     }
   } catch {
     throw formError(

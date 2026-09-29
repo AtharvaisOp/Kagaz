@@ -35,6 +35,14 @@ export async function loadPdf(
 
   try {
     const document = await loadingTask.promise;
+    // PDF.js hides signature field values and omits malformed signed ranges.
+    // Inspect parsed objects before admitting any source to the editable
+    // workspace. pdf-lib remains dynamically loaded, never in the main bundle.
+    const { inspectSourceSignatureSafety } =
+      await import('./pdf-signatures/signatureSafety');
+    await inspectSourceSignatureSafety(await document.getData());
+    if (signal.aborted)
+      throw new DOMException('PDF loading was cancelled.', 'AbortError');
     return { document, loadingTask };
   } catch (error) {
     await loadingTask.destroy();
@@ -54,6 +62,11 @@ export function isPdfFile(file: File): boolean {
 
 export function describePdfError(error: unknown): string {
   if (error instanceof Error) {
+    if (
+      error.name === 'SignedPdfError' ||
+      error.name === 'UnsafeSignatureFieldError'
+    )
+      return error.message;
     if (error.name === 'PasswordException') {
       return 'This PDF is password protected. Password entry is not available yet.';
     }

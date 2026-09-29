@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import type { PDFObject } from 'pdf-lib';
 
 import { exportWorkspace } from './exportWorkspace';
 import type { FormExportSnapshot } from './forms/types';
@@ -237,7 +238,422 @@ async function makeUnsafeField(kind: 'password' | 'button'): Promise<File> {
   return fileFromBytes(await document.save(), `${kind}.pdf`);
 }
 
+async function makeSignatureForm(
+  options: {
+    readonly signed?: boolean;
+    readonly multipleWidgets?: boolean;
+    readonly includeText?: boolean;
+    readonly mergedWidget?: boolean;
+    readonly nested?: boolean;
+    readonly fileName?: string;
+  } = {},
+): Promise<File> {
+  const document = await pdfLib.PDFDocument.create();
+  const first = document.addPage([400, 300]);
+  const second = options.multipleWidgets ? document.addPage([400, 300]) : first;
+  if (options.includeText) {
+    const text = document.getForm().createTextField('profile.name');
+    text.setText('Original');
+    text.addToPage(first, { x: 30, y: 230, width: 180, height: 24 });
+  }
+
+  const context = document.context;
+  const signatureDictionary = context.obj({
+    FT: 'Sig',
+    T: pdfLib.PDFHexString.fromText('Signature1'),
+  });
+  const signatureRef = context.register(signatureDictionary);
+  const pages = options.multipleWidgets ? [first, second] : [first];
+  const widgetRefs = pages.map((pdfPage, index) => {
+    const widget = context.obj({
+      Type: 'Annot',
+      Subtype: 'Widget',
+      Rect: [40, 70 + index * 40, 240, 120 + index * 40],
+      P: pdfPage.ref,
+      Parent: signatureRef,
+      F: 4,
+    });
+    const widgetRef = context.register(widget);
+    pdfPage.node.addAnnot(widgetRef);
+    return widgetRef;
+  });
+  signatureDictionary.set(PdfName('Kids'), context.obj(widgetRefs));
+  if (options.mergedWidget) {
+    signatureDictionary.delete(PdfName('Kids'));
+    signatureDictionary.set(PdfName('Subtype'), PdfName('Widget'));
+    signatureDictionary.set(PdfName('Rect'), context.obj([40, 70, 240, 120]));
+    signatureDictionary.set(PdfName('P'), first.ref);
+    first.node.removeAnnot(widgetRefs[0]!);
+    context.delete(widgetRefs[0]!);
+    first.node.addAnnot(signatureRef);
+  }
+  if (options.signed) {
+    const valueRef = context.register(
+      context.obj({
+        Type: 'Sig',
+        ByteRange: [0, 10, 20, 10],
+        Contents: pdfLib.PDFHexString.of('DEADBEEF'),
+        SubFilter: 'adbe.pkcs7.detached',
+      }),
+    );
+    signatureDictionary.set(PdfName('V'), valueRef);
+    document.catalog
+      .getOrCreateAcroForm()
+      .dict.set(PdfName('SigFlags'), context.obj(3));
+  }
+  if (options.nested) {
+    const parent = context.obj({
+      T: pdfLib.PDFHexString.fromText('parent'),
+      Kids: [signatureRef],
+    });
+    const parentRef = context.register(parent);
+    signatureDictionary.set(PdfName('Parent'), parentRef);
+    document.catalog.getOrCreateAcroForm().addField(parentRef);
+  } else document.catalog.getOrCreateAcroForm().addField(signatureRef);
+  return fileFromBytes(
+    await document.save({ updateFieldAppearances: false }),
+    options.fileName ?? 'signature-field.pdf',
+  );
+}
+
+function PdfName(name: string) {
+  return pdfLib.PDFName.of(name);
+}
+
+const signaturePngBytes = Uint8Array.from(
+  atob(
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
+  ),
+  (character) => character.charCodeAt(0),
+);
+
+function visualSignature(pageId: string, assetId: string, widgetId?: string) {
+  return {
+    id: `signature-${pageId}`,
+    workspacePageId: pageId,
+    kind: 'signature' as const,
+    box: {
+      origin: { x: 55, y: 82 },
+      width: 120,
+      height: 30,
+      rotation: 0 as const,
+    },
+    assetId,
+    method: 'draw' as const,
+    opacity: 1,
+    target: widgetId
+      ? {
+          kind: 'form-signature-field' as const,
+          sourceDocumentId: 'source',
+          sourcePageIndex: 0,
+          fieldName: 'Signature1',
+          widgetId,
+        }
+      : undefined,
+  };
+}
+
+async function imagePaintCount(bytes: Uint8Array): Promise<number> {
+  const loadingTask = pdfjs.getDocument({
+    data: bytes.slice(),
+    useSystemFonts: true,
+  });
+  const document = await loadingTask.promise;
+  try {
+    const pdfPage = await document.getPage(1);
+    const operators = await pdfPage.getOperatorList();
+    pdfPage.cleanup();
+    return operators.fnArray.filter(
+      (operator) =>
+        operator === pdfjs.OPS.paintImageXObject ||
+        operator === pdfjs.OPS.paintInlineImageXObject,
+    ).length;
+  } finally {
+    await loadingTask.destroy();
+  }
+}
+
 describe('safe AcroForm export', () => {
+  it.each([true, false])(
+    'isolates signature fields with the same name across reordered sources (same file=%s)',
+    async (sameFile) => {
+      const a = await makeSignatureForm({
+        includeText: true,
+        fileName: 'alpha.pdf',
+      });
+      const b = sameFile
+        ? a
+        : await makeSignatureForm({ includeText: true, fileName: 'beta.pdf' });
+      const fields = (value: string) => [
+        {
+          name: 'profile.name',
+          kind: 'text' as const,
+          value,
+          changed: true,
+          readOnly: false,
+          options: [],
+          multiSelect: false,
+        },
+      ];
+      const sigA = {
+        ...visualSignature('a-page', 'a-asset', 'a-widget'),
+        target: {
+          kind: 'form-signature-field' as const,
+          sourceDocumentId: 'a',
+          sourcePageIndex: 0,
+          fieldName: 'Signature1',
+          widgetId: 'a-widget',
+        },
+      };
+      const sigB = {
+        ...visualSignature('b-page', 'b-asset', 'b-widget'),
+        box: { ...sigA.box, origin: { x: 170, y: 82 } },
+        target: { ...sigA.target, sourceDocumentId: 'b', widgetId: 'b-widget' },
+      };
+      const result = await exportWorkspace({
+        pages: [page('b-page', 'b', 0), page('a-page', 'a', 0)],
+        sources: new Map([
+          ['a', source('a', a)],
+          ['b', source('b', b)],
+        ]),
+        forms: {
+          sources: [
+            ...safeForms('a', fields('ALPHA')).sources,
+            ...safeForms('b', fields('BETA')).sources,
+          ],
+          hasChangedTextDraft: false,
+        },
+        annotationsByPage: new Map([
+          ['a-page', [sigA]],
+          ['b-page', [sigB]],
+        ]),
+        imageAssets: new Map(
+          ['a-asset', 'b-asset'].map((assetId) => [
+            assetId,
+            {
+              assetId,
+              mimeType: 'image/png' as const,
+              bytes: signaturePngBytes,
+            },
+          ]),
+        ),
+      });
+      expect(await textByPage(result)).toEqual([
+        expect.stringContaining('BETA'),
+        expect.stringContaining('ALPHA'),
+      ]);
+      expect(await widgetCount(result)).toBe(0);
+      const output = await pdfLib.PDFDocument.load(result, {
+        throwOnInvalidObject: true,
+      });
+      expect(output.getForm().getFields()).toHaveLength(0);
+      const content = output.getPages().map((p) => {
+        const streams = p.node.Contents();
+        if (!(streams instanceof pdfLib.PDFArray))
+          throw new Error('Expected content array');
+        return streams
+          .asArray()
+          .map((ref) => {
+            const stream = output.context.lookup(ref);
+            if (!(stream instanceof pdfLib.PDFRawStream))
+              throw new Error('Expected stream');
+            return new TextDecoder().decode(
+              pdfLib.decodePDFRawStream(stream).decode(),
+            );
+          })
+          .join('\n');
+      });
+      expect(content[0]).toContain('1 0 0 1 170 82 cm');
+      expect(content[1]).toContain('1 0 0 1 55 82 cm');
+    },
+  );
+
+  it('demonstrates that pdf-lib can remove a signed field without preserving its signature', async () => {
+    const file = await makeSignatureForm({ signed: true });
+    for (const operation of ['remove', 'flatten'] as const) {
+      const document = await pdfLib.PDFDocument.load(await file.arrayBuffer());
+      const form = document.getForm();
+      const field = form.getSignature('Signature1');
+      for (const widget of field.acroField.getWidgets()) {
+        widget.setNormalAppearance(
+          document.context.register(
+            document.context.formXObject([], {
+              BBox: document.context.obj([0, 0, 200, 50]),
+            }),
+          ),
+        );
+      }
+      if (operation === 'remove') form.removeField(field);
+      else form.flatten();
+      const output = await pdfLib.PDFDocument.load(await document.save(), {
+        throwOnInvalidObject: true,
+      });
+      expect(output.getForm().getFields()).toHaveLength(0);
+      // The primitive API does not protect existing digital signatures.
+    }
+  });
+
+  it.each(['missing-page', 'wrong-page', 'bad-rectangle'] as const)(
+    'rejects unsafe unsigned signature widgets: %s',
+    async (fault) => {
+      const document = await pdfLib.PDFDocument.load(
+        await (await makeSignatureForm()).arrayBuffer(),
+      );
+      const widget = document
+        .getForm()
+        .getSignature('Signature1')
+        .acroField.getWidgets()[0]!;
+      if (fault === 'missing-page')
+        document.getPage(0).node.delete(PdfName('Annots'));
+      if (fault === 'wrong-page') widget.setP(document.addPage().ref);
+      if (fault === 'bad-rectangle')
+        widget.dict.set(PdfName('Rect'), document.context.obj([0, 0, 0, 0]));
+      const file = fileFromBytes(
+        await document.save({ updateFieldAppearances: false }),
+        'unsafe.pdf',
+      );
+      await expect(
+        exportSource(file, safeForms('source', [])),
+      ).rejects.toMatchObject({ code: 'signature-field-removal-failed' });
+    },
+  );
+  it.each([{ mergedWidget: true }, { nested: true }])(
+    'strictly reloads flattened signature structure %j',
+    async (options) => {
+      const file = await makeSignatureForm(options);
+      const result = await exportSource(file, safeForms('source', []));
+      const output = await pdfLib.PDFDocument.load(result, {
+        throwOnInvalidObject: true,
+      });
+      expect(output.getForm().getFields()).toHaveLength(0);
+      expect(output.getPage(0).node.Annots()?.size() ?? 0).toBe(0);
+      expect(await widgetCount(result)).toBe(0);
+      const visited = new Set<PDFObject>();
+      const pending = output.context
+        .enumerateIndirectObjects()
+        .map(([, object]) => object);
+      while (pending.length) {
+        const object = pending.pop()!;
+        if (visited.has(object)) continue;
+        visited.add(object);
+        if (object instanceof pdfLib.PDFRef)
+          expect(output.context.lookup(object)).toBeDefined();
+        if (object instanceof pdfLib.PDFDict) pending.push(...object.values());
+        if (object instanceof pdfLib.PDFArray)
+          pending.push(...object.asArray());
+        if (object instanceof pdfLib.PDFStream) pending.push(object.dict);
+      }
+    },
+  );
+
+  it.each(['plain', 'safe-acroform'] as const)(
+    'blocks signed sources even with a %s snapshot',
+    async (capability) => {
+      const file = await makeSignatureForm({ signed: true });
+      await expect(
+        exportSource(file, {
+          sources: [{ sourceDocumentId: 'source', capability, fields: [] }],
+          hasChangedTextDraft: false,
+        }),
+      ).rejects.toMatchObject({ code: 'existing-digital-signature' });
+    },
+  );
+
+  it('records pdf-lib 1.17.1 unsigned removeField/flatten failure and copyPages orphaning', async () => {
+    const file = await makeSignatureForm();
+    const load = () =>
+      file.arrayBuffer().then((bytes) => pdfLib.PDFDocument.load(bytes));
+    const removeDoc = await load();
+    expect(() =>
+      removeDoc
+        .getForm()
+        .removeField(removeDoc.getForm().getSignature('Signature1')),
+    ).toThrow();
+    const flattenDoc = await load();
+    expect(() => flattenDoc.getForm().flatten()).toThrow();
+    const copied = await pdfLib.PDFDocument.create();
+    const [copiedPage] = await copied.copyPages(await load(), [0]);
+    copied.addPage(copiedPage);
+    const saved = await copied.save();
+    expect(
+      (await pdfLib.PDFDocument.load(saved)).getForm().getFields(),
+    ).toHaveLength(0);
+    expect(await widgetCount(saved)).toBe(1);
+  });
+  it('removes an empty unsigned signature field without leaving widgets', async () => {
+    const file = await makeSignatureForm();
+    const result = await exportSource(file, safeForms('source', []));
+    const output = await pdfLib.PDFDocument.load(result);
+    expect(output.getForm().getFields()).toHaveLength(0);
+    expect(output.getPage(0).node.Annots()?.size() ?? 0).toBe(0);
+    expect(await widgetCount(result)).toBe(0);
+  });
+
+  it('coexists with normal form flattening and a field-targeted visual signature', async () => {
+    const file = await makeSignatureForm({ includeText: true });
+    const result = await exportWorkspace({
+      pages: [page('page-1', 'source', 0)],
+      sources: new Map([['source', source('source', file)]]),
+      annotationsByPage: new Map([
+        ['page-1', [visualSignature('page-1', 'signature-asset', 'widget-a')]],
+      ]),
+      imageAssets: new Map([
+        [
+          'signature-asset',
+          {
+            assetId: 'signature-asset',
+            mimeType: 'image/png',
+            bytes: signaturePngBytes,
+          },
+        ],
+      ]),
+      forms: safeForms('source', [
+        {
+          name: 'profile.name',
+          kind: 'text',
+          value: 'Signed visually',
+          changed: true,
+          readOnly: false,
+          options: [],
+          multiSelect: false,
+        },
+      ]),
+    });
+    const output = await pdfLib.PDFDocument.load(result);
+    expect(output.getForm().getFields()).toHaveLength(0);
+    expect(output.getPage(0).node.Annots()?.size() ?? 0).toBe(0);
+    expect(await widgetCount(result)).toBe(0);
+    expect(await textByPage(result)).toEqual([
+      expect.stringContaining('Signed visually'),
+    ]);
+    expect(await imagePaintCount(result)).toBeGreaterThan(0);
+  });
+
+  it('removes every widget from a repeated unsigned signature field', async () => {
+    const file = await makeSignatureForm({ multipleWidgets: true });
+    const result = await exportSource(file, safeForms('source', []), [
+      page('first', 'source', 0),
+      page('second', 'source', 1),
+    ]);
+    const output = await pdfLib.PDFDocument.load(result);
+    expect(output.getForm().getFields()).toHaveLength(0);
+    expect(
+      output.getPages().map((entry) => entry.node.Annots()?.size() ?? 0),
+    ).toEqual([0, 0]);
+    expect(await widgetCount(result)).toBe(0);
+  });
+
+  it('blocks a signature value before modifying the export-scoped source', async () => {
+    await expect(
+      exportSource(
+        await makeSignatureForm({ signed: true }),
+        safeForms('source', []),
+      ),
+    ).rejects.toMatchObject({
+      code: 'existing-digital-signature',
+    });
+  });
+
   it('applies every editable field kind, flattens fields, and removes PDF.js widgets', async () => {
     const file = await makeCompleteForm();
     const fields = [
@@ -576,7 +992,7 @@ describe('safe AcroForm export', () => {
     const file = await makeTextForm('blocked.pdf');
     for (const capability of [
       'unsupported-xfa',
-      'unsupported-signature',
+      'unsupported-signed-pdf',
       'unsupported-password',
       'unsupported-button',
       'unsupported-field',

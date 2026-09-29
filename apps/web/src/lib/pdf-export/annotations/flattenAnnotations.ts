@@ -184,13 +184,24 @@ function drawText(
   }
 }
 
-function imageAnnotationIdByAssetId(
+interface VisualAssetUse {
+  readonly annotationId: string;
+  readonly kind: 'image' | 'signature';
+}
+
+function visualAnnotationByAssetId(
   annotations: readonly PdfAnnotation[],
-): ReadonlyMap<string, string> {
-  const result = new Map<string, string>();
+): ReadonlyMap<string, VisualAssetUse> {
+  const result = new Map<string, VisualAssetUse>();
   for (const annotation of annotations) {
-    if (annotation.kind === 'image' && !result.has(annotation.assetId)) {
-      result.set(annotation.assetId, annotation.id);
+    if (
+      (annotation.kind === 'image' || annotation.kind === 'signature') &&
+      !result.has(annotation.assetId)
+    ) {
+      result.set(annotation.assetId, {
+        annotationId: annotation.id,
+        kind: annotation.kind,
+      });
     }
   }
   return result;
@@ -201,14 +212,16 @@ export async function prepareImageResources(
   context: AnnotationExportContext,
   resolver: AnnotationImageResolver | null = context.imageResolver,
 ): Promise<void> {
-  const annotationIds = imageAnnotationIdByAssetId(annotations);
-  for (const [assetId, annotationId] of annotationIds) {
+  const annotationUses = visualAnnotationByAssetId(annotations);
+  for (const [assetId, use] of annotationUses) {
     if (context.imageCache.has(assetId)) continue;
     if (!resolver) {
       throw new AnnotationExportError(
-        'missing-image-asset',
-        'The image annotation asset is not available for export.',
-        annotationId,
+        use.kind === 'signature'
+          ? 'missing-signature-asset'
+          : 'missing-image-asset',
+        `The ${use.kind === 'signature' ? 'visual signature' : 'image annotation'} asset is not available for export.`,
+        use.annotationId,
         assetId,
       );
     }
@@ -220,15 +233,17 @@ export async function prepareImageResources(
       throw new AnnotationExportError(
         'image-read-failed',
         'Kagaz could not read the image annotation asset for export.',
-        annotationId,
+        use.annotationId,
         assetId,
       );
     }
     if (!source) {
       throw new AnnotationExportError(
-        'missing-image-asset',
-        'The image annotation asset is not available for export.',
-        annotationId,
+        use.kind === 'signature'
+          ? 'missing-signature-asset'
+          : 'missing-image-asset',
+        `The ${use.kind === 'signature' ? 'visual signature' : 'image annotation'} asset is not available for export.`,
+        use.annotationId,
         assetId,
       );
     }
@@ -236,7 +251,7 @@ export async function prepareImageResources(
       throw new AnnotationExportError(
         'image-read-failed',
         'The resolved image annotation asset did not match its requested ID.',
-        annotationId,
+        use.annotationId,
         assetId,
       );
     }
@@ -244,7 +259,7 @@ export async function prepareImageResources(
       throw new AnnotationExportError(
         'unsupported-image-format',
         'Only PNG and JPEG image annotation assets can be exported.',
-        annotationId,
+        use.annotationId,
         assetId,
       );
     }
@@ -259,7 +274,7 @@ export async function prepareImageResources(
       throw new AnnotationExportError(
         'image-embed-failed',
         'The image annotation asset could not be embedded into the PDF.',
-        annotationId,
+        use.annotationId,
         assetId,
       );
     }
@@ -314,12 +329,15 @@ export function drawAnnotationsOnPage(
         drawText(page, annotation, context);
         break;
       case 'image':
+      case 'signature':
         {
           const image = context.imageCache.get(annotation.assetId);
           if (!image) {
             throw new AnnotationExportError(
-              'missing-image-asset',
-              'The image annotation asset was not prepared for export.',
+              annotation.kind === 'signature'
+                ? 'missing-signature-asset'
+                : 'missing-image-asset',
+              `The ${annotation.kind === 'signature' ? 'visual signature' : 'image annotation'} asset was not prepared for export.`,
               annotation.id,
               annotation.assetId,
             );
@@ -334,13 +352,6 @@ export function drawAnnotationsOnPage(
           });
         }
         break;
-      case 'signature':
-        throw new AnnotationExportError(
-          'unsupported-signature',
-          'Visual signatures cannot be included in PDF export yet.',
-          annotation.id,
-          annotation.assetId,
-        );
     }
   }
 }

@@ -56,10 +56,10 @@ export function friendlyExportError(error: unknown): string {
     switch (error.code) {
       case 'unsupported-text-font':
         return 'This text contains characters unsupported by the PDF export font.';
-      case 'unsupported-signature':
-        return 'Visual signatures cannot be included in PDF export yet. Remove the signature or keep this workspace in the browser.';
       case 'missing-image-asset':
         return 'An image annotation is no longer available for export.';
+      case 'missing-signature-asset':
+        return 'A visual signature is no longer available for export.';
       case 'image-read-failed':
         return 'Kagaz could not read an image annotation for export.';
       case 'unsupported-image-format':

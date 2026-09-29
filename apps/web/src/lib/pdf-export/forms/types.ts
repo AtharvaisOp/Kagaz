@@ -4,7 +4,7 @@ export type FormExportCapability =
   | 'plain'
   | 'safe-acroform'
   | 'unsupported-xfa'
-  | 'unsupported-signature'
+  | 'unsupported-signed-pdf'
   | 'unsupported-password'
   | 'unsupported-button'
   | 'unsupported-field'
@@ -51,6 +51,8 @@ export type FormExportErrorCode =
   | 'invalid-choice'
   | 'invalid-value'
   | 'unsupported-text-font'
+  | 'existing-digital-signature'
+  | 'signature-field-removal-failed'
   | 'appearance-update-failed'
   | 'form-flatten-failed';
 

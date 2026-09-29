@@ -65,6 +65,7 @@ interface PdfPageProps {
   readonly onCancelText: PdfAnnotationController['cancelTextEdit'];
   readonly onPlaceImage: PdfAnnotationController['placePendingImage'];
   readonly onPlaceSignature: PdfAnnotationController['placePendingSignature'];
+  readonly onPlaceSignatureField: PdfAnnotationController['openSignatureCreatorForField'];
   readonly formFields: readonly FormFieldDefinition[];
   readonly formWidgets: readonly FormWidgetDefinition[];
   readonly formController: PdfFormsController;
@@ -112,6 +113,7 @@ export function PdfPage({
   onCancelText,
   onPlaceImage,
   onPlaceSignature,
+  onPlaceSignatureField,
   formFields,
   formWidgets,
   formController,
@@ -264,6 +266,18 @@ export function PdfPage({
     status === 'ready' &&
     renderedViewport.requestSignature === viewportRequestSignature &&
     renderedViewport.document === document;
+  const targetedSignatureWidgetIds = new Set(
+    annotations.flatMap((annotation) =>
+      annotation.kind === 'signature' &&
+      annotation.target?.kind === 'form-signature-field'
+        ? [annotation.target.widgetId]
+        : [],
+    ),
+  );
+  const signatureSource = formController.sources.get(page.sourceDocumentId);
+  const signaturePlacementEnabled =
+    signatureSource?.status === 'acroform' &&
+    !signatureSource.hasDigitalSignature;
 
   return (
     <article
@@ -321,6 +335,23 @@ export function PdfPage({
               onSetCheckbox={formController.setCheckbox}
               onSelectRadio={formController.selectRadio}
               onSelectChoice={formController.selectChoice}
+              onPlaceVisualSignature={
+                signaturePlacementEnabled
+                  ? (field, widget) =>
+                      onPlaceSignatureField(
+                        page.id,
+                        {
+                          kind: 'form-signature-field',
+                          sourceDocumentId: page.sourceDocumentId,
+                          sourcePageIndex: page.sourcePageIndex,
+                          fieldName: field.name,
+                          widgetId: widget.id,
+                        },
+                        widget.geometry,
+                      )
+                  : undefined
+              }
+              targetedSignatureWidgetIds={targetedSignatureWidgetIds}
               annotationTool={activeTool}
             />
           ) : null

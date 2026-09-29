@@ -19,8 +19,8 @@ function unsupportedSourceMessage(capability: FormExportCapability): string {
   switch (capability) {
     case 'unsupported-xfa':
       return 'This PDF uses XFA forms, which Kagaz cannot support yet.';
-    case 'unsupported-signature':
-      return 'This PDF contains a signature field. Signature-field export support is still being added.';
+    case 'unsupported-signed-pdf':
+      return 'This PDF already contains a digital signature. Kagaz does not modify digitally signed PDFs because changes can invalidate that signature.';
     case 'unsupported-password':
       return 'This PDF contains a password field, so Kagaz cannot safely flatten it for export yet.';
     case 'unsupported-button':
@@ -68,30 +68,19 @@ export async function exportWorkspace(
       'Finish or cancel the active form text edit before exporting.',
     );
   }
-  for (const annotations of request.annotationsByPage.values()) {
-    const signature = annotations.find(
-      (annotation) => annotation.kind === 'signature',
-    );
-    if (signature?.kind === 'signature') {
-      throw new AnnotationExportError(
-        'unsupported-signature',
-        'Visual signatures cannot be included in PDF export yet.',
-        signature.id,
-        signature.assetId,
-      );
-    }
-  }
   options.onProgress?.({
     phase: 'preparing',
     current: 0,
     total: uniqueSourceIds.length,
   });
 
-  const [pdfLib, flattening, formPreparation] = await Promise.all([
-    import('pdf-lib'),
-    import('./annotations/flattenAnnotations'),
-    import('./forms/prepareFormSource'),
-  ]);
+  const [pdfLib, flattening, formPreparation, signatureSafety] =
+    await Promise.all([
+      import('pdf-lib'),
+      import('./annotations/flattenAnnotations'),
+      import('./forms/prepareFormSource'),
+      import('../pdf-signatures/signatureSafety'),
+    ]);
   const { PDFDocument, degrees } = pdfLib;
 
   try {
@@ -145,7 +134,9 @@ export async function exportWorkspace(
 
       let sourceDocument: PDFDocument;
       try {
-        sourceDocument = await PDFDocument.load(bytes);
+        sourceDocument = await PDFDocument.load(bytes, {
+          throwOnInvalidObject: true,
+        });
       } catch {
         throw new PdfExportError(
           'source-pdf-invalid',
@@ -154,7 +145,31 @@ export async function exportWorkspace(
         );
       }
 
-      if (formSnapshot.capability === 'safe-acroform') {
+      try {
+        signatureSafety.assertNoDigitalSignature(sourceDocument);
+      } catch (error) {
+        throw new FormExportError(
+          'existing-digital-signature',
+          error instanceof signatureSafety.SignedPdfError
+            ? error.message
+            : 'Kagaz could not safely inspect this PDF for existing digital signatures.',
+          source.fileName,
+        );
+      }
+      try {
+        signatureSafety.assertUnsignedSignatureStructure(sourceDocument);
+      } catch {
+        throw new FormExportError(
+          'signature-field-removal-failed',
+          'This PDF has an unsigned signature field whose widget structure Kagaz cannot safely export.',
+          source.fileName,
+        );
+      }
+      // Verify the real form inventory even if discovery reported no widgets.
+      if (
+        formSnapshot.capability === 'safe-acroform' ||
+        sourceDocument.catalog.getAcroForm()
+      ) {
         await formPreparation.prepareFormSource(
           sourceDocument,
           formSnapshot,

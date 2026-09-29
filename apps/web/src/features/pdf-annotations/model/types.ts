@@ -1,5 +1,6 @@
 import type {
   PageRotation,
+  SourceDocumentId,
   WorkspacePageId,
 } from '../../pdf-workspace/model/types';
 
@@ -98,11 +99,21 @@ export interface ImageAnnotation extends AnnotationBase<'image'> {
 
 export type SignatureMethod = 'draw' | 'type' | 'upload';
 
+export interface FormSignatureFieldTarget {
+  readonly kind: 'form-signature-field';
+  readonly sourceDocumentId: SourceDocumentId;
+  readonly sourcePageIndex: number;
+  readonly fieldName: string;
+  readonly widgetId: string;
+}
+
 export interface SignatureAnnotation extends AnnotationBase<'signature'> {
   readonly box: PdfOrientedBox;
   readonly assetId: AnnotationAssetId;
   readonly method: SignatureMethod;
   readonly opacity: number;
+  /** Present only when the visual mark was placed through a PDF field widget. */
+  readonly target?: FormSignatureFieldTarget;
 }
 
 export type PdfAnnotation =

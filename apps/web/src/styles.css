@@ -1146,7 +1146,9 @@ input:focus-visible + * {
 }
 
 .form-widget-control,
-.form-widget-placeholder {
+.form-widget-placeholder,
+.form-widget-signature-button,
+.form-widget-signature-state {
   box-sizing: border-box;
   width: 100%;
   height: 100%;
@@ -1222,6 +1224,59 @@ input:focus-visible + * {
   letter-spacing: 0.02em;
   text-align: center;
   white-space: normal;
+}
+
+.form-widget-signature-button {
+  display: grid;
+  place-items: center;
+  min-width: 44px;
+  min-height: 32px;
+  padding: 4px 7px;
+  border: 1px solid rgb(249 115 22 / 72%);
+  color: #ffffff;
+  background: rgb(124 45 18 / 88%);
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 8px;
+  font-weight: 600;
+  line-height: 1.25;
+  text-align: center;
+  white-space: normal;
+  cursor: pointer;
+  transition:
+    border-color 140ms ease,
+    background 140ms ease,
+    box-shadow 140ms ease;
+}
+
+.form-widget-signature-button:hover:not(:disabled) {
+  border-color: #fb923c;
+  background: rgb(154 52 18 / 94%);
+}
+
+.form-widget-signature-button:focus-visible {
+  position: relative;
+  z-index: 1;
+  outline: 2px solid #06b6d4;
+  outline-offset: 1px;
+  box-shadow: 0 0 0 3px rgb(6 182 212 / 18%);
+}
+
+.form-widget-signature-button:disabled {
+  color: #71717a;
+  border-color: #52525b;
+  background: rgb(39 39 42 / 72%);
+}
+
+.form-widget-signature-state {
+  display: grid;
+  place-items: end center;
+  padding: 3px;
+  color: #164e63;
+  background: transparent;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 7px;
+  text-align: center;
+  pointer-events: none;
 }
 
 .form-status-notices {

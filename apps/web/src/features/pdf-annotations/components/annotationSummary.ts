@@ -36,7 +36,7 @@ export function annotationSummaryLabel(
     case 'image':
       return fileName ? `Image: ${fileName}` : 'Image';
     case 'signature':
-      return `${annotation.method === 'draw' ? 'Drawn' : annotation.method === 'type' ? 'Typed' : 'Uploaded'} signature`;
+      return `${annotation.method === 'draw' ? 'Drawn' : annotation.method === 'type' ? 'Typed' : 'Uploaded'} signature${annotation.target?.kind === 'form-signature-field' ? ' in signature field' : ''}`;
     case 'highlight':
       return 'Highlight';
     case 'rectangle':

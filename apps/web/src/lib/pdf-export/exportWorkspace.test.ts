@@ -2,11 +2,22 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { parsePageRange } from '../../features/pdf-workspace/model/rangeParser';
 import { exportWorkspace } from './exportWorkspace';
+import { snapshotAnnotationsForPages } from '../../features/pdf-workspace/hooks/usePdfExport';
+import { annotationReducer } from '../../features/pdf-annotations/model/reducer';
+import { createAnnotationHistoryState } from '../../features/pdf-annotations/model/history';
 import type { ExportSource } from './types';
 import type { PdfAnnotation } from '../../features/pdf-annotations/model/types';
 import type { FormExportSnapshot } from './forms/types';
 
 const pdfLib = await import('pdf-lib');
+const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
+
+const pngBytes = Uint8Array.from(
+  atob(
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
+  ),
+  (character) => character.charCodeAt(0),
+);
 
 async function makePdf(
   fileName: string,
@@ -49,7 +60,198 @@ function plainForms(
   };
 }
 
+function signature(workspacePageId: string, assetId = 'signature-asset') {
+  return {
+    id: `signature-${workspacePageId}`,
+    workspacePageId,
+    kind: 'signature' as const,
+    box: {
+      origin: { x: 30, y: 40 },
+      width: 100,
+      height: 40,
+      rotation: 0 as const,
+    },
+    assetId,
+    method: 'draw' as const,
+    opacity: 1,
+  };
+}
+
+async function imagePaintCounts(bytes: Uint8Array): Promise<readonly number[]> {
+  const task = pdfjs.getDocument({ data: bytes.slice() });
+  const document = await task.promise;
+  try {
+    const counts: number[] = [];
+    for (let pageNumber = 1; pageNumber <= document.numPages; pageNumber += 1) {
+      const pdfPage = await document.getPage(pageNumber);
+      const operators = await pdfPage.getOperatorList();
+      counts.push(
+        operators.fnArray.filter(
+          (operator) =>
+            operator === pdfjs.OPS.paintImageXObject ||
+            operator === pdfjs.OPS.paintInlineImageXObject,
+        ).length,
+      );
+      pdfPage.cleanup();
+    }
+    return counts;
+  } finally {
+    await task.destroy();
+  }
+}
+
 describe('exportWorkspace', () => {
+  it('fails safely when a captured signature asset is missing', async () => {
+    const file = await makePdf('missing.pdf', [{ width: 300, height: 200 }]);
+    await expect(
+      exportWorkspace({
+        pages: [page('p', 'source', 0)],
+        sources: new Map([['source', source('source', file)]]),
+        forms: plainForms('source'),
+        annotationsByPage: new Map([['p', [signature('p')]]]),
+        imageAssets: new Map(),
+      }),
+    ).rejects.toMatchObject({ code: 'missing-signature-asset' });
+  });
+  it('exports click-time signatures after editor move/delete, and follows Undo/Redo without changing history', async () => {
+    const file = await makePdf('snapshot.pdf', [{ width: 300, height: 200 }]);
+    const pages = [page('p', 'source', 0)];
+    let state = annotationReducer(createAnnotationHistoryState(), {
+      type: 'ADD_ANNOTATION',
+      annotation: signature('p'),
+    });
+    const captured = snapshotAnnotationsForPages(pages, state);
+    const build = (snapshot: ReturnType<typeof snapshotAnnotationsForPages>) =>
+      exportWorkspace({
+        pages,
+        sources: new Map([['source', source('source', file)]]),
+        forms: plainForms('source'),
+        annotationsByPage: snapshot.annotationsByPage,
+        imageAssets: new Map([
+          [
+            'signature-asset',
+            {
+              assetId: 'signature-asset',
+              mimeType: 'image/png',
+              bytes: pngBytes,
+            },
+          ],
+        ]),
+      });
+    state = annotationReducer(state, {
+      type: 'REPLACE_ANNOTATION',
+      annotation: {
+        ...signature('p'),
+        box: { ...signature('p').box, origin: { x: 150, y: 100 } },
+      },
+    });
+    state = annotationReducer(state, {
+      type: 'DELETE_ANNOTATION',
+      pageId: 'p',
+      annotationId: 'signature-p',
+    });
+    const stateBefore = structuredClone(state);
+    expect((await imagePaintCounts(await build(captured)))[0]).toBeGreaterThan(
+      0,
+    );
+    expect(captured.annotationsByPage.get('p')).toEqual([signature('p')]);
+    expect(
+      await imagePaintCounts(
+        await build(snapshotAnnotationsForPages(pages, state)),
+      ),
+    ).toEqual([0]);
+    expect(state).toEqual(stateBefore);
+    state = annotationReducer(state, { type: 'UNDO' }); // restore moved signature
+    expect(
+      (
+        await imagePaintCounts(
+          await build(snapshotAnnotationsForPages(pages, state)),
+        )
+      )[0],
+    ).toBeGreaterThan(0);
+    state = annotationReducer(state, { type: 'UNDO' }); // undo move
+    state = annotationReducer(state, { type: 'UNDO' }); // undo creation
+    expect(
+      await imagePaintCounts(
+        await build(snapshotAnnotationsForPages(pages, state)),
+      ),
+    ).toEqual([0]);
+    state = annotationReducer(state, { type: 'REDO' });
+    expect(
+      (
+        await imagePaintCounts(
+          await build(snapshotAnnotationsForPages(pages, state)),
+        )
+      )[0],
+    ).toBeGreaterThan(0);
+  });
+
+  it.each([0, 90, 180, 270] as const)(
+    'keeps raw signature geometry on a page rotated %s degrees',
+    async (rotation) => {
+      const file = await makePdf('rotation.pdf', [
+        { width: 300, height: 200, rotation },
+      ]);
+      const result = await exportWorkspace({
+        pages: [page('p', 'source', 0)],
+        sources: new Map([['source', source('source', file)]]),
+        forms: plainForms('source'),
+        annotationsByPage: new Map([['p', [signature('p')]]]),
+        imageAssets: new Map([
+          [
+            'signature-asset',
+            {
+              assetId: 'signature-asset',
+              mimeType: 'image/png',
+              bytes: pngBytes,
+            },
+          ],
+        ]),
+      });
+      const output = await pdfLib.PDFDocument.load(result, {
+        throwOnInvalidObject: true,
+      });
+      expect(output.getPage(0).getRotation().angle).toBe(rotation);
+      const contents = output.getPage(0).node.Contents();
+      if (!(contents instanceof pdfLib.PDFArray))
+        throw new Error('Expected content array');
+      const stream = output.context.lookup(contents.get(0));
+      if (!(stream instanceof pdfLib.PDFRawStream))
+        throw new Error('Expected content stream');
+      const operators = new TextDecoder().decode(
+        pdfLib.decodePDFRawStream(stream).decode(),
+      );
+      expect(operators).toContain('1 0 0 1 30 40 cm');
+      expect(operators).toContain('100 0 0 40 0 0 cm');
+    },
+  );
+  it('flattens a freeform visual signature without creating a PDF form field', async () => {
+    const sourceFile = await makePdf('visual-signature.pdf', [
+      { width: 200, height: 200 },
+    ]);
+    const result = await exportWorkspace({
+      pages: [page('signed-page', 'source', 0)],
+      forms: plainForms('source'),
+      sources: new Map([['source', source('source', sourceFile)]]),
+      annotationsByPage: new Map([['signed-page', [signature('signed-page')]]]),
+      imageAssets: new Map([
+        [
+          'signature-asset',
+          {
+            assetId: 'signature-asset',
+            mimeType: 'image/png',
+            bytes: pngBytes,
+          },
+        ],
+      ]),
+    });
+    const output = await pdfLib.PDFDocument.load(result);
+    expect(output.getForm().getFields()).toHaveLength(0);
+    expect(output.getPage(0).node.Annots()?.size() ?? 0).toBe(0);
+    expect(await imagePaintCounts(result)).toEqual([expect.any(Number)]);
+    expect((await imagePaintCounts(result))[0]).toBeGreaterThan(0);
+  });
+
   it('flattens page-local vector, text, and image snapshots in request order', async () => {
     const sourceFile = await makePdf('annotated.pdf', [
       { width: 200, height: 200 },
@@ -301,6 +503,39 @@ describe('exportWorkspace', () => {
     expect(output.getPages().map((item) => item.getWidth())).toEqual([
       203, 201, 202,
     ]);
+  });
+
+  it('extracts only selected visual signatures in requested page order', async () => {
+    const file = await makePdf('signature-extract.pdf', [
+      { width: 201, height: 202 },
+      { width: 202, height: 203 },
+      { width: 203, height: 204 },
+    ]);
+    const result = await exportWorkspace({
+      pages: [page('p3', 'source', 2), page('p1', 'source', 0)],
+      forms: plainForms('source'),
+      sources: new Map([['source', source('source', file)]]),
+      annotationsByPage: new Map([
+        ['p3', [signature('p3')]],
+        ['unselected-p2', [signature('unselected-p2', 'unselected-asset')]],
+      ]),
+      imageAssets: new Map([
+        [
+          'signature-asset',
+          {
+            assetId: 'signature-asset',
+            mimeType: 'image/png',
+            bytes: pngBytes,
+          },
+        ],
+      ]),
+    });
+    const output = await pdfLib.PDFDocument.load(result);
+    expect(output.getPages().map((item) => item.getWidth())).toEqual([
+      203, 201,
+    ]);
+    expect(await imagePaintCounts(result)).toEqual([expect.any(Number), 0]);
+    expect((await imagePaintCounts(result))[0]).toBeGreaterThan(0);
   });
 
   it('fails safely when a required source is missing', async () => {

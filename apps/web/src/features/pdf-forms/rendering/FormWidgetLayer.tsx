@@ -33,6 +33,11 @@ interface FormWidgetLayerProps {
   readonly onSetCheckbox?: (fieldId: string, checked: boolean) => void;
   readonly onSelectRadio?: (fieldId: string, value: string | null) => void;
   readonly onSelectChoice?: (fieldId: string, value: FormValue) => void;
+  readonly onPlaceVisualSignature?: (
+    field: FormFieldDefinition,
+    widget: FormWidgetDefinition,
+  ) => void;
+  readonly targetedSignatureWidgetIds?: ReadonlySet<string>;
   readonly annotationTool?: string;
 }
 
@@ -144,6 +149,11 @@ function fieldControl(
   session: FormTextEditSession | null,
   handlers: Handlers,
   interactionEnabled: boolean,
+  signaturePlaced: boolean,
+  onPlaceVisualSignature?: (
+    field: FormFieldDefinition,
+    widget: FormWidgetDefinition,
+  ) => void,
 ) {
   const isEditable = editable(field) && interactionEnabled;
   const textValue =
@@ -264,12 +274,44 @@ function fieldControl(
       </select>
     );
   }
+  if (field.kind === 'signature') {
+    if (signaturePlaced) {
+      return (
+        <div
+          {...common}
+          className="form-widget-signature-state"
+          aria-label={`${label} · visual signature placed`}
+        >
+          <span aria-hidden="true">Visual signature placed</span>
+        </div>
+      );
+    }
+    const enabled =
+      interactionEnabled && !field.readOnly && Boolean(onPlaceVisualSignature);
+    return (
+      <button
+        type="button"
+        className="form-widget-signature-button"
+        aria-label={`Place visual signature in ${label}`}
+        data-form-field-id={field.id}
+        data-form-widget-id={widget.id}
+        disabled={!enabled}
+        tabIndex={enabled ? 0 : -1}
+        title={
+          enabled
+            ? `Place visual signature in ${label}`
+            : `${label} · visual signature placement unavailable`
+        }
+        onClick={() => onPlaceVisualSignature?.(field, widget)}
+      >
+        Place visual signature
+      </button>
+    );
+  }
   const description =
-    field.kind === 'signature'
-      ? 'Signature field · viewing only'
-      : field.kind === 'button'
-        ? 'Button field · viewing only'
-        : 'Unsupported field · viewing only';
+    field.kind === 'button'
+      ? 'Button field · viewing only'
+      : 'Unsupported field · viewing only';
   return (
     <div
       {...common}
@@ -294,6 +336,8 @@ export function FormWidgetLayer({
   onSetCheckbox = () => undefined,
   onSelectRadio = () => undefined,
   onSelectChoice = () => undefined,
+  onPlaceVisualSignature,
+  targetedSignatureWidgetIds = new Set(),
   annotationTool = 'select',
 }: FormWidgetLayerProps) {
   const fieldsById = new Map(fields.map((field) => [field.id, field]));
@@ -311,7 +355,16 @@ export function FormWidgetLayer({
           coordinateViewport,
         );
         const label = getFormFieldLabel(field, widget);
-        const isEditable = editable(field) && formEditingPriority;
+        const signaturePlaced =
+          field.kind === 'signature' &&
+          targetedSignatureWidgetIds.has(widget.id);
+        const isSignatureAction =
+          field.kind === 'signature' &&
+          !field.readOnly &&
+          !signaturePlaced &&
+          Boolean(onPlaceVisualSignature);
+        const isEditable =
+          (editable(field) || isSignatureAction) && formEditingPriority;
         return (
           <div
             key={widget.id}
@@ -336,6 +389,8 @@ export function FormWidgetLayer({
                 onSelectChoice,
               },
               formEditingPriority,
+              signaturePlaced,
+              onPlaceVisualSignature,
             )}
           </div>
         );

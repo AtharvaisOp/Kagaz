@@ -50,10 +50,33 @@ silently replaced.
   duplicate PDF source instances
 - Download or Extract supported form pages as flattened, non-interactive PDF
   content alongside Kagaz annotations
-- Keep XFA, signature fields, password fields, push buttons, and unknown form
+- Keep XFA, password fields, push buttons, and unknown form
   structures blocked from export with source-specific guidance
 - Reject form appearance text that Standard Helvetica cannot encode instead
   of corrupting the exported PDF
+
+## Phase 3F visual signatures
+
+- Draw, type, or choose a PNG/JPEG signature locally, then place, move, resize,
+  delete, or undo/redo it like other visual annotations
+- Download and Extract flatten visual signatures in annotation order, preserving
+  PNG transparency, canonical PDF geometry, and page rotation
+- Safe unsigned AcroForm signature widgets offer **Place visual signature**;
+  the existing creator centers the mark inside that widget without stretching it
+- Export snapshots all required image and signature Blobs before any asynchronous
+  reads, so later editor changes and resource cleanup cannot change the output
+- Sources containing digital-signature values or byte-range structures are
+  rejected before entering the editable workspace and checked again at export
+
+These marks are **visual electronic signatures**, not cryptographic PDF digital
+signatures. Kagaz does not sign with certificates, verify certificates or signers,
+or retain a signature library. Pending unplaced signatures still block export.
+Unsigned fields are removed during flattening, including unfilled ones; the
+exported PDF contains page content, not interactive signature widgets.
+
+See [Phase 3F engineering and verification notes](docs/phase-3f.md) for the
+pdf-lib investigation, supported structures, inherited-change review, and
+repeatable browser artifact checks.
 
 ## Privacy-first architecture
 
@@ -83,7 +106,11 @@ reducers store serializable logical edits. The source registry owns browser
 `File` objects and PDF.js runtime resources, while the annotation asset
 registry owns decoded PNG/JPEG runtime assets and their object URLs. The export
 layer snapshots the required source files and annotation assets by stable IDs,
-then lazy-loads pdf-lib only when creating output bytes in the browser.
+then lazy-loads pdf-lib in the browser. Phase 3F also loads that separate chunk
+on first PDF selection to inspect parsed signature structures before editing;
+PDF.js intentionally omits raw signature values from widget metadata. This adds
+a temporary parse of the source for safety, without putting pdf-lib in the
+initial application bundle or uploading any bytes.
 
 ## Technology
 
@@ -177,8 +204,11 @@ that genuinely need native tooling.
 - Password-protected PDFs cannot be opened; password entry is not available.
 - There is no persistence or cloud collaboration yet.
 - Exported AcroForms are flattened and cannot be edited as forms afterward.
-- XFA and signature-field export are unsupported; cryptographic signing is not
-  implemented.
+- XFA is unsupported. Unsigned signature fields are supported only with
+  unambiguous page/widget ownership and valid geometry; unsafe structures fail
+  closed. Existing digital-signature structures block import and export.
+- Visual signatures are not cryptographic digital signatures. Certificate
+  signing, verification, and signature persistence are not implemented.
 - Password fields and push-button or PDF JavaScript behavior are not exported.
 - OCR, compression, and conversion are not implemented.
 - Canvas annotations are projected visually; the current-page semantic list is

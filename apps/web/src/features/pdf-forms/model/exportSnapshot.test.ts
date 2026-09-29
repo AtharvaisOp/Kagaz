@@ -40,6 +40,7 @@ function sourceWith(
   return {
     sourceDocumentId: 'source-a',
     status: 'acroform',
+    hasDigitalSignature: false,
     fields,
     widgets: [],
     error: null,

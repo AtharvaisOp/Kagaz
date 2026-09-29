@@ -69,6 +69,26 @@ function imageAnnotation(
   });
 }
 
+function signatureAnnotation(
+  id: string,
+  assetId: string,
+  method: 'draw' | 'type' | 'upload' = 'draw',
+  rotation: 0 | 90 | 180 | 270 = 0,
+): PdfAnnotation {
+  return annotation('signature', {
+    id,
+    assetId,
+    method,
+    box: {
+      origin: { x: 45, y: 55 },
+      width: 120,
+      height: 48,
+      rotation,
+    },
+    opacity: 1,
+  });
+}
+
 async function pageWithContext() {
   const document = await PDFDocument.create();
   const page = document.addPage([400, 300]);
@@ -319,7 +339,7 @@ describe('annotation PDF flattening', () => {
     },
   );
 
-  it('rejects unsupported Unicode and image annotations explicitly', async () => {
+  it('rejects unsupported Unicode and missing visual assets explicitly', async () => {
     const { page, context } = await pageWithContext();
     expect(() =>
       drawAnnotationsOnPage(
@@ -349,18 +369,92 @@ describe('annotation PDF flattening', () => {
     expect(() =>
       drawAnnotationsOnPage(
         page,
-        [
-          annotation('signature', {
-            box,
-            assetId: 'asset-signature',
-            method: 'draw',
-            opacity: 1,
-          }),
-        ],
+        [signatureAnnotation('signature-1', 'asset-signature')],
         context,
       ),
-    ).toThrowError(expect.objectContaining({ code: 'unsupported-signature' }));
+    ).toThrowError(
+      expect.objectContaining({ code: 'missing-signature-asset' }),
+    );
   });
+
+  it.each([
+    ['draw', 'image/png', pngBytes],
+    ['type', 'image/png', pngBytes],
+    ['upload', 'image/png', pngBytes],
+    ['upload', 'image/jpeg', jpegBytes],
+  ] as const)(
+    'exports %s visual signatures from %s bytes',
+    async (method, mimeType, bytes) => {
+      const document = await PDFDocument.create();
+      const page = document.addPage([300, 200]);
+      const drawImage = vi.spyOn(page, 'drawImage');
+      await flattenAnnotationsOntoCopiedPage(
+        page,
+        [signatureAnnotation('signature-1', 'signature-asset', method)],
+        document,
+        undefined,
+        createAnnotationImageResolver(
+          new Map([
+            [
+              'signature-asset',
+              { assetId: 'signature-asset', mimeType, bytes },
+            ],
+          ]),
+        ),
+      );
+      expect(drawImage).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({
+          x: 45,
+          y: 55,
+          width: 120,
+          height: 48,
+          opacity: 1,
+        }),
+      );
+      await expect(
+        PDFDocument.load(await document.save()),
+      ).resolves.toBeDefined();
+    },
+  );
+
+  it.each([0, 90, 180, 270] as const)(
+    'exports visual-signature geometry once at rotation %s',
+    async (rotation) => {
+      const document = await PDFDocument.create();
+      const page = document.addPage([300, 200]);
+      const drawImage = vi.spyOn(page, 'drawImage');
+      await flattenAnnotationsOntoCopiedPage(
+        page,
+        [
+          signatureAnnotation(
+            'signature-1',
+            'signature-asset',
+            'draw',
+            rotation,
+          ),
+        ],
+        document,
+        undefined,
+        createAnnotationImageResolver(
+          new Map([
+            [
+              'signature-asset',
+              {
+                assetId: 'signature-asset',
+                mimeType: 'image/png',
+                bytes: pngBytes,
+              },
+            ],
+          ]),
+        ),
+      );
+      expect(drawImage).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({ rotate: degrees(rotation) }),
+      );
+    },
+  );
 
   it('embeds PNG bytes, preserves image opacity/rotation, and reopens the PDF', async () => {
     const document = await PDFDocument.create();
@@ -460,6 +554,8 @@ describe('annotation PDF flattening', () => {
       [
         imageAnnotation('image-1', 'png-1'),
         imageAnnotation('image-2', 'jpg-1'),
+        signatureAnnotation('signature-1', 'png-1'),
+        signatureAnnotation('signature-2', 'jpg-1', 'upload'),
       ],
       document,
       context,
@@ -540,6 +636,61 @@ describe('annotation PDF flattening', () => {
     );
     expect(order).toEqual(['rectangle', 'image', 'text']);
   });
+
+  it.each([false, true])(
+    'keeps Rectangle / Signature / Text overlap order (reverse=%s)',
+    async (reverse) => {
+      const document = await PDFDocument.create();
+      const page = document.addPage([300, 200]);
+      const order: string[] = [];
+      vi.spyOn(page, 'drawRectangle').mockImplementation(() =>
+        order.push('rectangle'),
+      );
+      vi.spyOn(page, 'drawImage').mockImplementation(() =>
+        order.push('signature'),
+      );
+      vi.spyOn(page, 'drawText').mockImplementation(() => order.push('text'));
+      const signature = signatureAnnotation('signature-1', 'signature-asset');
+      const rectangle = annotation('rectangle', { box, fill, stroke });
+      const context = await createAnnotationExportContext(
+        document,
+        createAnnotationImageResolver(
+          new Map([
+            [
+              'signature-asset',
+              {
+                assetId: 'signature-asset',
+                mimeType: 'image/png',
+                bytes: pngBytes,
+              },
+            ],
+          ]),
+        ),
+      );
+      await prepareImageResources([signature], context);
+      const text = annotation('text', {
+        box,
+        text: 'top',
+        fontFamily: 'helvetica',
+        fontSizeUserUnits: 12,
+        lineHeight: 1,
+        align: 'left',
+        color,
+        opacity: 1,
+      });
+      const annotations = [rectangle, signature, text];
+      drawAnnotationsOnPage(
+        page,
+        reverse ? annotations.reverse() : annotations,
+        context,
+      );
+      expect(order).toEqual(
+        reverse
+          ? ['text', 'signature', 'rectangle']
+          : ['rectangle', 'signature', 'text'],
+      );
+    },
+  );
 
   it('fails explicitly for missing, unsupported, and corrupt assets', async () => {
     const missing = await pageWithContext();

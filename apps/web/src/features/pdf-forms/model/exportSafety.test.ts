@@ -4,7 +4,7 @@ import {
   ACTIVE_FORM_DRAFT_EXPORT_BLOCK_MESSAGE,
   BUTTON_EXPORT_BLOCK_MESSAGE,
   PASSWORD_EXPORT_BLOCK_MESSAGE,
-  SIGNATURE_EXPORT_BLOCK_MESSAGE,
+  SIGNED_PDF_EXPORT_BLOCK_MESSAGE,
   UNSUPPORTED_FIELD_EXPORT_BLOCK_MESSAGE,
   XFA_EXPORT_BLOCK_MESSAGE,
   getFormExportCapability,
@@ -31,9 +31,11 @@ const source = (
   sourceDocumentId: string,
   status: FormSourceDefinition['status'],
   fields: readonly FormFieldDefinition[] = [],
+  hasDigitalSignature = false,
 ): FormSourceDefinition => ({
   sourceDocumentId,
   status,
+  hasDigitalSignature,
   fields,
   widgets: [],
   error: null,
@@ -77,8 +79,21 @@ describe('form export safety', () => {
     ).toBe(XFA_EXPORT_BLOCK_MESSAGE);
   });
 
+  it('allows unsigned signature fields and blocks an existing digital signature', () => {
+    const unsigned = source('form', 'acroform', [field('signature')]);
+    expect(getFormExportCapability(unsigned)).toBe('safe-acroform');
+    expect(
+      getFormExportBlockReason([page('form')], new Map([['form', unsigned]])),
+    ).toBeNull();
+
+    const signed = source('form', 'acroform', [field('signature')], true);
+    expect(getFormExportCapability(signed)).toBe('unsupported-signed-pdf');
+    expect(
+      getFormExportBlockReason([page('form')], new Map([['form', signed]])),
+    ).toBe(SIGNED_PDF_EXPORT_BLOCK_MESSAGE);
+  });
+
   it.each([
-    ['signature', 'unsupported-signature', SIGNATURE_EXPORT_BLOCK_MESSAGE],
     ['password', 'unsupported-password', PASSWORD_EXPORT_BLOCK_MESSAGE],
     ['button', 'unsupported-button', BUTTON_EXPORT_BLOCK_MESSAGE],
     [

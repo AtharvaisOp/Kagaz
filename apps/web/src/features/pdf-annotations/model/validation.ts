@@ -206,6 +206,16 @@ function isImageAnnotation(value: unknown): value is ImageAnnotation {
 
 function isSignatureAnnotation(value: unknown): value is SignatureAnnotation {
   if (!isRecord(value)) return false;
+  const target = value.target;
+  const validTarget =
+    target === undefined ||
+    (isRecord(target) &&
+      target.kind === 'form-signature-field' &&
+      isNonEmptyString(target.sourceDocumentId) &&
+      Number.isInteger(target.sourcePageIndex) &&
+      (target.sourcePageIndex as number) >= 0 &&
+      isNonEmptyString(target.fieldName) &&
+      isNonEmptyString(target.widgetId));
   return (
     value.kind === 'signature' &&
     isPdfOrientedBox(value.box) &&
@@ -213,7 +223,8 @@ function isSignatureAnnotation(value: unknown): value is SignatureAnnotation {
     (value.method === 'draw' ||
       value.method === 'type' ||
       value.method === 'upload') &&
-    isOpacity(value.opacity)
+    isOpacity(value.opacity) &&
+    validTarget
   );
 }
 

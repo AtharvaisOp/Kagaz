@@ -173,6 +173,8 @@ export function usePdfForms(
         next.set(sourceId, {
           sourceDocumentId: sourceId,
           status: 'discovering',
+          hasDigitalSignature:
+            previous.get(sourceId)?.hasDigitalSignature ?? false,
           fields: previous.get(sourceId)?.fields ?? [],
           widgets: previous.get(sourceId)?.widgets ?? [],
           error: null,

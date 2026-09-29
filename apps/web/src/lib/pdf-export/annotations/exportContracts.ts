@@ -1,7 +1,7 @@
 export type AnnotationExportErrorCode =
   | 'unsupported-text-font'
-  | 'unsupported-signature'
   | 'missing-image-asset'
+  | 'missing-signature-asset'
   | 'image-read-failed'
   | 'unsupported-image-format'
   | 'image-embed-failed';

@@ -10,8 +10,8 @@ export const XFA_EXPORT_BLOCK_MESSAGE =
   'This PDF uses XFA forms, which Kagaz cannot support yet.';
 export const FORM_DISCOVERY_EXPORT_BLOCK_MESSAGE =
   'Kagaz is still checking this PDF for form fields. Try again in a moment.';
-export const SIGNATURE_EXPORT_BLOCK_MESSAGE =
-  'This PDF contains a signature field. Signature-field export support is still being added.';
+export const SIGNED_PDF_EXPORT_BLOCK_MESSAGE =
+  'This PDF already contains a digital signature. Kagaz does not modify digitally signed PDFs because changes can invalidate that signature.';
 export const PASSWORD_EXPORT_BLOCK_MESSAGE =
   'This PDF contains a password field, so Kagaz cannot safely flatten it for export yet.';
 export const BUTTON_EXPORT_BLOCK_MESSAGE =
@@ -39,12 +39,11 @@ export function getFormExportCapability(
 ): FormExportCapability {
   if (!source || source.status === 'idle' || source.status === 'discovering')
     return 'discovering';
+  if (source.hasDigitalSignature) return 'unsupported-signed-pdf';
   if (source.status === 'none') return 'plain';
   if (source.status === 'unsupported-xfa') return 'unsupported-xfa';
   if (source.status === 'error') return 'error';
 
-  if (source.fields.some((field) => field.kind === 'signature'))
-    return 'unsupported-signature';
   if (source.fields.some((field) => field.kind === 'password'))
     return 'unsupported-password';
   if (source.fields.some((field) => field.kind === 'button'))
@@ -52,7 +51,8 @@ export function getFormExportCapability(
   if (
     source.fields.some(
       (field) =>
-        !isFormExportFieldKind(field.kind) || field.metadataWarnings.length > 0,
+        (field.kind !== 'signature' && !isFormExportFieldKind(field.kind)) ||
+        field.metadataWarnings.length > 0,
     )
   )
     return 'unsupported-field';
@@ -69,8 +69,8 @@ export function getFormExportCapabilityMessage(
       return null;
     case 'unsupported-xfa':
       return XFA_EXPORT_BLOCK_MESSAGE;
-    case 'unsupported-signature':
-      return SIGNATURE_EXPORT_BLOCK_MESSAGE;
+    case 'unsupported-signed-pdf':
+      return SIGNED_PDF_EXPORT_BLOCK_MESSAGE;
     case 'unsupported-password':
       return PASSWORD_EXPORT_BLOCK_MESSAGE;
     case 'unsupported-button':

@@ -10,9 +10,13 @@ export async function snapshotAnnotationImageAssets(
   assetIds: readonly string[],
 ): Promise<ReadonlyMap<string, AnnotationImageExportSource>> {
   const snapshot = new Map<string, AnnotationImageExportSource>();
-  for (const assetId of assetIds) {
-    if (snapshot.has(assetId)) continue;
-    const asset = registry.get(assetId);
+  // Capture every immutable Blob before the first await. Registry cleanup or
+  // replacement during an earlier read must not change a later asset.
+  const captured = [...new Set(assetIds)].map((assetId) => ({
+    assetId,
+    asset: registry.get(assetId),
+  }));
+  for (const { assetId, asset } of captured) {
     if (!asset) continue;
     let bytes: ArrayBuffer;
     try {
@@ -20,7 +24,7 @@ export async function snapshotAnnotationImageAssets(
     } catch {
       throw new AnnotationExportError(
         'image-read-failed',
-        'Kagaz could not read the image annotation asset for export.',
+        'Kagaz could not read a visual annotation asset for export.',
         null,
         assetId,
       );

@@ -24,6 +24,7 @@ function widget(overrides: Record<string, unknown>) {
 function fakeDocument(
   pages: readonly unknown[][],
   metadataInfo: Record<string, unknown> = {},
+  signatures: readonly object[] | null = null,
 ) {
   const pageProxies = pages.map((annotations) => ({
     getAnnotations: vi.fn(() => Promise.resolve(annotations)),
@@ -33,17 +34,31 @@ function fakeDocument(
   const getPage = vi.fn((pageNumber: number) =>
     Promise.resolve(pageProxies[pageNumber - 1]),
   );
+  const getSignatures = vi.fn(() => Promise.resolve(signatures));
   const document = {
     numPages: pageProxies.length,
     isPureXfa: false,
     allXfaHtml: null,
     getMetadata,
+    getSignatures,
     getPage,
   } as unknown as PDFDocumentProxy;
   return { document, pageProxies, getPage };
 }
 
 describe('discoverPdfForms', () => {
+  it.each([0, undefined, null])(
+    'normalizes an unconstrained MaxLen=%s across repeated widgets',
+    async (maxLen) => {
+      const { document } = fakeDocument([
+        [widget({ maxLen })],
+        [widget({ id: 'second', maxLen: 0 })],
+      ]);
+      const result = await discoverPdfForms('source', document);
+      expect(result.fields[0]?.maxLength).toBeNull();
+      expect(result.fields[0]?.metadataWarnings).toEqual([]);
+    },
+  );
   it('uses page annotations, merges repeated widgets, and cleans borrowed pages', async () => {
     const second = widget({ id: 'widget-2', rect: [10, 60, 110, 90] });
     const { document, pageProxies } = fakeDocument([[widget({})], [second]]);
@@ -150,5 +165,17 @@ describe('discoverPdfForms', () => {
       'button',
       'signature',
     ]);
+  });
+
+  it('records signed byte-range metadata without claiming certificate validation', async () => {
+    const { document } = fakeDocument(
+      [[widget({ id: 'signature', fieldType: 'Sig' })]],
+      {},
+      [{ id: '5R:0-10-20-10', byteRange: [0, 10, 20, 10] }],
+    );
+    await expect(discoverPdfForms('signed', document)).resolves.toMatchObject({
+      status: 'acroform',
+      hasDigitalSignature: true,
+    });
   });
 });

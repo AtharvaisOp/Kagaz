@@ -31,6 +31,30 @@ describe('visual signatures', () => {
     expect(isPdfAnnotation({ ...signature, method: 'secure-digital' })).toBe(
       false,
     );
+    expect(
+      isPdfAnnotation({
+        ...signature,
+        target: {
+          kind: 'form-signature-field',
+          sourceDocumentId: 'source-a',
+          sourcePageIndex: 2,
+          fieldName: 'Signature1',
+          widgetId: 'widget-a',
+        },
+      }),
+    ).toBe(true);
+    expect(
+      isPdfAnnotation({
+        ...signature,
+        target: {
+          kind: 'form-signature-field',
+          sourceDocumentId: 'source-a',
+          sourcePageIndex: -1,
+          fieldName: 'Signature1',
+          widgetId: 'widget-a',
+        },
+      }),
+    ).toBe(false);
   });
 
   it('keeps signature assets reachable through annotation history', () => {
@@ -56,6 +80,18 @@ describe('visual signatures', () => {
     expect(annotationSummaryLabel({ ...signature, method: 'upload' })).toBe(
       'Uploaded signature',
     );
+    expect(
+      annotationSummaryLabel({
+        ...signature,
+        target: {
+          kind: 'form-signature-field',
+          sourceDocumentId: 'source-a',
+          sourcePageIndex: 0,
+          fieldName: 'Signature1',
+          widgetId: 'widget-a',
+        },
+      }),
+    ).toBe('Drawn signature in signature field');
   });
 
   it('preserves the aspect ratio for keyboard resize', () => {

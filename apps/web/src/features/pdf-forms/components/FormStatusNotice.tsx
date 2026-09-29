@@ -16,9 +16,14 @@ export function FormStatusNotice({
   if (definition.status === 'none' || definition.status === 'idle') return null;
 
   const capability = getFormExportCapability(definition);
+  const hasUnsignedSignatureField = definition.fields.some(
+    (field) => field.kind === 'signature',
+  );
   const message =
     capability === 'safe-acroform'
-      ? 'Form fields can be filled here. Exported PDFs flatten filled fields.'
+      ? hasUnsignedSignatureField
+        ? 'Unsigned signature fields accept a visual signature. Export flattens visual marks and supported form values.'
+        : 'Form fields can be filled here. Exported PDFs flatten filled fields.'
       : capability === 'unsupported-xfa'
         ? 'This PDF uses XFA forms, which Kagaz cannot support yet. Standard AcroForm PDFs are supported.'
         : capability === 'discovering'

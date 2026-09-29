@@ -51,10 +51,27 @@ describe('snapshotAnnotationsForPages', () => {
       workspacePageId: pageB.id,
       assetId: 'asset-b',
     };
+    const signature = {
+      id: 'signature',
+      workspacePageId: pageA.id,
+      kind: 'signature' as const,
+      box: {
+        origin: { x: 60, y: 60 },
+        width: 80,
+        height: 30,
+        rotation: 0 as const,
+      },
+      assetId: 'signature-asset',
+      method: 'type' as const,
+      opacity: 1,
+    };
     let state = createAnnotationHistoryState();
     state = {
       ...state,
-      present: addAnnotation(addAnnotation(state.present, rectangle), image),
+      present: addAnnotation(
+        addAnnotation(addAnnotation(state.present, rectangle), signature),
+        image,
+      ),
     };
     state = {
       ...state,
@@ -64,13 +81,29 @@ describe('snapshotAnnotationsForPages', () => {
     const snapshot = snapshotAnnotationsForPages([pageA], state);
     expect(snapshot.annotationsByPage.get(pageA.id)).toEqual([
       rectangle,
+      signature,
       image,
     ]);
     expect(snapshot.annotationsByPage.has(pageB.id)).toBe(false);
-    expect(snapshot.imageAssetIds).toEqual(['asset-a']);
+    expect(snapshot.imageAssetIds).toEqual(['signature-asset', 'asset-a']);
     expect(snapshot.annotationsByPage.get(pageA.id)).not.toBe(
       state.present.byPage[pageA.id],
     );
+  });
+
+  it('maps missing visual-signature assets without exposing IDs', () => {
+    const message = friendlyExportError(
+      new AnnotationExportError(
+        'missing-signature-asset',
+        'internal detail',
+        'signature-id',
+        'asset-id',
+      ),
+    );
+    expect(message).toBe(
+      'A visual signature is no longer available for export.',
+    );
+    expect(message).not.toContain('asset-id');
   });
 });
 

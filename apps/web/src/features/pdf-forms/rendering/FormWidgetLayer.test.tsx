@@ -62,7 +62,7 @@ function widget(kind: string): FormWidgetDefinition {
 }
 
 describe('FormWidgetLayer', () => {
-  it('renders editable native controls and keeps passwords/signatures non-editable', () => {
+  it('renders editable native controls and an accessible visual-signature action', () => {
     const fields = [
       field('text', { kind: 'text', current: 'Ada', defaultValue: null }),
       field('multiline-text', {
@@ -91,7 +91,12 @@ describe('FormWidgetLayer', () => {
     ];
     const widgets = fields.map((entry) => widget(entry.kind));
     const markup = renderToStaticMarkup(
-      <FormWidgetLayer viewport={viewport} fields={fields} widgets={widgets} />,
+      <FormWidgetLayer
+        viewport={viewport}
+        fields={fields}
+        widgets={widgets}
+        onPlaceVisualSignature={() => undefined}
+      />,
     );
     expect(markup).toContain('type="password"');
     expect(markup).toContain('<textarea');
@@ -99,10 +104,30 @@ describe('FormWidgetLayer', () => {
     expect(markup).toContain('type="radio"');
     expect(markup).toContain('<select');
     expect(markup).toContain('multiple=""');
-    expect(markup).toContain('Signature field');
+    expect(markup).toContain('Place visual signature');
     expect(markup).toContain('autoComplete="off"');
-    expect(markup).toContain('viewing only');
     expect(markup).toContain('data-form-editable="true"');
     expect(markup).toContain('not editable in Kagaz');
+  });
+
+  it('hides the action after placement and restores pass-through semantics', () => {
+    const signature = field('signature', {
+      kind: 'none',
+      current: null,
+      defaultValue: null,
+    });
+    const signatureWidget = widget('signature');
+    const markup = renderToStaticMarkup(
+      <FormWidgetLayer
+        viewport={viewport}
+        fields={[signature]}
+        widgets={[signatureWidget]}
+        onPlaceVisualSignature={() => undefined}
+        targetedSignatureWidgetIds={new Set([signatureWidget.id])}
+      />,
+    );
+    expect(markup).toContain('Visual signature placed');
+    expect(markup).not.toContain('<button');
+    expect(markup).not.toContain('data-form-editable="true"');
   });
 });

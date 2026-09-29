@@ -108,6 +108,8 @@ export interface FormWidgetDefinition {
 export interface FormSourceDefinition {
   readonly sourceDocumentId: SourceDocumentId;
   readonly status: FormDiscoveryStatus;
+  /** PDF.js found a signed byte-range structure; no certificate validation. */
+  readonly hasDigitalSignature: boolean;
   readonly fields: readonly FormFieldDefinition[];
   readonly widgets: readonly FormWidgetDefinition[];
   readonly error: string | null;
