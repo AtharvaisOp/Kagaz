@@ -3,24 +3,42 @@ import express from 'express';
 
 import type { HealthResponse } from '@kagaz/shared-types';
 import type { ErrorRequestHandler, Express } from 'express';
+import { COMPRESSION_HEADERS, ToolService } from './tools/service.js';
 
-export function createApp(allowedOrigins: string[]): Express {
+export function createApp(
+  allowedOrigins: string[],
+  tools = new ToolService(),
+): Express {
   const app = express();
 
   app.disable('x-powered-by');
   app.use(
     cors({
+      exposedHeaders: COMPRESSION_HEADERS,
+      methods: ['GET', 'POST', 'OPTIONS'],
       origin(origin, callback) {
         if (!origin || allowedOrigins.includes(origin)) {
           callback(null, true);
           return;
         }
 
-        callback(new Error('Origin is not allowed by CORS policy.'));
+        callback(null, false);
       },
     }),
   );
-  app.use(express.json({ limit: '100kb' }));
+  app.use((request, response, next) => {
+    const origin = request.headers.origin;
+    if (origin && !allowedOrigins.includes(origin)) {
+      response.status(403).json({
+        error: {
+          code: 'invalid-request',
+          message: 'This origin is not allowed.',
+        },
+      });
+      return;
+    }
+    next();
+  });
 
   app.get('/health', (_request, response) => {
     const payload = {
@@ -32,6 +50,13 @@ export function createApp(allowedOrigins: string[]): Express {
     response.status(200).json(payload);
   });
 
+  app.post('/tools/compress', (request, response) =>
+    tools.handle(request, response),
+  );
+
+  // Multipart tools own their parser and limits. Future JSON routes use this one.
+  app.use(express.json({ limit: '100kb' }));
+
   app.use((_request, response) => {
     response.status(404).json({ error: 'Not found' });
   });
@@ -42,7 +67,9 @@ export function createApp(allowedOrigins: string[]): Express {
     response,
     _next,
   ) => {
-    console.error(error);
+    console.error('API request failed.', {
+      name: error instanceof Error ? error.name : 'unknown',
+    });
     response.status(500).json({ error: 'Internal server error' });
   };
 

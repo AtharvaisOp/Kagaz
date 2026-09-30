@@ -2014,6 +2014,129 @@ input:focus-visible + * {
   }
 }
 
+.compress-dialog {
+  max-height: calc(100dvh - 40px);
+  margin: auto;
+  overflow-y: auto;
+  color: #e4e4e7;
+  animation: compression-enter 160ms ease-out;
+}
+
+.compress-dialog::backdrop {
+  background: rgb(0 0 0 / 72%);
+}
+
+.compression-privacy {
+  border-left: 2px solid #06b6d4;
+  padding-left: 14px;
+  margin-bottom: 24px;
+}
+
+.compression-privacy p,
+.compression-copy,
+.compression-result p {
+  font-size: 12px;
+  line-height: 1.6;
+  color: #a1a1aa;
+}
+
+.compression-privacy p:first-child {
+  color: #e4e4e7;
+}
+
+.compression-presets {
+  padding: 0;
+  margin: 0 0 20px;
+  border: 0;
+}
+
+.compression-presets legend {
+  margin-bottom: 12px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.compress-dialog .compression-preset {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid #27272a;
+  border-radius: 8px;
+  cursor: pointer;
+  transition:
+    border-color 140ms ease,
+    background 140ms ease;
+}
+
+.compression-preset:has(:checked),
+.compression-preset:hover {
+  border-color: #06b6d4;
+  background: #151e20;
+}
+
+.compress-dialog .compression-preset input {
+  width: 16px;
+  min-height: 16px;
+  accent-color: #06b6d4;
+  flex-shrink: 0;
+}
+
+.compression-preset strong,
+.compression-preset span span {
+  display: block;
+}
+
+.compression-preset span span {
+  margin-top: 4px;
+  font-size: 11px;
+  color: #a1a1aa;
+}
+
+.compression-progress {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.compression-result dl {
+  display: flex;
+  gap: 32px;
+  padding-top: 16px;
+  border-top: 1px solid #27272a;
+}
+
+.compression-result dt {
+  font-size: 11px;
+  color: #a1a1aa;
+}
+
+.compression-result dd {
+  margin: 8px 0 0;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 16px;
+  color: #ffffff;
+}
+
+.compress-dialog .primary-button {
+  min-width: 0;
+  padding: 0 16px;
+  font-size: 12px;
+}
+
+@keyframes compression-enter {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

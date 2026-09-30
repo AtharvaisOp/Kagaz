@@ -2,9 +2,14 @@ import 'dotenv/config';
 
 import { createApp } from './app.js';
 import { readConfig } from './config.js';
+import { ToolService } from './tools/service.js';
 
 const config = readConfig();
-const app = createApp(config.allowedOrigins);
+const tools = new ToolService({
+  gs: process.env.GHOSTSCRIPT_PATH,
+  qpdf: process.env.QPDF_PATH,
+});
+const app = createApp(config.allowedOrigins, tools);
 
 const server = app.listen(config.port, '0.0.0.0', () => {
   console.log(`Kagaz API listening on port ${config.port}`);
@@ -30,6 +35,7 @@ function shutdown(signal: string) {
       process.exitCode = 1;
     }
   });
+  void tools.shutdown().then(() => server.closeAllConnections());
 }
 
 process.on('SIGTERM', () => shutdown('SIGTERM'));

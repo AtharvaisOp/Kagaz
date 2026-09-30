@@ -43,6 +43,10 @@ export interface PdfExportController {
   readonly downloadWorkspace: () => void;
   readonly extractPages: (pages: readonly WorkspacePage[]) => void;
   readonly cancel: () => void;
+  readonly prepareWorkspace: (
+    signal: AbortSignal,
+    onProgress?: (progress: ExportProgress) => void,
+  ) => Promise<{ bytes: Uint8Array; fileName: string }>;
 }
 
 const IDLE_EXPORT_STATE: PdfExportState = {
@@ -170,6 +174,64 @@ export function usePdfExport(
     setState(IDLE_EXPORT_STATE);
   }, []);
 
+  const preparePages = useCallback(
+    (
+      pages: readonly WorkspacePage[],
+      signal: AbortSignal,
+      onProgress?: (progress: ExportProgress) => void,
+    ) => {
+      const block = getExportBlockReason(pages);
+      if (block) throw new PdfExportError('export-blocked', block);
+      const pageSnapshot = snapshotWorkspacePages(pages);
+      const sources = sourceMapForPages(pageSnapshot, registry);
+      const forms = snapshotForms(pageSnapshot);
+      const annotations = snapshotAnnotationsForPages(
+        pageSnapshot,
+        annotationState,
+      );
+      // Captures asset Blobs synchronously before the first asynchronous read.
+      const imageAssets = snapshotAnnotationImageAssets(
+        annotationAssets,
+        annotations.imageAssetIds,
+      );
+      return {
+        fileName: getWorkspaceExportFileName(
+          sourceNamesInPageOrder(pageSnapshot, sources),
+        ),
+        bytes: imageAssets.then((assets) =>
+          exportWorkspace(
+            {
+              pages: pageSnapshot,
+              sources,
+              forms,
+              annotationsByPage: annotations.annotationsByPage,
+              imageAssets: assets,
+            },
+            { signal, onProgress },
+          ),
+        ),
+      };
+    },
+    [
+      getExportBlockReason,
+      registry,
+      snapshotForms,
+      annotationState,
+      annotationAssets,
+    ],
+  );
+
+  const prepareWorkspace = useCallback(
+    async (
+      signal: AbortSignal,
+      onProgress?: (progress: ExportProgress) => void,
+    ) => {
+      const prepared = preparePages(workspace.pages, signal, onProgress);
+      return { bytes: await prepared.bytes, fileName: prepared.fileName };
+    },
+    [preparePages, workspace.pages],
+  );
+
   const run = useCallback(
     (pages: readonly WorkspacePage[], fileName: string) => {
       if (state.status === 'exporting' || pages.length === 0) {
@@ -190,12 +252,15 @@ export function usePdfExport(
       generationRef.current = generation;
       const controller = new AbortController();
       abortRef.current = controller;
-      const pageSnapshot = snapshotWorkspacePages(pages);
-      const formSnapshot = snapshotForms(pageSnapshot);
-      let sources: Map<SourceDocumentId, ExportSource>;
+      let prepared: ReturnType<typeof preparePages>;
+      const isCurrent = () =>
+        generationRef.current === generation && !controller.signal.aborted;
 
       try {
-        sources = sourceMapForPages(pageSnapshot, registry);
+        prepared = preparePages(pages, controller.signal, (progress) => {
+          if (isCurrent())
+            setState({ status: 'exporting', progress, error: null });
+        });
       } catch (error: unknown) {
         setState({
           status: 'error',
@@ -205,41 +270,13 @@ export function usePdfExport(
         return;
       }
 
-      const isCurrent = () =>
-        generationRef.current === generation && !controller.signal.aborted;
-      const annotationSnapshot = snapshotAnnotationsForPages(
-        pageSnapshot,
-        annotationState,
-      );
       setState({
         status: 'exporting',
-        progress: { phase: 'preparing', current: 0, total: sources.size },
+        progress: { phase: 'preparing', current: 0, total: 1 },
         error: null,
       });
 
-      void (async () => {
-        const imageAssets = await snapshotAnnotationImageAssets(
-          annotationAssets,
-          annotationSnapshot.imageAssetIds,
-        );
-        if (!isCurrent()) return null;
-        return exportWorkspace(
-          {
-            pages: pageSnapshot,
-            sources,
-            annotationsByPage: annotationSnapshot.annotationsByPage,
-            imageAssets,
-            forms: formSnapshot,
-          },
-          {
-            signal: controller.signal,
-            onProgress: (progress) => {
-              if (isCurrent())
-                setState({ status: 'exporting', progress, error: null });
-            },
-          },
-        );
-      })()
+      void prepared.bytes
         .then((bytes) => {
           if (!bytes || !isCurrent()) return;
           downloadPdf(bytes, fileName);
@@ -260,14 +297,7 @@ export function usePdfExport(
           });
         });
     },
-    [
-      annotationAssets,
-      annotationState,
-      getExportBlockReason,
-      registry,
-      snapshotForms,
-      state.status,
-    ],
+    [getExportBlockReason, preparePages, state.status],
   );
 
   const downloadWorkspace = useCallback(() => {
@@ -318,5 +348,5 @@ export function usePdfExport(
     };
   }, []);
 
-  return { state, downloadWorkspace, extractPages, cancel };
+  return { state, downloadWorkspace, extractPages, cancel, prepareWorkspace };
 }

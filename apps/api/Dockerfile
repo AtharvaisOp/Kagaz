@@ -17,10 +17,15 @@ RUN pnpm --filter @kagaz/api... build && pnpm --filter @kagaz/api deploy --prod 
 
 FROM node:22.20.0-bookworm-slim AS runner
 
+RUN apt-get update && apt-get install -y --no-install-recommends ghostscript qpdf util-linux \
+    && rm -rf /var/lib/apt/lists/*
+
 ENV NODE_ENV=production
 WORKDIR /app
 
 COPY --from=builder /prod/api ./
+
+USER node
 
 EXPOSE 4000
 CMD ["node", "dist/index.js"]

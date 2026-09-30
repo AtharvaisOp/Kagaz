@@ -142,6 +142,7 @@ export function App() {
           exportBlockReason={getExportBlockReason(workspace.pages)}
           annotationController={annotationController}
           formController={formController}
+          prepareWorkspace={pdfExport.prepareWorkspace}
         />
       ) : null}
     </main>

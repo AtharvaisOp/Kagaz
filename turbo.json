@@ -2,10 +2,18 @@
   "$schema": "https://turbo.build/schema.json",
   "tasks": {
     "build": {
+      "env": ["VITE_API_URL"],
       "dependsOn": ["^build"],
       "outputs": ["dist/**"]
     },
     "dev": {
+      "passThroughEnv": [
+        "PORT",
+        "CORS_ORIGINS",
+        "GHOSTSCRIPT_PATH",
+        "QPDF_PATH",
+        "VITE_API_URL"
+      ],
       "cache": false,
       "persistent": true
     },
@@ -16,6 +24,7 @@
       "dependsOn": ["^typecheck"]
     },
     "test": {
+      "env": ["GHOSTSCRIPT_PATH", "QPDF_PATH"],
       "outputs": []
     }
   }

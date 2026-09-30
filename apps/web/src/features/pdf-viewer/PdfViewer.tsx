@@ -14,7 +14,11 @@ import type { PdfFormsController } from '../pdf-forms/hooks/usePdfForms';
 
 import type { FileLoadIssue } from '../pdf-workspace/loading/types';
 import type { WorkspaceLoadingState } from '../pdf-workspace/hooks/usePdfWorkspace';
-import type { PdfExportState } from '../pdf-workspace/hooks/usePdfExport';
+import type {
+  PdfExportState,
+  PdfExportController,
+} from '../pdf-workspace/hooks/usePdfExport';
+import { CompressDialog } from '../pdf-compression/CompressDialog';
 import type { SourceDocumentRegistry } from '../pdf-workspace/runtime/sourceDocumentRegistry';
 import type {
   SourceDocumentId,
@@ -52,6 +56,7 @@ interface PdfViewerProps {
   readonly exportBlockReason: string | null;
   readonly annotationController: PdfAnnotationController;
   readonly formController: PdfFormsController;
+  readonly prepareWorkspace: PdfExportController['prepareWorkspace'];
 }
 
 function getSourceLabel(
@@ -99,9 +104,16 @@ export function PdfViewer({
   exportBlockReason,
   annotationController,
   formController,
+  prepareWorkspace,
 }: PdfViewerProps) {
   const [mobilePageManagerOpen, setMobilePageManagerOpen] = useState(false);
   const [extractOpen, setExtractOpen] = useState(false);
+  const [compressOpen, setCompressOpen] = useState(false);
+  const compressTriggerRef = useRef<HTMLButtonElement>(null);
+  const closeCompress = useCallback(() => {
+    setCompressOpen(false);
+    window.requestAnimationFrame(() => compressTriggerRef.current?.focus());
+  }, []);
   const [extractSession, setExtractSession] = useState(0);
   const extractTriggerRef = useRef<HTMLButtonElement>(null);
   const pagesTriggerRef = useRef<HTMLButtonElement>(null);
@@ -168,7 +180,20 @@ export function PdfViewer({
         onOpenExtract={openExtract}
         extractTriggerRef={extractTriggerRef}
         pagesTriggerRef={pagesTriggerRef}
+        compressTriggerRef={compressTriggerRef}
+        onOpenCompress={() => setCompressOpen(true)}
       />
+      {compressOpen ? (
+        <CompressDialog
+          prepareWorkspace={prepareWorkspace}
+          blockReason={
+            exportBlocked
+              ? 'Finish or cancel the active text edit before compressing.'
+              : exportBlockReason
+          }
+          onClose={closeCompress}
+        />
+      ) : null}
       <AnnotationToolbar controller={annotationController} />
       <AnnotationSummary
         controller={annotationController}

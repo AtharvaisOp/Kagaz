@@ -38,10 +38,64 @@ jobs:
         run: pnpm typecheck
 
       - name: Test
-        run: pnpm test
+        # Compression integration tests execute the real native engines.
+        # The Docker job below verifies the production image independently.
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends ghostscript qpdf
+          pnpm test
 
       - name: Build
         run: pnpm build
 
       - name: Format check
         run: pnpm format:check
+
+      - name: Diff check
+        run: git diff --check
+
+  compression-container:
+    needs: quality
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 12.3.4
+          run_install: false
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.20.0
+          cache: pnpm
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Build production API image
+        run: docker build -f apps/api/Dockerfile -t kagaz-api:verify .
+      - name: Verify container health, tools, compression, failures and cleanup
+        run: node scripts/verify-phase4a-container.mjs
+      - name: Install browser
+        run: pnpm exec playwright install --with-deps chromium
+      - name: Verify editor and real container together
+        env:
+          KAGAZ_ARTIFACT_DIR: ${{ runner.temp }}/phase4a-artifacts
+        run: |
+          docker run -d --name kagaz-browser-api --init --memory=512m --cpus=0.5 -p 4000:4000 kagaz-api:verify
+          pnpm --filter @kagaz/web dev --host 127.0.0.1 > /tmp/kagaz-web.log 2>&1 &
+          for i in $(seq 1 30); do curl -fsS http://localhost:5173/ > /dev/null && curl -fsS http://localhost:4000/health > /dev/null && break; sleep 1; done
+          node scripts/verify-phase4a.mjs
+      - name: Save verification artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase4a-verification
+          path: ${{ runner.temp }}/phase4a-artifacts
+          if-no-files-found: ignore
+      - name: Container diagnostics and cleanup
+        if: always()
+        run: |
+          docker logs kagaz-browser-api || true
+          docker stats --no-stream kagaz-browser-api || true
+          docker rm -f kagaz-browser-api || true

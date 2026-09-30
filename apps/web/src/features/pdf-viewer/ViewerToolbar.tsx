@@ -37,6 +37,8 @@ interface ViewerToolbarProps {
   readonly onOpenExtract: () => void;
   readonly extractTriggerRef: RefObject<HTMLButtonElement | null>;
   readonly pagesTriggerRef: RefObject<HTMLButtonElement | null>;
+  readonly compressTriggerRef: RefObject<HTMLButtonElement | null>;
+  readonly onOpenCompress: () => void;
 }
 
 export function ViewerToolbar({
@@ -60,6 +62,8 @@ export function ViewerToolbar({
   onOpenExtract,
   extractTriggerRef,
   pagesTriggerRef,
+  compressTriggerRef,
+  onOpenCompress,
 }: ViewerToolbarProps) {
   const exporting = exportState.status === 'exporting';
   const exportStatus = exportState.progress
@@ -152,6 +156,15 @@ export function ViewerToolbar({
         >
           <PagesIcon className="size-4" />
           Pages
+        </button>
+        <button
+          ref={compressTriggerRef}
+          className="toolbar-button"
+          type="button"
+          disabled={exporting || pageCount === 0}
+          onClick={onOpenCompress}
+        >
+          Compress PDF
         </button>
         <button
           className="toolbar-button start-over-button"

@@ -47,6 +47,7 @@ export type ExportProgress =
     };
 
 export type PdfExportErrorCode =
+  | 'export-blocked'
   | 'aborted'
   | 'missing-source'
   | 'source-read-failed'

@@ -1,0 +1,253 @@
+import { useEffect, useRef, useState } from 'react';
+import type { CompressionPreset } from '@kagaz/shared-types';
+import type { PdfExportController } from '../pdf-workspace/hooks/usePdfExport';
+import { CloseIcon, DownloadIcon } from '../../components/icons';
+import { usePdfCompression } from './usePdfCompression';
+
+const PRESETS: readonly {
+  value: CompressionPreset;
+  label: string;
+  detail: string;
+}[] = [
+  {
+    value: 'high-quality',
+    label: 'High quality',
+    detail: 'Sharper images · suitable for print',
+  },
+  {
+    value: 'balanced',
+    label: 'Balanced',
+    detail: 'A smaller file with clear images',
+  },
+  {
+    value: 'maximum',
+    label: 'Maximum compression',
+    detail: 'Stronger downsampling · lower image quality',
+  },
+];
+function formatBytes(bytes: number): string {
+  return bytes < 1024
+    ? `${bytes} B`
+    : bytes < 1024 * 1024
+      ? `${(bytes / 1024).toFixed(1)} KiB`
+      : `${(bytes / 1024 / 1024).toFixed(2)} MiB`;
+}
+
+export function CompressDialog({
+  prepareWorkspace,
+  blockReason,
+  onClose,
+}: {
+  readonly prepareWorkspace: PdfExportController['prepareWorkspace'];
+  readonly blockReason: string | null;
+  readonly onClose: () => void;
+}) {
+  const dialog = useRef<HTMLDialogElement>(null);
+  const [preset, setPreset] = useState<CompressionPreset>('balanced');
+  const compression = usePdfCompression(prepareWorkspace);
+  const cancelCompression = compression.cancel;
+  const busy =
+    compression.state.status === 'preparing' ||
+    compression.state.status === 'processing';
+  const close = () => {
+    compression.cancel();
+    onClose();
+  };
+  useEffect(() => {
+    const element = dialog.current;
+    element?.showModal();
+    return () => element?.close();
+  }, []);
+  useEffect(() => {
+    const handleKey = (event: KeyboardEvent) => {
+      if (event.key === 'Tab') {
+        const element = dialog.current;
+        const controls = element?.querySelectorAll<HTMLElement>(
+          'button:not(:disabled), input:not(:disabled), [href], [tabindex="0"]',
+        );
+        const first = controls?.[0];
+        const last = controls?.[controls.length - 1];
+        if (
+          first &&
+          last &&
+          (event.shiftKey
+            ? document.activeElement === first
+            : document.activeElement === last)
+        ) {
+          event.preventDefault();
+          (event.shiftKey ? last : first).focus();
+        } else if (
+          first &&
+          !(event.target instanceof Node && element?.contains(event.target))
+        ) {
+          event.preventDefault();
+          first.focus();
+        }
+      }
+      // A disabled submit button can move focus to body while processing.
+      // Capture Escape even then, before the editor's global shortcuts.
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        event.stopPropagation();
+        cancelCompression();
+        onClose();
+      } else if (
+        !(event.target instanceof Node) ||
+        !dialog.current?.contains(event.target)
+      ) {
+        event.stopPropagation();
+      }
+    };
+    document.addEventListener('keydown', handleKey, true);
+    return () => document.removeEventListener('keydown', handleKey, true);
+  }, [cancelCompression, onClose]);
+  const state = compression.state;
+  return (
+    <dialog
+      ref={dialog}
+      className="extract-dialog compress-dialog"
+      aria-labelledby="compress-title"
+      aria-describedby="compress-privacy"
+      onKeyDown={(event) => {
+        // Keep editor shortcuts from acting on the workspace behind this modal.
+        event.stopPropagation();
+        if (event.key === 'Escape') {
+          event.preventDefault();
+          close();
+        }
+      }}
+      onCancel={(event) => {
+        event.preventDefault();
+        close();
+      }}
+    >
+      <div className="extract-dialog-heading">
+        <h2 id="compress-title">Compress PDF</h2>
+        <button
+          type="button"
+          className="icon-button"
+          aria-label="Close compression"
+          onClick={close}
+        >
+          <CloseIcon className="size-4" />
+        </button>
+      </div>
+      <div id="compress-privacy" className="compression-privacy">
+        <p>
+          Compression temporarily uploads the current PDF to the Kagaz server
+          for processing.
+        </p>
+        <p>
+          It is not permanently stored. Temporary files are deleted after
+          processing. Ordinary editing and export remain browser-local.
+        </p>
+      </div>
+      <form
+        onSubmit={(event) => {
+          event.preventDefault();
+          if (!blockReason) void compression.start(preset);
+        }}
+      >
+        <fieldset
+          className="compression-presets"
+          disabled={busy || state.status === 'success'}
+        >
+          <legend>Compression level</legend>
+          {PRESETS.map((option) => (
+            <label className="compression-preset" key={option.value}>
+              <input
+                type="radio"
+                name="compression-preset"
+                value={option.value}
+                checked={preset === option.value}
+                onChange={() => setPreset(option.value)}
+              />
+              <span>
+                <strong>{option.label}</strong>
+                <span>{option.detail}</span>
+              </span>
+            </label>
+          ))}
+        </fieldset>
+        {blockReason ? (
+          <p className="extract-dialog-error" role="alert">
+            {blockReason}
+          </p>
+        ) : null}
+        <div aria-live="polite" aria-atomic="true" aria-busy={busy}>
+          {busy ? (
+            <p className="compression-progress" role="status">
+              <span className="export-status-dot" aria-hidden="true" />
+              {state.status === 'preparing'
+                ? 'Preparing the current PDF in your browser…'
+                : 'Uploading and compressing on the server…'}
+            </p>
+          ) : null}
+          {state.status === 'cancelled' ? (
+            <p className="compression-copy">
+              Compression cancelled. Your workspace is intact.
+            </p>
+          ) : null}
+          {state.status === 'error' ? (
+            <p className="extract-dialog-error" role="alert">
+              {state.message}
+            </p>
+          ) : null}
+          {state.status === 'success' ? (
+            <div className="compression-result">
+              <dl>
+                <div>
+                  <dt>Before</dt>
+                  <dd>{formatBytes(state.metadata.originalBytes)}</dd>
+                </div>
+                <div>
+                  <dt>After</dt>
+                  <dd>{formatBytes(state.metadata.compressedBytes)}</dd>
+                </div>
+              </dl>
+              <p>
+                {state.metadata.outcome === 'unchanged'
+                  ? 'Already compact. Your exported PDF is returned without increasing its size.'
+                  : `Saved ${formatBytes(state.metadata.savedBytes)} (${state.metadata.savedPercent.toFixed(1)}%)`}
+              </p>
+            </div>
+          ) : null}
+        </div>
+        <p className="compression-copy">
+          Creates a separate download. Your workspace stays unchanged.
+        </p>
+        <div className="extract-dialog-actions">
+          <button
+            type="button"
+            className="text-button"
+            onClick={busy ? compression.cancel : close}
+          >
+            {busy ? 'Cancel compression' : 'Close'}
+          </button>
+          {state.status === 'success' ? (
+            <button
+              type="button"
+              className="primary-button"
+              onClick={compression.download}
+            >
+              <DownloadIcon className="size-4" />
+              Download compressed PDF
+            </button>
+          ) : (
+            <button
+              type="submit"
+              className="primary-button"
+              disabled={busy || Boolean(blockReason)}
+            >
+              {busy
+                ? 'Working…'
+                : state.status === 'error' || state.status === 'cancelled'
+                  ? 'Retry compression'
+                  : 'Compress'}
+            </button>
+          )}
+        </div>
+      </form>
+    </dialog>
+  );
+}

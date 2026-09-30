@@ -3,7 +3,9 @@
 Kagaz is a browser-first PDF workspace for combining and arranging documents
 locally. Open one or several PDFs, inspect their pages, reorder them, rotate or
 delete pages, extract a range, and download the result without sending PDF
-bytes to a server.
+bytes to a server. **Compress PDF** is an explicit server operation: only after
+you press Compress does Kagaz upload a flattened export of the current workspace
+to its API. Ordinary editing and export remain browser-local.
 
 ## Phase 1 capabilities
 
@@ -93,8 +95,17 @@ repeatable browser scripts, performance observations, and remaining limitations.
 
 ## Privacy-first architecture
 
-PDF source files stay in the browser for current Phase 1 operations. The
-backend is not involved in PDF editing or export.
+PDF source files stay in the browser for editing and ordinary export. Compression
+temporarily sends one generated, flattened PDF containing the current page order,
+rotations, annotations, images, filled forms and visual signatures. It never sends
+individual source files. Existing form/signature export blockers apply before any
+upload. Compression creates a derivative download and leaves the workspace intact.
+
+The API streams uploads to an isolated temporary directory, validates with qpdf,
+runs Ghostscript, validates the result and streams it back. Temporary files are
+deleted after processing/download, errors, disconnection and orderly shutdown.
+There is no permanent PDF storage, database persistence or content analytics.
+Logs contain error codes rather than PDF contents, filenames or native stderr.
 
 ```text
 Browser
@@ -111,7 +122,7 @@ Browser
      â””â”€ browser-local Blob download
 
 Backend
-â””â”€ Express /health foundation for future server-heavy work
+â””â”€ Explicit /tools/compress > isolated qpdf/Ghostscript > download > cleanup
 ```
 
 PDF.js is responsible for preview and rendering. The workspace and annotation
@@ -134,6 +145,7 @@ initial application bundle or uploading any bytes.
 - Vitest for deterministic model, lifecycle, and export tests
 - pnpm workspaces and Turborepo
 - Express 5 and Docker for the API foundation
+- Ghostscript for compression, qpdf for structural validation, Busboy for streamed uploads
 - GitHub Actions, Vercel, and Render deployment paths
 
 ## Local development
@@ -151,7 +163,17 @@ pnpm format:check
 ```
 
 The web app runs at `http://localhost:5173`; the API defaults to
-`http://localhost:4000`. Phase 1 PDF editing does not require the API.
+`http://localhost:4000`. Editing and ordinary export do not require the API.
+Compression requires Ghostscript and qpdf on PATH, or their executable paths
+in the API environment. On Debian/Ubuntu: `apt-get install ghostscript qpdf util-linux`.
+On Windows, set `GHOSTSCRIPT_PATH` to `gswin64c.exe` and `QPDF_PATH` to `qpdf.exe`.
+The Linux runner uses `prlimit` from util-linux for resource bounds. API integration
+tests deliberately require these native tools; they are not silently skipped.
+
+Vite proxies `/tools` to the local API. Use the `localhost` URL to match the
+default CORS origin. Set `VITE_API_URL` for a separately hosted frontend; see
+`apps/web/.env.example`. Native paths set only in `apps/api/.env` are loaded by
+the running API; for repository tests, export them into the shell environment.
 
 Run one application directly when useful:
 
@@ -173,7 +195,44 @@ are needed.
 | `PORT`         | `4000`                  | API listening port; hosting platforms may provide it. |
 | `CORS_ORIGINS` | `http://localhost:5173` | Comma-separated API origins.                          |
 
-No secrets are required for the current browser-local workflow.
+`GHOSTSCRIPT_PATH` (default `gs`) and `QPDF_PATH` (default `qpdf`) optionally
+select native executables using server-controlled configuration. No secrets are
+required for local development.
+
+## Compression contract and limits
+
+`POST /tools/compress` accepts multipart fields `file` (exactly one PDF) and
+`preset` (`high-quality`, `balanced`, `maximum`). Success returns `application/pdf`.
+The API exposes `X-Kagaz-Original-Bytes`, `X-Kagaz-Compressed-Bytes`,
+`X-Kagaz-Saved-Bytes`, `X-Kagaz-Saved-Percent`, `X-Kagaz-Preset` and
+`X-Kagaz-Outcome` (`compressed` or `unchanged`) through CORS. Errors return
+`{ "error": { "code": "…", "message": "…" } }` with a small shared typed contract.
+Responses are not cached.
+
+| Level               | Ghostscript setting | Color/gray image target |
+| ------------------- | ------------------- | ----------------------- |
+| High quality        | `/printer`          | 300 dpi                 |
+| Balanced            | `/ebook`            | 150 dpi                 |
+| Maximum compression | `/screen`           | 72 dpi                  |
+
+Kagaz also disables automatic page rotation, uses PDF 1.7 output to retain
+transparency, and enables stream/font compression and duplicate-image detection.
+These are quality presets, not promises about exact file size or monotonic savings.
+If the validated derivative is equal to or larger than the input, the API returns
+the exact validated browser export with zero savings. It never returns a failed
+or partially validated derivative as a fallback.
+
+Input is limited to **20 MiB and 300 pages**. One request owns the processing slot;
+at most two wait in an abortable FIFO queue. Admission covers upload through cleanup,
+so both disk use and native concurrency are bounded. Overflow returns `server-busy`
+(503 with `Retry-After`). Multipart body overhead is capped at 64 KiB, upload time
+at 30 seconds, each native process at 60 seconds, and the total request including
+queue time at 120 seconds. Linux native processes have a 384 MiB address-space
+limit, 60 CPU seconds and a 40 MiB file-size limit. Encrypted files, interactive
+AcroForms, malformed structures and qpdf recovery warnings are rejected.
+
+See [Phase 4A engineering and verification](docs/phase-4a.md) for implementation
+boundaries, repeatable container/browser checks, security review and limitations.
 
 ## Deployment
 
@@ -190,8 +249,9 @@ The intended frontend configuration uses the repository root:
 - Output Directory: `apps/web/dist`
 
 The configured production-origin candidate is
-`https://kagaz-personal.vercel.app`. The repository does not require a
-frontend API environment variable for Phase 1.
+`https://kagaz-personal.vercel.app`. For compression, set the frontend build
+variable `VITE_API_URL=https://kagaz-api.onrender.com` before the next normal
+deployment. Source editing and ordinary export work without this variable.
 
 During the final Phase 1 audit, that domain was reachable but still served
 the older single-document viewer. Promote the latest `main` deployment before
@@ -209,8 +269,10 @@ https://kagaz-api.onrender.com/health
 
 The Render Blueprint uses the `main` branch, Docker, the Singapore region,
 and `/health` as its health check. `CORS_ORIGINS` is configured for the
-intended production frontend origin. Render is reserved for future operations
-that genuinely need native tooling.
+intended production frontend origin. Phase 4A retains the free tier, existing
+health check, region, branch and normal auto-deploy configuration. Docker installs
+only Ghostscript, qpdf and util-linux, then runs as the unprivileged Node user.
+No persistent disk is assumed. This phase does not manually trigger deployment.
 
 ## Current limitations
 
@@ -223,7 +285,11 @@ that genuinely need native tooling.
 - Visual signatures are not cryptographic digital signatures. Certificate
   signing, verification, and signature persistence are not implemented.
 - Password fields and push-button or PDF JavaScript behavior are not exported.
-- OCR, compression, and conversion are not implemented.
+- OCR and conversion are not implemented.
+- Compression is lossy for images and may change document-level metadata and
+  other non-visible features. It targets a flattened visual derivative rather
+  than archival equivalence. Savings depend on PDF content.
+- Render's free service can cold-start; request timeouts and retry are intentional.
 - Canvas annotations are projected visually; the current-page semantic list is
   the keyboard and screen-reader path for existing annotations.
 - Text export is limited to glyphs supported by Standard Helvetica; custom
