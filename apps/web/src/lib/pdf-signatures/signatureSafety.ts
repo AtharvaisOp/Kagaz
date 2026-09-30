@@ -1,13 +1,6 @@
-import {
-  PDFArray,
-  PDFDict,
-  PDFName,
-  PDFNull,
-  PDFRef,
-  PDFSignature,
-  PDFStream,
-} from 'pdf-lib';
+import { PDFArray, PDFDict, PDFName, PDFNull, PDFStream } from 'pdf-lib';
 import type { PDFDocument, PDFObject } from 'pdf-lib';
+import { assertFormStructure } from './formStructure';
 
 export const SIGNED_PDF_MESSAGE =
   'This PDF contains a digital-signature value or byte-range structure. Kagaz does not modify digitally signed PDFs because changes can invalidate the signature.';
@@ -30,7 +23,8 @@ export function assertNoDigitalSignature(document: PDFDocument): void {
     if (visited.has(object)) continue;
     visited.add(object);
     if (object instanceof PDFStream) pending.push(object.dict);
-    if (object instanceof PDFArray) pending.push(...object.asArray());
+    if (object instanceof PDFArray)
+      for (const child of object.asArray()) pending.push(child);
     if (!(object instanceof PDFDict)) continue;
 
     // Also catches malformed, orphaned, inline, and document timestamp
@@ -50,18 +44,19 @@ export function assertNoDigitalSignature(document: PDFDocument): void {
             if (document.context.lookup(value) !== PDFNull)
               throw new SignedPdfError();
           }
-          break;
         }
         ancestor = ancestor.lookupMaybe(PDFName.of('Parent'), PDFDict);
       }
     }
-    const type = object.get(PDFName.of('Type'))?.toString();
+    const type = document.context
+      .lookup(object.get(PDFName.of('Type')))
+      ?.toString();
     if (
       (type === '/Sig' || type === '/DocTimeStamp') &&
       object.has(PDFName.of('Contents'))
     )
       throw new SignedPdfError();
-    pending.push(...object.values());
+    for (const child of object.values()) pending.push(child);
   }
 }
 
@@ -74,7 +69,41 @@ export async function inspectSourceSignatureSafety(
     throwOnInvalidObject: true,
   });
   assertNoDigitalSignature(document);
+  assertNoExecutableActions(document);
   assertUnsignedSignatureStructure(document);
+}
+
+export class UnsafePdfActionError extends Error {
+  constructor() {
+    super(
+      'This PDF contains JavaScript actions. Kagaz cannot safely edit or export PDF scripts.',
+    );
+    this.name = 'UnsafePdfActionError';
+  }
+}
+
+export function assertNoExecutableActions(document: PDFDocument): void {
+  const pending: PDFObject[] = document.context
+    .enumerateIndirectObjects()
+    .map(([, object]) => object);
+  const seen = new Set<PDFObject>();
+  while (pending.length) {
+    const object = pending.pop()!;
+    if (seen.has(object)) continue;
+    seen.add(object);
+    if (object instanceof PDFStream) pending.push(object.dict);
+    if (object instanceof PDFArray)
+      for (const value of object.asArray()) pending.push(value);
+    if (object instanceof PDFDict) {
+      if (
+        object.has(PDFName.of('JS')) ||
+        document.context.lookup(object.get(PDFName.of('S')))?.toString() ===
+          '/JavaScript'
+      )
+        throw new UnsafePdfActionError();
+      for (const value of object.values()) pending.push(value);
+    }
+  }
 }
 
 export class UnsafeSignatureFieldError extends Error {
@@ -88,43 +117,12 @@ export class UnsafeSignatureFieldError extends Error {
 
 /** Limit widget placement to unambiguous, page-owned terminal fields. */
 export function assertUnsignedSignatureStructure(document: PDFDocument): void {
+  assertFormStructure(document);
   if (!document.catalog.getAcroForm()) return;
   const fields = document.getForm().getFields();
-  const signatures = fields.filter((field) => field instanceof PDFSignature);
-  if (signatures.length === 0) return;
   const fieldNames = new Set<string>();
   for (const field of fields) {
     if (fieldNames.has(field.getName())) throw new UnsafeSignatureFieldError();
     fieldNames.add(field.getName());
-  }
-  const pages = document.getPages();
-  for (const field of signatures) {
-    for (const widget of field.acroField.getWidgets()) {
-      const rect = widget.getRectangle();
-      if (
-        ![rect.x, rect.y, rect.width, rect.height].every(Number.isFinite) ||
-        rect.width <= 0 ||
-        rect.height <= 0
-      )
-        throw new UnsafeSignatureFieldError();
-      const owners = pages.filter((page) =>
-        page.node
-          .Annots()
-          ?.asArray()
-          .some(
-            (ref) =>
-              ref instanceof PDFRef &&
-              document.context.lookup(ref) === widget.dict,
-          ),
-      );
-      if (owners.length !== 1 || (widget.P() && widget.P() !== owners[0]!.ref))
-        throw new UnsafeSignatureFieldError();
-      const parent = widget.dict.get(PDFName.of('Parent'));
-      if (
-        widget.dict !== field.acroField.dict &&
-        document.context.lookup(parent) !== field.acroField.dict
-      )
-        throw new UnsafeSignatureFieldError();
-    }
   }
 }

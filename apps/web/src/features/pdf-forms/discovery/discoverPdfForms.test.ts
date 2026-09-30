@@ -179,3 +179,43 @@ describe('discoverPdfForms', () => {
     });
   });
 });
+
+describe('hostile discovery metadata and cancellation', () => {
+  it('never retains password plaintext in the form model', async () => {
+    const { document } = fakeDocument([
+      [
+        widget({
+          password: true,
+          fieldValue: 'secret',
+          defaultFieldValue: 'secret',
+        }),
+      ],
+    ]);
+    expect(
+      JSON.stringify(await discoverPdfForms('source', document)),
+    ).not.toContain('secret');
+  });
+  it.each([
+    [0, 0, 'bad', 30, 40],
+    [0, 0, 0, 4],
+    [0, 0, Infinity, 4],
+  ])(
+    'skips an invalid widget rect %j without repairing it',
+    async (...rect) => {
+      const { document } = fakeDocument([[widget({ rect })]]);
+      expect((await discoverPdfForms('source', document)).widgets).toEqual([]);
+    },
+  );
+  it('aborts after the last annotation await and releases the borrowed page', async () => {
+    const { document, pageProxies } = fakeDocument([[widget({})]]);
+    const controller = new AbortController();
+    pageProxies[0]!.getAnnotations.mockImplementation(() => {
+      controller.abort();
+      return Promise.resolve([widget({})]);
+    });
+    await expect(
+      discoverPdfForms('source', document, { signal: controller.signal }),
+    ).rejects.toMatchObject({ name: 'AbortError' });
+    expect(pageProxies[0]!.cleanup).toHaveBeenCalledOnce();
+  });
+});

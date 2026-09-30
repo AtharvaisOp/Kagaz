@@ -1,3 +1,4 @@
+import type { PdfFormsController } from '../../pdf-forms/hooks/usePdfForms';
 import { useEffect, useRef, useState } from 'react';
 import { DragDropProvider } from '@dnd-kit/react';
 import { isSortableOperation, useSortable } from '@dnd-kit/react/sortable';
@@ -40,6 +41,7 @@ interface ThumbnailRailProps {
   readonly getAnnotationsForPage: (
     pageId: WorkspacePageId,
   ) => readonly PdfAnnotation[];
+  readonly formController: PdfFormsController;
   readonly assetRegistry: AnnotationAssetRegistry;
 }
 
@@ -56,6 +58,7 @@ interface ThumbnailItemProps {
   readonly onDelete: (pageId: WorkspacePageId) => void;
   readonly onRotate: (pageId: WorkspacePageId) => void;
   readonly annotations: readonly PdfAnnotation[];
+  readonly formController: PdfFormsController;
   readonly assetRegistry: AnnotationAssetRegistry;
 }
 
@@ -73,6 +76,7 @@ function ThumbnailItem({
   onRotate,
   annotations,
   assetRegistry,
+  formController,
 }: ThumbnailItemProps) {
   const { isDragging, isDropping, isDropTarget, handleRef, ref } = useSortable({
     id: page.id,
@@ -116,6 +120,7 @@ function ThumbnailItem({
             root={railRoot}
             annotations={annotations}
             assetRegistry={assetRegistry}
+            formController={formController}
           />
           <span className="thumbnail-page-number">
             {String(position + 1).padStart(2, '0')}
@@ -207,6 +212,7 @@ export function ThumbnailRail({
   onRotatePage,
   getAnnotationsForPage,
   assetRegistry,
+  formController,
 }: ThumbnailRailProps) {
   const [railRoot, setRailRoot] = useState<HTMLElement | null>(null);
   const [announcement, setAnnouncement] = useState('');
@@ -320,6 +326,7 @@ export function ThumbnailRail({
                 onRotate={handleRotate}
                 annotations={getAnnotationsForPage(page.id)}
                 assetRegistry={assetRegistry}
+                formController={formController}
               />
             ))}
           </ol>

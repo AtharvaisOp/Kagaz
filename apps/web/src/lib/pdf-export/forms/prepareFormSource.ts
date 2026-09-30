@@ -342,8 +342,11 @@ function validateFields(
   pdfLib: PdfLibRuntime,
   fileName: string,
 ): readonly ValidatedField[] {
+  const fieldsByName = new Map(
+    form.getFields().map((field) => [field.getName(), field]),
+  );
   const validated = snapshot.fields.map((fieldSnapshot) => {
-    const field = form.getFieldMaybe(fieldSnapshot.name);
+    const field = fieldsByName.get(fieldSnapshot.name);
     if (!field) {
       throw formError(
         'missing-field',

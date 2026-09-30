@@ -234,7 +234,9 @@ export function usePdfAnnotations(
         action.type !== 'PRUNE_REMOVED_PAGES' &&
         action.type !== 'RESET_ANNOTATIONS'
       ) {
-        history?.record();
+        if ('annotation' in action)
+          history?.record([action.annotation.workspacePageId]);
+        else if ('pageId' in action) history?.record([action.pageId]);
       }
     },
     [history],
@@ -248,7 +250,7 @@ export function usePdfAnnotations(
     const removedPageIds = findRemovedWorkspacePageIds(state, committedPageIds);
     if (removedPageIds.length > 0) {
       dispatch({ type: 'PRUNE_REMOVED_PAGES', pageIds: removedPageIds });
-      history?.prune();
+      history?.prune(removedPageIds);
     }
   }, [committedPageIds, history, state]);
 
@@ -389,6 +391,7 @@ export function usePdfAnnotations(
 
   const resetAnnotations = useCallback(() => {
     imageRequestVersionRef.current += 1;
+    assetRegistry.destroyAll();
     pendingImageRef.current = null;
     setPendingImage(null);
     pendingSignatureRef.current = null;
@@ -403,7 +406,7 @@ export function usePdfAnnotations(
     setActiveToolState('select');
     setImageError(null);
     dispatch({ type: 'RESET_ANNOTATIONS' });
-  }, []);
+  }, [assetRegistry]);
 
   const setActiveTool = useCallback(
     (tool: AnnotationTool) => {

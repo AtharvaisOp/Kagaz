@@ -24,7 +24,8 @@ function snapshotField(
 ): FormExportFieldSnapshot | null {
   if (!isFormExportFieldKind(field.kind)) return null;
   const initial = initialFormValue(field);
-  const current = state.present.byField[field.id] ?? initial;
+  const committed = state.present.byField[field.id];
+  const current = committed === undefined ? initial : committed;
   return Object.freeze({
     name: field.name,
     kind: field.kind,

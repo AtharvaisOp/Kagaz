@@ -157,6 +157,15 @@ export async function exportWorkspace(
         );
       }
       try {
+        signatureSafety.assertNoExecutableActions(sourceDocument);
+      } catch {
+        throw new FormExportError(
+          'unsupported-source',
+          'This PDF contains JavaScript actions, which Kagaz cannot safely export.',
+          source.fileName,
+        );
+      }
+      try {
         signatureSafety.assertUnsignedSignatureStructure(sourceDocument);
       } catch {
         throw new FormExportError(

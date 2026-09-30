@@ -102,10 +102,12 @@ export function initializeFormSource(
 ): FormHistoryState {
   const baseline = cloneDocument(state.baseline);
   const present = cloneDocument(state.present);
+  const added: Record<FormFieldId, FormValue> = {};
   let changed = false;
   for (const [fieldId, value] of Object.entries(initialValues)) {
     if (baseline.byField[fieldId] === undefined) {
       baseline.byField[fieldId] = cloneFormValue(value);
+      added[fieldId] = cloneFormValue(value);
       changed = true;
     }
     if (present.byField[fieldId] === undefined) {
@@ -116,7 +118,19 @@ export function initializeFormSource(
     }
   }
   if (!changed) return state;
-  return { ...state, baseline, present, dirty: dirty(present, baseline) };
+  const initializeSnapshot = (
+    document: FormValueDocument,
+  ): FormValueDocument => ({
+    byField: { ...added, ...document.byField },
+  });
+  return {
+    ...state,
+    baseline,
+    present,
+    past: state.past.map(initializeSnapshot),
+    future: state.future.map(initializeSnapshot),
+    dirty: dirty(present, baseline),
+  };
 }
 
 function pruneDocument(

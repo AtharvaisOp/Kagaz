@@ -29,6 +29,14 @@ describe('form history reducer', () => {
       'source-b:name': 'Katherine',
     });
     expect(state.dirty).toBe(true);
+    state = formReducer(state, { type: 'UNDO' });
+    expect(state.present.byField).toEqual({
+      'source-a:name': 'Ada',
+      'source-b:name': 'Katherine',
+    });
+    expect(state.dirty).toBe(false);
+    state = formReducer(state, { type: 'REDO' });
+    expect(state.present.byField['source-b:name']).toBe('Katherine');
   });
 
   it('supports semantic undo/redo and invalidates the future branch', () => {

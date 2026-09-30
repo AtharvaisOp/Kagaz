@@ -78,6 +78,19 @@ See [Phase 3F engineering and verification notes](docs/phase-3f.md) for the
 pdf-lib investigation, supported structures, inherited-change review, and
 repeatable browser artifact checks.
 
+## Phase 3G hardening
+
+Committed supported form values now appear in lazy Canvas2D page thumbnails,
+including repeated widgets and independent duplicate sources. Thumbnail text is
+an approximate preview, not a replacement for the exported PDF appearance.
+Malformed field trees, ambiguous widget ownership, invalid geometry, digital
+signature structures, and JavaScript actions fail closed. Source discovery,
+reset, image assets, and the unified form/annotation history have additional
+lifecycle protection.
+
+See [Phase 3G audit and verification](docs/phase-3g.md) for defects repaired,
+repeatable browser scripts, performance observations, and remaining limitations.
+
 ## Privacy-first architecture
 
 PDF source files stay in the browser for current Phase 1 operations. The
@@ -85,20 +98,20 @@ backend is not involved in PDF editing or export.
 
 ```text
 Browser
-│
-├─ SourceDocumentRegistry
-│    └─ PDF.js source documents and loading lifecycle
-│
-├─ WorkspacePage[]
-│    └─ order, source page, rotation, selection
-│
-├─ Thumbnail / main viewer
-│
-└─ pdf-lib export
-     └─ browser-local Blob download
+â”‚
+â”œâ”€ SourceDocumentRegistry
+â”‚    â””â”€ PDF.js source documents and loading lifecycle
+â”‚
+â”œâ”€ WorkspacePage[]
+â”‚    â””â”€ order, source page, rotation, selection
+â”‚
+â”œâ”€ Thumbnail / main viewer
+â”‚
+â””â”€ pdf-lib export
+     â””â”€ browser-local Blob download
 
 Backend
-└─ Express /health foundation for future server-heavy work
+â””â”€ Express /health foundation for future server-heavy work
 ```
 
 PDF.js is responsible for preview and rendering. The workspace and annotation
@@ -222,9 +235,9 @@ that genuinely need native tooling.
 
 ## Roadmap
 
-- Phase 2 — annotations (complete)
-- Phase 3 — forms and signatures
-- Phase 4 — server-backed heavy processing such as OCR and conversion
+- Phase 2 â€” annotations (complete)
+- Phase 3 â€” forms and signatures
+- Phase 4 â€” server-backed heavy processing such as OCR and conversion
 
 The browser-local architecture remains the default for operations that can be
 performed safely on the device.

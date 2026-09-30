@@ -150,6 +150,9 @@ export function usePdfForms(
   const sessionCounterRef = useRef(0);
   const activeFieldIdsRef = useRef<ReadonlySet<FormFieldId> | null>(null);
   const sourceDefinitionsRef = useRef(sourceDefinitions);
+  const discoveredRef = useRef(
+    new Map<SourceDocumentId, FormSourceDefinition>(),
+  );
   const signature = sourceSignature(workspace);
 
   useLayoutEffect(() => {
@@ -167,18 +170,24 @@ export function usePdfForms(
         workspace.sources[sourceId]?.status === 'ready' &&
         registry.getDocument(sourceId) !== null,
     );
+    for (const sourceId of discoveredRef.current.keys())
+      if (!readySourceIds.includes(sourceId))
+        discoveredRef.current.delete(sourceId);
     setSourceDefinitions((previous) => {
       const next = new Map<SourceDocumentId, FormSourceDefinition>();
       for (const sourceId of readySourceIds) {
-        next.set(sourceId, {
-          sourceDocumentId: sourceId,
-          status: 'discovering',
-          hasDigitalSignature:
-            previous.get(sourceId)?.hasDigitalSignature ?? false,
-          fields: previous.get(sourceId)?.fields ?? [],
-          widgets: previous.get(sourceId)?.widgets ?? [],
-          error: null,
-        });
+        next.set(
+          sourceId,
+          discoveredRef.current.get(sourceId) ?? {
+            sourceDocumentId: sourceId,
+            status: 'discovering',
+            hasDigitalSignature:
+              previous.get(sourceId)?.hasDigitalSignature ?? false,
+            fields: previous.get(sourceId)?.fields ?? [],
+            widgets: previous.get(sourceId)?.widgets ?? [],
+            error: null,
+          },
+        );
       }
       return next;
     });
@@ -186,6 +195,7 @@ export function usePdfForms(
       for (const sourceId of readySourceIds) {
         if (controller.signal.aborted || generationRef.current !== generation)
           return;
+        if (discoveredRef.current.has(sourceId)) continue;
         const document = registry.getDocument(sourceId);
         if (!document) continue;
         try {
@@ -194,15 +204,12 @@ export function usePdfForms(
           });
           if (controller.signal.aborted || generationRef.current !== generation)
             return;
+          discoveredRef.current.set(sourceId, definition);
           setSourceDefinitions((previous) => {
             if (!previous.has(sourceId)) return previous;
             const next = new Map(previous);
             next.set(sourceId, definition);
             return next;
-          });
-          dispatch({
-            type: 'INITIALIZE_SOURCE',
-            initialValues: initialValuesFor(definition),
           });
         } catch (error: unknown) {
           if (
@@ -252,6 +259,19 @@ export function usePdfForms(
   useEffect(() => {
     const previous = activeFieldIdsRef.current;
     const active = new Set(activeFieldIds);
+    if (sessionRef.current && !active.has(sessionRef.current.fieldId)) {
+      sessionRef.current = null;
+      setTextEditSession(null);
+    }
+    // Initialize and prune from the same committed discovery view. Dispatching
+    // initialization from an async discovery continuation can otherwise race a
+    // previous render's prune and erase a newly discovered source's baseline.
+    const initialValues: Record<FormFieldId, FormValue> = {};
+    for (const source of sourceDefinitions.values()) {
+      for (const [fieldId, value] of Object.entries(initialValuesFor(source)))
+        if (active.has(fieldId)) initialValues[fieldId] = value;
+    }
+    dispatch({ type: 'INITIALIZE_SOURCE', initialValues });
     dispatch({ type: 'PRUNE_FIELDS', fieldIds: activeFieldIds });
     if (history && previous) {
       const removedFieldIds = [...previous].filter(
@@ -260,7 +280,7 @@ export function usePdfForms(
       if (removedFieldIds.length > 0) history.prune(removedFieldIds);
     }
     activeFieldIdsRef.current = active;
-  }, [activeFieldIds, history]);
+  }, [activeFieldIds, history, sourceDefinitions]);
 
   const getField = useCallback(
     (fieldId: FormFieldId) => fields.get(fieldId),
@@ -270,14 +290,28 @@ export function usePdfForms(
     (fieldId: FormFieldId) => state.present.byField[fieldId],
     [state.present],
   );
+  const widgetsBySourcePage = useMemo(() => {
+    const sources = new Map<
+      SourceDocumentId,
+      Map<number, FormWidgetDefinition[]>
+    >();
+    for (const source of sourceDefinitions.values()) {
+      const pages = new Map<number, FormWidgetDefinition[]>();
+      for (const widget of source.widgets) {
+        const widgets = pages.get(widget.sourcePageIndex) ?? [];
+        widgets.push(widget);
+        pages.set(widget.sourcePageIndex, widgets);
+      }
+      sources.set(source.sourceDocumentId, pages);
+    }
+    return sources;
+  }, [sourceDefinitions]);
   const getWidgetsForWorkspacePage = useCallback(
     (page: WorkspacePage) =>
-      sourceDefinitions
+      widgetsBySourcePage
         .get(page.sourceDocumentId)
-        ?.widgets.filter(
-          (widget) => widget.sourcePageIndex === page.sourcePageIndex,
-        ) ?? [],
-    [sourceDefinitions],
+        ?.get(page.sourcePageIndex) ?? [],
+    [widgetsBySourcePage],
   );
   const hasFormsForSource = useCallback(
     (sourceId: SourceDocumentId) => {
@@ -438,6 +472,11 @@ export function usePdfForms(
     [domainRedo, history],
   );
   const resetForms = useCallback(() => {
+    generationRef.current += 1;
+    discoveredRef.current.clear();
+    sourceDefinitionsRef.current = new Map();
+    setSourceDefinitions(new Map());
+    activeFieldIdsRef.current = null;
     sessionRef.current = null;
     setTextEditSession(null);
     dispatch({ type: 'RESET_FORMS' });

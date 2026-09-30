@@ -210,3 +210,38 @@ describe('image asset reachability', () => {
     expect(collectReachableAnnotationAssetIds(state)).toEqual(new Set());
   });
 });
+
+it('destroyAll invalidates in-flight decoding and revokes its URL exactly once', async () => {
+  let finish!: (value: {
+    width: number;
+    height: number;
+    image: CanvasImageSource;
+  }) => void;
+  const close = vi.fn(),
+    revoke = vi.fn();
+  const registry = createAnnotationAssetRegistry({
+    createId: () => 'pending',
+    createObjectUrl: () => 'blob:pending',
+    revokeObjectUrl: revoke,
+    decode: () =>
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+  });
+  const loading = registry.register(new Blob(['png'], { type: 'image/png' }));
+  const rejected = expect(loading).rejects.toMatchObject({
+    name: 'AbortError',
+  });
+  registry.destroyAll();
+  expect(revoke).toHaveBeenCalledExactlyOnceWith('blob:pending');
+  finish({
+    width: 10,
+    height: 10,
+    image: { close } as unknown as CanvasImageSource,
+  });
+  await rejected;
+  registry.destroyAll();
+  expect(registry.size).toBe(0);
+  expect(close).toHaveBeenCalledOnce();
+  expect(revoke).toHaveBeenCalledOnce();
+});

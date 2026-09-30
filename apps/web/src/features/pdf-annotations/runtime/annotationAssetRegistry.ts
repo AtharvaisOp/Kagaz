@@ -51,6 +51,11 @@ export function createAnnotationAssetRegistry(
 ) {
   const assets = new Map<AnnotationAssetId, AnnotationImageAsset>();
   const listeners = new Map<AnnotationAssetId, Set<() => void>>();
+  const pendingUrls = new Set<string>();
+  let generation = 0;
+  const revokePending = (url: string) => {
+    if (pendingUrls.delete(url)) dependencies.revokeObjectUrl(url);
+  };
 
   const notify = (assetId: AnnotationAssetId) => {
     for (const listener of listeners.get(assetId) ?? []) listener();
@@ -70,6 +75,7 @@ export function createAnnotationAssetRegistry(
 
   return {
     async register(blob: Blob): Promise<AnnotationImageAsset> {
+      const requestGeneration = generation;
       if (!supportedMimeTypes.has(blob.type)) {
         throw new Error('Choose a PNG or JPEG image.');
       }
@@ -77,10 +83,18 @@ export function createAnnotationAssetRegistry(
       if (mimeType === 'image/jpeg') {
         await rejectUnsupportedJpegOrientation(blob);
       }
+      if (requestGeneration !== generation)
+        throw new DOMException('Image loading was cancelled.', 'AbortError');
       const assetId = dependencies.createId();
       const objectUrl = dependencies.createObjectUrl(blob);
+      pendingUrls.add(objectUrl);
       try {
         const decoded = await dependencies.decode(blob, objectUrl);
+        if (requestGeneration !== generation) {
+          const close = (decoded.image as { close?: () => void }).close;
+          close?.call(decoded.image);
+          throw new DOMException('Image loading was cancelled.', 'AbortError');
+        }
         if (
           !Number.isFinite(decoded.width) ||
           decoded.width <= 0 ||
@@ -105,10 +119,11 @@ export function createAnnotationAssetRegistry(
           image: decoded.image,
         };
         assets.set(assetId, asset);
+        pendingUrls.delete(objectUrl);
         notify(assetId);
         return asset;
       } catch (error) {
-        dependencies.revokeObjectUrl(objectUrl);
+        revokePending(objectUrl);
         throw error instanceof Error
           ? error
           : new Error('The selected image could not be decoded.');
@@ -133,6 +148,8 @@ export function createAnnotationAssetRegistry(
     },
     destroy,
     destroyAll(): void {
+      generation += 1;
+      for (const url of pendingUrls) revokePending(url);
       for (const assetId of [...assets.keys()]) destroy(assetId);
     },
     get size() {

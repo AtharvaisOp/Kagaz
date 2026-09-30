@@ -64,6 +64,8 @@ export function describePdfError(error: unknown): string {
   if (error instanceof Error) {
     if (
       error.name === 'SignedPdfError' ||
+      error.name === 'UnsafeFormStructureError' ||
+      error.name === 'UnsafePdfActionError' ||
       error.name === 'UnsafeSignatureFieldError'
     )
       return error.message;

@@ -214,6 +214,7 @@ export function PdfViewer({
       </div>
       <div className="workspace-layout">
         <ThumbnailRail
+          formController={formController}
           pages={pages}
           sources={sources}
           registry={registry}

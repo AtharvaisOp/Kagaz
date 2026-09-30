@@ -156,6 +156,7 @@ export function ViewerToolbar({
         <button
           className="toolbar-button start-over-button"
           type="button"
+          onMouseDown={(event) => event.preventDefault()}
           onClick={onStartOver}
         >
           <CloseIcon className="size-4" />

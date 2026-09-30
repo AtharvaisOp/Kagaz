@@ -1,3 +1,5 @@
+import { drawThumbnailForms, projectThumbnailForms } from './thumbnailForms';
+import type { PdfFormsController } from '../../pdf-forms/hooks/usePdfForms';
 import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { normalizeRotation } from '../model/operations';
@@ -24,6 +26,7 @@ interface ThumbnailCanvasProps {
   readonly document: PDFDocumentProxy | null;
   readonly root: HTMLElement | null;
   readonly annotations: readonly PdfAnnotation[];
+  readonly formController: PdfFormsController;
   readonly assetRegistry: AnnotationAssetRegistry;
 }
 
@@ -37,6 +40,7 @@ export function ThumbnailCanvas({
   root,
   annotations,
   assetRegistry,
+  formController,
 }: ThumbnailCanvasProps) {
   const shellRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -133,6 +137,7 @@ export function ThumbnailCanvas({
         setSurfaceSize({ width: viewport.width, height: viewport.height });
         setViewport(viewport);
         renderTask = ownedPage.render({
+          annotationMode: 2, // PDF.js ENABLE_FORMS: omit native widget appearances.
           canvas,
           canvasContext: context,
           transform:
@@ -171,6 +176,20 @@ export function ThumbnailCanvas({
     const context = canvas.getContext('2d');
     if (!context) return;
     context.clearRect(0, 0, canvas.width, canvas.height);
+    if (
+      formController.sources.get(page.sourceDocumentId)?.status === 'acroform'
+    ) {
+      drawThumbnailForms(
+        context,
+        projectThumbnailForms(
+          formController.getWidgetsForWorkspacePage(page),
+          formController.getField,
+          formController.getValue,
+          viewport,
+        ),
+        pixelRatio,
+      );
+    }
     drawThumbnailAnnotations(
       context,
       projectThumbnailAnnotations(annotations, viewport, {
@@ -178,7 +197,16 @@ export function ThumbnailCanvas({
       }),
       pixelRatio,
     );
-  }, [annotations, assetRegistry, assetVersion, pixelRatio, status, viewport]);
+  }, [
+    annotations,
+    assetRegistry,
+    assetVersion,
+    pixelRatio,
+    status,
+    viewport,
+    formController,
+    page,
+  ]);
 
   return (
     <div ref={shellRef} className="thumbnail-canvas-shell" data-status={status}>

@@ -79,6 +79,10 @@ export function SignatureCreator({
   const drawCanvasRef = useRef<HTMLCanvasElement>(null);
   const typeCanvasRef = useRef<HTMLCanvasElement>(null);
   const uploadRef = useRef<HTMLInputElement>(null);
+  const dialogRef = useRef<HTMLElement>(null);
+  const generationRef = useRef(0);
+  const busyRef = useRef(false);
+  const [busy, setBusy] = useState(false);
   const [method, setMethod] = useState<SignatureMethod>('draw');
   const [strokes, setStrokes] = useState<readonly (readonly Point[])[]>([]);
   const [activeStroke, setActiveStroke] = useState<readonly Point[] | null>(
@@ -91,37 +95,71 @@ export function SignatureCreator({
       drawCanvasRef.current,
       activeStroke ? [...strokes, activeStroke] : strokes,
     );
-  }, [activeStroke, strokes]);
+  }, [activeStroke, strokes, method]);
 
   useEffect(() => {
     drawTypedText(typeCanvasRef.current, typedValue);
-  }, [typedValue]);
+  }, [typedValue, method]);
 
   useEffect(() => {
     if (!open) return;
+    const trigger = document.activeElement;
+    dialogRef.current?.querySelector<HTMLButtonElement>('button')?.focus();
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
         event.preventDefault();
         onClose();
       }
+      if (event.key === 'Tab') {
+        const items = [
+          ...(dialogRef.current?.querySelectorAll<HTMLElement>(
+            'button:not([disabled]), input:not([disabled]), [tabindex="0"]',
+          ) ?? []),
+        ].filter((item) => item.getClientRects().length > 0);
+        const first = items[0];
+        const last = items[items.length - 1];
+        if (
+          first &&
+          last &&
+          (event.shiftKey
+            ? document.activeElement === first
+            : document.activeElement === last)
+        ) {
+          event.preventDefault();
+          (event.shiftKey ? last : first).focus();
+        }
+      }
     };
     window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
+    return () => {
+      generationRef.current += 1;
+      window.removeEventListener('keydown', handleKeyDown);
+      if (trigger instanceof HTMLElement && trigger.isConnected)
+        trigger.focus();
+    };
   }, [onClose, open]);
 
   if (!open) return null;
 
-  const acceptDraw = async () => {
-    const blob = await canvasBlob(drawCanvasRef.current);
-    if (strokes.length === 0 || !blob) return;
-    await onCreate(blob, 'draw');
-  };
-
-  const acceptType = async () => {
-    if (!typedValue.trim()) return;
-    const blob = await canvasBlob(typeCanvasRef.current);
-    if (!blob) return;
-    await onCreate(blob, 'type');
+  const acceptCanvas = async (kind: 'draw' | 'type') => {
+    if (
+      busyRef.current ||
+      (kind === 'draw' ? strokes.length === 0 : !typedValue.trim())
+    )
+      return;
+    busyRef.current = true;
+    setBusy(true);
+    const generation = generationRef.current;
+    try {
+      const blob = await canvasBlob(
+        kind === 'draw' ? drawCanvasRef.current : typeCanvasRef.current,
+      );
+      if (!blob || generation !== generationRef.current) return;
+      await onCreate(blob, kind);
+    } finally {
+      busyRef.current = false;
+      if (generation === generationRef.current) setBusy(false);
+    }
   };
 
   const handlePointerDown = (event: React.PointerEvent<HTMLCanvasElement>) => {
@@ -147,10 +185,12 @@ export function SignatureCreator({
   return (
     <div className="signature-dialog-scrim" role="presentation">
       <section
+        ref={dialogRef}
         className="signature-dialog"
         role="dialog"
         aria-modal="true"
         aria-labelledby="signature-dialog-title"
+        aria-busy={busy}
       >
         <div className="signature-dialog-heading">
           <div>
@@ -163,7 +203,7 @@ export function SignatureCreator({
             aria-label="Close signature creator"
             onClick={onClose}
           >
-            ×
+            Ã—
           </button>
         </div>
         <p className="signature-dialog-hint">
@@ -180,9 +220,33 @@ export function SignatureCreator({
               key={item}
               type="button"
               role="tab"
+              disabled={busy}
               aria-selected={method === item}
+              tabIndex={method === item ? 0 : -1}
               className="annotation-tool-button"
               onClick={() => setMethod(item)}
+              onKeyDown={(event) => {
+                const methods = ['draw', 'type', 'upload'] as const;
+                const index = methods.indexOf(item);
+                const next =
+                  event.key === 'ArrowRight'
+                    ? (index + 1) % 3
+                    : event.key === 'ArrowLeft'
+                      ? (index + 2) % 3
+                      : event.key === 'Home'
+                        ? 0
+                        : event.key === 'End'
+                          ? 2
+                          : null;
+                if (next === null) return;
+                event.preventDefault();
+                setMethod(methods[next]!);
+                const tabs =
+                  event.currentTarget.parentElement?.querySelectorAll<HTMLButtonElement>(
+                    '[role="tab"]',
+                  );
+                tabs?.item(next).focus();
+              }}
             >
               {item.charAt(0).toUpperCase() + item.slice(1)}
             </button>
@@ -221,7 +285,7 @@ export function SignatureCreator({
               <button
                 type="button"
                 className="text-button"
-                disabled={strokes.length === 0}
+                disabled={busy || strokes.length === 0}
                 onClick={() => setStrokes(strokes.slice(0, -1))}
               >
                 Undo stroke
@@ -286,8 +350,8 @@ export function SignatureCreator({
             <button
               type="button"
               className="primary-button"
-              disabled={strokes.length === 0}
-              onClick={() => void acceptDraw()}
+              disabled={busy || strokes.length === 0}
+              onClick={() => void acceptCanvas('draw')}
             >
               Use signature
             </button>
@@ -296,8 +360,8 @@ export function SignatureCreator({
             <button
               type="button"
               className="primary-button"
-              disabled={!typedValue.trim()}
-              onClick={() => void acceptType()}
+              disabled={busy || !typedValue.trim()}
+              onClick={() => void acceptCanvas('type')}
             >
               Use signature
             </button>

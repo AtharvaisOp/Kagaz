@@ -129,7 +129,6 @@ function fieldValueFor(
   switch (kind) {
     case 'text':
     case 'multiline-text':
-    case 'password':
       return {
         kind: 'text',
         current: asString(annotation.fieldValue) ?? '',
@@ -201,13 +200,11 @@ function normalizedWidget(
   widgetIndex: number,
 ): NormalizedWidget | null {
   if (annotation.subtype !== 'Widget') return null;
-  const rawRect = Array.isArray(annotation.rect)
-    ? normalizeRawRect(
-        annotation.rect.filter(
-          (value): value is number => typeof value === 'number',
-        ),
-      )
-    : null;
+  const rawRect =
+    Array.isArray(annotation.rect) &&
+    annotation.rect.every((value): value is number => typeof value === 'number')
+      ? normalizeRawRect(annotation.rect)
+      : null;
   if (!rawRect) return null;
 
   const annotationId =
@@ -401,6 +398,7 @@ export async function discoverPdfForms(
     readMetadataInfo(document),
     document.getSignatures(),
   ]);
+  throwIfAborted(options.signal);
   const xfa = detectXfa({ metadataInfo });
   if (xfa.detected) {
     return {
@@ -426,6 +424,7 @@ export async function discoverPdfForms(
       page = await document.getPage(sourcePageIndex + 1);
       throwIfAborted(options.signal);
       const annotations = await page.getAnnotations({ intent: 'display' });
+      throwIfAborted(options.signal);
       for (const [widgetIndex, candidate] of annotations.entries()) {
         const annotation = asWidget(candidate);
         if (!annotation) continue;
@@ -460,7 +459,7 @@ export async function discoverPdfForms(
 
 export function createDiscoveryError(
   sourceDocumentId: string,
-  error: unknown,
+  _error: unknown,
 ): FormSourceDefinition {
   return {
     sourceDocumentId,
@@ -468,9 +467,6 @@ export function createDiscoveryError(
     hasDigitalSignature: false,
     fields: [],
     widgets: [],
-    error:
-      error instanceof Error
-        ? error.message
-        : 'Kagaz could not inspect this PDF form.',
+    error: 'Kagaz could not safely inspect this PDF form. Try another PDF.',
   };
 }

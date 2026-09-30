@@ -138,3 +138,25 @@ describe('form export snapshots', () => {
     expect(snapshot.hasChangedTextDraft).toBe(true);
   });
 });
+
+it('preserves a deliberately cleared choice instead of restoring its initial selection', () => {
+  const field: FormFieldDefinition = {
+    ...textField(),
+    kind: 'dropdown',
+    initialValue: { kind: 'choice', current: ['a'], defaultValue: [] },
+  };
+  const state = {
+    ...createFormHistoryState(),
+    present: { byField: { [field.id]: null } },
+  };
+  const snapshot = snapshotFormsForPages(
+    [page],
+    new Map([['source-a', sourceWith([field])]]),
+    state,
+    null,
+  );
+  expect(snapshot.sources[0]!.fields[0]).toMatchObject({
+    value: null,
+    changed: true,
+  });
+});
