@@ -170,7 +170,11 @@ async function compress(name) {
   );
   await dialog().getByRole('button', { name: 'Compress', exact: true }).click();
   const response = await responseEvent;
-  assert.equal(response.status(), 200, await response.text());
+  // Chromium can discard a fetched PDF's protocol response body once the app
+  // consumes it. Validate successful bytes through the actual download below.
+  if (response.status() !== 200) {
+    assert.fail(`Compression returned HTTP ${response.status()}`);
+  }
   await dialog()
     .getByRole('button', { name: 'Download compressed PDF', exact: true })
     .waitFor();

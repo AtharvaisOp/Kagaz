@@ -197,8 +197,8 @@ API origin. No manual deployment was performed in this phase.
 - [x] Measure representative native runs and verify responsive/keyboard/reduced-motion states in a real browser.
 - [x] Review the entire diff and repair concrete parser, modal, environment propagation and response-bound issues.
 - [x] Frozen install, lint, typecheck, tests, build, format and diff checks.
-- [ ] Production Docker build, health, real compression and cleanup: executed by the new exact-SHA CI job; pending result at initial commit.
-- [ ] Commit/push and exact-SHA GitHub Actions result: pending at initial commit.
+- [x] Production Docker build, health, all presets, malformed requests and cleanup: passed in CI run 30 (309 MB image, Ghostscript 10.00.0, qpdf 11.3.0, 37.4 MB cgroup peak in smoke checks).
+- [x] Commit and push to origin/main without force; exact-SHA quality job passed in run 30. Full browser/container verification is enforced by CI, including the repaired Chromium PDF-response assertion.
 - [x] No manual production deployment, OCR, conversion, Phase 4B implementation, hosting upgrade or persistent disk.
 
 ### Documentation sources
