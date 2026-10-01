@@ -282,6 +282,7 @@ try {
   await button('Use signature').click();
   const uploadsBeforeBlock = uploads.length;
   await button('Compress PDF').click();
+  await dialog().getByRole('alert').waitFor();
   assert(
     await dialog()
       .getByRole('button', { name: 'Compress', exact: true })
@@ -299,6 +300,7 @@ try {
   await fresh(unsafe);
   const blocked = uploads.length;
   await button('Compress PDF').click();
+  await dialog().getByRole('alert').waitFor();
   assert(
     await dialog()
       .getByRole('button', { name: 'Compress', exact: true })

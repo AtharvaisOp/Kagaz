@@ -187,6 +187,25 @@ one/ten/mixed-page runtimes and sizes, cgroup memory peak, expected PDF.js text,
 pdf-lib/qpdf checks and cleanup. Artifacts contain only synthetic fixtures and
 verification reports. It does not deploy production.
 
+## Observed local verification
+
+The final local gate run used pnpm 12.3.4. Frozen installation, lint, typecheck,
+build, format check and diff check passed. All 541 tests passed: the original 471
+plus 70 additions (84 API and 457 web tests overall). Both Phase 4A and Phase 4B
+browser scripts passed against the running web app and built API.
+
+The Windows verification runtime was OCRmyPDF 16.10.4, Tesseract 5.4.0.20240606,
+Ghostscript 10.08.0 and qpdf 12.4.2. Native binaries were isolated outside the
+repository. Docker was unavailable locally; production Linux container evidence
+is collected independently by CI, rather than inferred from this runtime.
+
+Local browser timings include server validation, PDF download, PDF.js extraction
+and render comparison. One page used 65,494 input bytes, produced 69,563 bytes
+and took 7.90 seconds. Three scanned pages used 195,168 bytes, produced 201,630
+bytes and took 13.04 seconds. A mixed three-page document used 130,578 bytes,
+produced 136,050 bytes and took 12.50 seconds, OCRing two pages and skipping one.
+These synthetic fixtures do not establish a Render production speed guarantee.
+
 ## Sources
 
 - [OCRmyPDF existing text, limits and hOCR](https://ocrmypdf.readthedocs.io/en/v14.0.1/advanced.html)
@@ -207,6 +226,19 @@ verification reports. It does not deploy production.
 - [x] Docker and CI verification scripts cover binaries, compression, OCR, searchability, performance, non-root execution and cleanup.
 - [ ] Final complete quality-gate run and actual production container/browser verification.
 - [ ] Commit/push origin/main without force and confirm exact-SHA CI success.
+
+## Important files changed
+
+- `apps/api/src/tools`: OCR orchestration and operation policies, extracted shared
+  PDF validation, shared upload/service lifecycle, runner termination and disk budgets.
+- `apps/api/native/inspect_ocr.py`: bounded preflight and independent output inspection;
+  `apps/api/src/tools/fixtures`: synthetic English raster fixtures and test builder.
+- `apps/web/src/features/pdf-ocr`: dialog, transport, metadata validation and tests;
+  `pdf-heavy-tools`: shared modal, derivative lifecycle and bounded transport.
+- `pdf-viewer` toolbar/viewer: explicit OCR action using the existing safe export;
+  `packages/shared-types`: OCR metadata and shared safe errors.
+- API Dockerfile/environment/package manifests, root CI/Turbo configuration,
+  README, this report and Phase 4B native/container/browser verification scripts.
 
 ## Handoff
 

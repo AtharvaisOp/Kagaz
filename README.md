@@ -96,7 +96,7 @@ repeatable browser scripts, performance observations, and remaining limitations.
 ## Privacy-first architecture
 
 PDF source files stay in the browser for editing and ordinary export. Compression and OCR
-temporarily sends one generated, flattened PDF containing the current page order,
+temporarily send one generated, flattened PDF containing the current page order,
 rotations, annotations, images, filled forms and visual signatures. It never sends
 individual source files. Existing form/signature export blockers apply before any
 upload. Each server tool creates a derivative download and leaves the workspace intact.
@@ -110,20 +110,15 @@ Logs contain error codes rather than PDF contents, filenames or native stderr.
 
 ```text
 Browser
-â”‚
-â”œâ”€ SourceDocumentRegistry
-â”‚    â””â”€ PDF.js source documents and loading lifecycle
-â”‚
-â”œâ”€ WorkspacePage[]
-â”‚    â””â”€ order, source page, rotation, selection
-â”‚
-â”œâ”€ Thumbnail / main viewer
-â”‚
-â””â”€ pdf-lib export
-     â””â”€ browser-local Blob download
+|
++-- SourceDocumentRegistry: PDF.js documents and loading lifecycle
++-- WorkspacePage[]: order, source page, rotation, selection
++-- Thumbnail / main viewer
++-- pdf-lib export: browser-local Blob download
 
 Backend
-â””â”€ Explicit /tools/compress > isolated qpdf/Ghostscript > download > cleanup
++-- Explicit /tools/compress or /tools/ocr
+    +-- isolated native processing > validation > download > cleanup
 ```
 
 PDF.js is responsible for preview and rendering. The workspace and annotation
@@ -147,6 +142,7 @@ initial application bundle or uploading any bytes.
 - pnpm workspaces and Turborepo
 - Express 5 and Docker for the API foundation
 - Ghostscript for compression, qpdf for structural validation, Busboy for streamed uploads
+- OCRmyPDF and Tesseract for English searchable PDF derivatives
 - GitHub Actions, Vercel, and Render deployment paths
 
 ## Local development

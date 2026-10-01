@@ -185,6 +185,7 @@ try {
   await button('Use signature').click();
   const blockedUploads = uploads.length;
   await button('OCR PDF').click();
+  await dialog().getByRole('alert').waitFor();
   assert(
     await dialog()
       .getByRole('button', { name: 'Start OCR', exact: true })
@@ -197,6 +198,7 @@ try {
   await ocr('visual-signature');
   await fresh('password', { form: true, unsafe: true });
   await button('OCR PDF').click();
+  await dialog().getByRole('alert').waitFor();
   assert(
     await dialog()
       .getByRole('button', { name: 'Start OCR', exact: true })
