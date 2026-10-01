@@ -3,5 +3,7 @@
 **/node_modules
 **/dist
 **/.turbo
+**/__pycache__
 .env*
+**/.env*
 *.log

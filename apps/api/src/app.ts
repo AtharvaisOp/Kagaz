@@ -3,7 +3,11 @@ import express from 'express';
 
 import type { HealthResponse } from '@kagaz/shared-types';
 import type { ErrorRequestHandler, Express } from 'express';
-import { COMPRESSION_HEADERS, ToolService } from './tools/service.js';
+import {
+  COMPRESSION_HEADERS,
+  OCR_HEADERS,
+  ToolService,
+} from './tools/service.js';
 
 export function createApp(
   allowedOrigins: string[],
@@ -14,7 +18,7 @@ export function createApp(
   app.disable('x-powered-by');
   app.use(
     cors({
-      exposedHeaders: COMPRESSION_HEADERS,
+      exposedHeaders: [...COMPRESSION_HEADERS, ...OCR_HEADERS],
       methods: ['GET', 'POST', 'OPTIONS'],
       origin(origin, callback) {
         if (!origin || allowedOrigins.includes(origin)) {
@@ -52,6 +56,9 @@ export function createApp(
 
   app.post('/tools/compress', (request, response) =>
     tools.handle(request, response),
+  );
+  app.post('/tools/ocr', (request, response) =>
+    tools.handle(request, response, 'ocr'),
   );
 
   // Multipart tools own their parser and limits. Future JSON routes use this one.

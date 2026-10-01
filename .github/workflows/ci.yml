@@ -42,7 +42,7 @@ jobs:
         # The Docker job below verifies the production image independently.
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends ghostscript qpdf
+          sudo apt-get install -y --no-install-recommends ghostscript qpdf ocrmypdf tesseract-ocr-eng
           pnpm test
 
       - name: Build
@@ -60,6 +60,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - name: Set up pnpm
         uses: pnpm/action-setup@v4
         with:
@@ -73,7 +75,10 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
       - name: Build production API image
-        run: docker build -f apps/api/Dockerfile -t kagaz-api:verify .
+        run: |
+          git show 7fa5d2a4601c4d750da95cbf96137f5c6bb65dd2:apps/api/Dockerfile > /tmp/kagaz-baseline.Dockerfile
+          docker build -f /tmp/kagaz-baseline.Dockerfile -t kagaz-api:baseline .
+          docker build -f apps/api/Dockerfile -t kagaz-api:verify .
       - name: Verify container health, tools, compression, failures and cleanup
         run: node scripts/verify-phase4a-container.mjs
       - name: Install browser
@@ -86,6 +91,13 @@ jobs:
           pnpm --filter @kagaz/web dev --host 127.0.0.1 > /tmp/kagaz-web.log 2>&1 &
           for i in $(seq 1 30); do curl -fsS http://localhost:5173/ > /dev/null && curl -fsS http://localhost:4000/health > /dev/null && break; sleep 1; done
           node scripts/verify-phase4a.mjs
+          node scripts/verify-phase4b.mjs
+      - name: Verify OCR container, searchability, fidelity, limits and performance
+        env:
+          KAGAZ_ARTIFACT_DIR: ${{ runner.temp }}/phase4a-artifacts
+        run: |
+          docker stop kagaz-browser-api
+          node scripts/verify-phase4b-container.mjs
       - name: Save verification artifacts
         if: always()
         uses: actions/upload-artifact@v4

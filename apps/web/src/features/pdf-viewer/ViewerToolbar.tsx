@@ -39,6 +39,8 @@ interface ViewerToolbarProps {
   readonly pagesTriggerRef: RefObject<HTMLButtonElement | null>;
   readonly compressTriggerRef: RefObject<HTMLButtonElement | null>;
   readonly onOpenCompress: () => void;
+  readonly ocrTriggerRef: RefObject<HTMLButtonElement | null>;
+  readonly onOpenOcr: () => void;
 }
 
 export function ViewerToolbar({
@@ -64,6 +66,8 @@ export function ViewerToolbar({
   pagesTriggerRef,
   compressTriggerRef,
   onOpenCompress,
+  ocrTriggerRef,
+  onOpenOcr,
 }: ViewerToolbarProps) {
   const exporting = exportState.status === 'exporting';
   const exportStatus = exportState.progress
@@ -165,6 +169,15 @@ export function ViewerToolbar({
           onClick={onOpenCompress}
         >
           Compress PDF
+        </button>
+        <button
+          ref={ocrTriggerRef}
+          className="toolbar-button"
+          type="button"
+          disabled={exporting || pageCount === 0}
+          onClick={onOpenOcr}
+        >
+          OCR PDF
         </button>
         <button
           className="toolbar-button start-over-button"

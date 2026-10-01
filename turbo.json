@@ -12,6 +12,8 @@
         "CORS_ORIGINS",
         "GHOSTSCRIPT_PATH",
         "QPDF_PATH",
+        "OCRMYPDF_PATH",
+        "OCR_PYTHON_PATH",
         "VITE_API_URL"
       ],
       "cache": false,
@@ -24,7 +26,12 @@
       "dependsOn": ["^typecheck"]
     },
     "test": {
-      "env": ["GHOSTSCRIPT_PATH", "QPDF_PATH"],
+      "env": [
+        "GHOSTSCRIPT_PATH",
+        "QPDF_PATH",
+        "OCRMYPDF_PATH",
+        "OCR_PYTHON_PATH"
+      ],
       "outputs": []
     }
   }

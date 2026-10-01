@@ -19,6 +19,7 @@ import type {
   PdfExportController,
 } from '../pdf-workspace/hooks/usePdfExport';
 import { CompressDialog } from '../pdf-compression/CompressDialog';
+import { OcrDialog } from '../pdf-ocr/OcrDialog';
 import type { SourceDocumentRegistry } from '../pdf-workspace/runtime/sourceDocumentRegistry';
 import type {
   SourceDocumentId,
@@ -109,6 +110,12 @@ export function PdfViewer({
   const [mobilePageManagerOpen, setMobilePageManagerOpen] = useState(false);
   const [extractOpen, setExtractOpen] = useState(false);
   const [compressOpen, setCompressOpen] = useState(false);
+  const [ocrOpen, setOcrOpen] = useState(false);
+  const ocrTriggerRef = useRef<HTMLButtonElement>(null);
+  const closeOcr = useCallback(() => {
+    setOcrOpen(false);
+    window.requestAnimationFrame(() => ocrTriggerRef.current?.focus());
+  }, []);
   const compressTriggerRef = useRef<HTMLButtonElement>(null);
   const closeCompress = useCallback(() => {
     setCompressOpen(false);
@@ -182,7 +189,20 @@ export function PdfViewer({
         pagesTriggerRef={pagesTriggerRef}
         compressTriggerRef={compressTriggerRef}
         onOpenCompress={() => setCompressOpen(true)}
+        ocrTriggerRef={ocrTriggerRef}
+        onOpenOcr={() => setOcrOpen(true)}
       />
+      {ocrOpen ? (
+        <OcrDialog
+          prepareWorkspace={prepareWorkspace}
+          blockReason={
+            exportBlocked
+              ? 'Finish or cancel the active text edit before OCR.'
+              : exportBlockReason
+          }
+          onClose={closeOcr}
+        />
+      ) : null}
       {compressOpen ? (
         <CompressDialog
           prepareWorkspace={prepareWorkspace}

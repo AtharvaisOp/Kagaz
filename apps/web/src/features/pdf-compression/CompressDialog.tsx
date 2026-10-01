@@ -1,8 +1,9 @@
-import { useEffect, useRef, useState } from 'react';
+import { useState } from 'react';
 import type { CompressionPreset } from '@kagaz/shared-types';
 import type { PdfExportController } from '../pdf-workspace/hooks/usePdfExport';
-import { CloseIcon, DownloadIcon } from '../../components/icons';
+import { DownloadIcon } from '../../components/icons';
 import { usePdfCompression } from './usePdfCompression';
+import { PdfToolDialog } from '../pdf-heavy-tools/PdfToolDialog';
 
 const PRESETS: readonly {
   value: CompressionPreset;
@@ -42,10 +43,8 @@ export function CompressDialog({
   readonly blockReason: string | null;
   readonly onClose: () => void;
 }) {
-  const dialog = useRef<HTMLDialogElement>(null);
   const [preset, setPreset] = useState<CompressionPreset>('balanced');
   const compression = usePdfCompression(prepareWorkspace);
-  const cancelCompression = compression.cancel;
   const busy =
     compression.state.status === 'preparing' ||
     compression.state.status === 'processing';
@@ -53,85 +52,9 @@ export function CompressDialog({
     compression.cancel();
     onClose();
   };
-  useEffect(() => {
-    const element = dialog.current;
-    element?.showModal();
-    return () => element?.close();
-  }, []);
-  useEffect(() => {
-    const handleKey = (event: KeyboardEvent) => {
-      if (event.key === 'Tab') {
-        const element = dialog.current;
-        const controls = element?.querySelectorAll<HTMLElement>(
-          'button:not(:disabled), input:not(:disabled), [href], [tabindex="0"]',
-        );
-        const first = controls?.[0];
-        const last = controls?.[controls.length - 1];
-        if (
-          first &&
-          last &&
-          (event.shiftKey
-            ? document.activeElement === first
-            : document.activeElement === last)
-        ) {
-          event.preventDefault();
-          (event.shiftKey ? last : first).focus();
-        } else if (
-          first &&
-          !(event.target instanceof Node && element?.contains(event.target))
-        ) {
-          event.preventDefault();
-          first.focus();
-        }
-      }
-      // A disabled submit button can move focus to body while processing.
-      // Capture Escape even then, before the editor's global shortcuts.
-      if (event.key === 'Escape') {
-        event.preventDefault();
-        event.stopPropagation();
-        cancelCompression();
-        onClose();
-      } else if (
-        !(event.target instanceof Node) ||
-        !dialog.current?.contains(event.target)
-      ) {
-        event.stopPropagation();
-      }
-    };
-    document.addEventListener('keydown', handleKey, true);
-    return () => document.removeEventListener('keydown', handleKey, true);
-  }, [cancelCompression, onClose]);
   const state = compression.state;
   return (
-    <dialog
-      ref={dialog}
-      className="extract-dialog compress-dialog"
-      aria-labelledby="compress-title"
-      aria-describedby="compress-privacy"
-      onKeyDown={(event) => {
-        // Keep editor shortcuts from acting on the workspace behind this modal.
-        event.stopPropagation();
-        if (event.key === 'Escape') {
-          event.preventDefault();
-          close();
-        }
-      }}
-      onCancel={(event) => {
-        event.preventDefault();
-        close();
-      }}
-    >
-      <div className="extract-dialog-heading">
-        <h2 id="compress-title">Compress PDF</h2>
-        <button
-          type="button"
-          className="icon-button"
-          aria-label="Close compression"
-          onClick={close}
-        >
-          <CloseIcon className="size-4" />
-        </button>
-      </div>
+    <PdfToolDialog id="compress" title="Compress PDF" onClose={close}>
       <div id="compress-privacy" className="compression-privacy">
         <p>
           Compression temporarily uploads the current PDF to the Kagaz server
@@ -248,6 +171,6 @@ export function CompressDialog({
           )}
         </div>
       </form>
-    </dialog>
+    </PdfToolDialog>
   );
 }

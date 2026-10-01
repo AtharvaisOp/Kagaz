@@ -8,6 +8,8 @@ const config = readConfig();
 const tools = new ToolService({
   gs: process.env.GHOSTSCRIPT_PATH,
   qpdf: process.env.QPDF_PATH,
+  ocrmypdf: process.env.OCRMYPDF_PATH,
+  python: process.env.OCR_PYTHON_PATH,
 });
 const app = createApp(config.allowedOrigins, tools);
 

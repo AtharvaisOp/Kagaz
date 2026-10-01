@@ -7,7 +7,7 @@ import type { CompressionPreset } from '@kagaz/shared-types';
 import { checkAbort, HeavyToolError } from './errors.js';
 
 export const MAX_INPUT_BYTES = 20 * 1024 * 1024;
-const MAX_BODY_BYTES = MAX_INPUT_BYTES + 64 * 1024;
+export const MAX_OCR_INPUT_BYTES = 10 * 1024 * 1024;
 export function isPreset(value: string): value is CompressionPreset {
   return (
     value === 'high-quality' || value === 'balanced' || value === 'maximum'
@@ -19,8 +19,11 @@ export async function receivePdf(
   request: Request,
   path: string,
   signal: AbortSignal,
-): Promise<CompressionPreset> {
+  operation: 'compress' | 'ocr' = 'compress',
+): Promise<CompressionPreset | 'eng'> {
   checkAbort(signal);
+  const maximum = operation === 'ocr' ? MAX_OCR_INPUT_BYTES : MAX_INPUT_BYTES;
+  const MAX_BODY_BYTES = maximum + 64 * 1024;
   if (Number(request.headers['content-length']) > MAX_BODY_BYTES)
     throw new HeavyToolError('file-too-large');
   let parser: ReturnType<typeof busboy>;
@@ -32,7 +35,7 @@ export async function receivePdf(
         fields: 1,
         // Busboy emits partsLimit upon reaching the count, including the last part.
         parts: 3,
-        fileSize: MAX_INPUT_BYTES + 1,
+        fileSize: maximum + 1,
         fieldSize: 32,
         fieldNameSize: 32,
         headerPairs: 32,
@@ -43,7 +46,7 @@ export async function receivePdf(
   }
   let bytes = 0,
     fileCount = 0;
-  let preset: CompressionPreset | undefined;
+  let preset: CompressionPreset | 'eng' | undefined;
   let failure: unknown;
   const writes: Promise<void>[] = [];
   const counter = new Transform({
@@ -91,16 +94,19 @@ export async function receivePdf(
   });
   parser.on('field', (name, value, info) => {
     if (
-      name !== 'preset' ||
+      name !== (operation === 'ocr' ? 'language' : 'preset') ||
       preset ||
       info.valueTruncated ||
-      info.nameTruncated ||
-      !isPreset(value)
+      info.nameTruncated
     ) {
       fail(new HeavyToolError('invalid-request'));
       return;
     }
-    preset = value;
+    if (operation === 'ocr') {
+      if (value !== 'eng') fail(new HeavyToolError('unsupported-language'));
+      else preset = value;
+    } else if (isPreset(value)) preset = value;
+    else fail(new HeavyToolError('invalid-request'));
   });
   parser.on('filesLimit', () => fail(new HeavyToolError('invalid-request')));
   parser.on('fieldsLimit', () => fail(new HeavyToolError('invalid-request')));

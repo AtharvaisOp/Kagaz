@@ -4,8 +4,10 @@ import type { Request, Response } from 'express';
 import { compressPdf, type CompressionEngineOptions } from './compress.js';
 import { HeavyToolError } from './errors.js';
 import { ExecutionLimiter } from './limiter.js';
-import { receivePdf } from './upload.js';
+import { isPreset, receivePdf } from './upload.js';
 import { createTempWorkspace } from './workspace.js';
+import { ocrPdf, OCR_POLICY, type OcrEngineOptions } from './ocr.js';
+import { watchWorkspaceBudget } from './workspaceBudget.js';
 
 export const COMPRESSION_HEADERS = [
   'X-Kagaz-Original-Bytes',
@@ -15,8 +17,17 @@ export const COMPRESSION_HEADERS = [
   'X-Kagaz-Preset',
   'X-Kagaz-Outcome',
 ];
+export const OCR_HEADERS = [
+  'X-Kagaz-Original-Bytes',
+  'X-Kagaz-Output-Bytes',
+  'X-Kagaz-Pages',
+  'X-Kagaz-Ocr-Language',
+  'X-Kagaz-Pages-Ocred',
+  'X-Kagaz-Pages-Skipped',
+];
 
-export interface ToolServiceOptions extends CompressionEngineOptions {
+export interface ToolServiceOptions
+  extends CompressionEngineOptions, OcrEngineOptions {
   readonly tempRoot?: string;
   readonly concurrency?: number;
   readonly queueLimit?: number;
@@ -30,13 +41,17 @@ export class ToolService {
   private closed = false;
   constructor(private readonly options: ToolServiceOptions = {}) {
     this.limiter = new ExecutionLimiter(
-      options.concurrency ?? 1,
+      Math.min(options.concurrency ?? 1, 1),
       options.queueLimit ?? 2,
     );
   }
 
-  handle(request: Request, response: Response): Promise<void> {
-    const task = this.compress(request, response);
+  handle(
+    request: Request,
+    response: Response,
+    operation: 'compress' | 'ocr' = 'compress',
+  ): Promise<void> {
+    const task = this.process(request, response, operation);
     this.work.add(task);
     void task.finally(() => this.work.delete(task)).catch(() => {});
     return task;
@@ -50,7 +65,11 @@ export class ToolService {
     await Promise.allSettled(this.work);
   }
 
-  private async compress(request: Request, response: Response): Promise<void> {
+  private async process(
+    request: Request,
+    response: Response,
+    operation: 'compress' | 'ocr',
+  ): Promise<void> {
     response.set({
       'Cache-Control': 'no-store',
       'X-Content-Type-Options': 'nosniff',
@@ -65,37 +84,67 @@ export class ToolService {
     response.once('close', abort);
     const deadline = setTimeout(
       () => controller.abort(new HeavyToolError('processing-timeout')),
-      this.options.requestTimeoutMs ?? 120_000,
+      this.options.requestTimeoutMs ??
+        (operation === 'ocr' ? OCR_POLICY.requestTimeoutMs : 120_000),
     );
     let release: (() => void) | undefined;
     let workspace: Awaited<ReturnType<typeof createTempWorkspace>> | undefined;
+    let stopBudget: (() => Promise<void>) | undefined;
     try {
       if (this.closed) throw new HeavyToolError('server-busy');
       release = await this.limiter.acquire(controller.signal);
       workspace = await createTempWorkspace(this.options.tempRoot);
-      const preset = await receivePdf(
+      if (operation === 'ocr')
+        stopBudget = watchWorkspaceBudget(workspace.directory, controller);
+      const selection = await receivePdf(
         request,
         workspace.input,
         controller.signal,
+        operation,
       );
-      const result = await compressPdf(
-        workspace.input,
-        workspace.output,
-        preset,
-        controller.signal,
-        this.options,
-      );
+      let result: { path: string };
       response.type('application/pdf');
-      response.set({
-        'Content-Disposition': 'attachment; filename="kagaz-compressed.pdf"',
-        'Content-Length': String(result.metadata.compressedBytes),
-        'X-Kagaz-Original-Bytes': String(result.metadata.originalBytes),
-        'X-Kagaz-Compressed-Bytes': String(result.metadata.compressedBytes),
-        'X-Kagaz-Saved-Bytes': String(result.metadata.savedBytes),
-        'X-Kagaz-Saved-Percent': String(result.metadata.savedPercent),
-        'X-Kagaz-Preset': result.metadata.preset,
-        'X-Kagaz-Outcome': result.metadata.outcome,
-      });
+      if (operation === 'ocr') {
+        const ocr = await ocrPdf(
+          workspace.input,
+          workspace.output,
+          controller.signal,
+          this.options,
+        );
+        result = ocr;
+        response.set({
+          'Content-Disposition': 'attachment; filename="kagaz-searchable.pdf"',
+          'Content-Length': String(ocr.metadata.outputBytes),
+          'X-Kagaz-Original-Bytes': String(ocr.metadata.originalBytes),
+          'X-Kagaz-Output-Bytes': String(ocr.metadata.outputBytes),
+          'X-Kagaz-Pages': String(ocr.metadata.pages),
+          'X-Kagaz-Ocr-Language': ocr.metadata.language,
+          'X-Kagaz-Pages-Ocred': String(ocr.metadata.pagesOcred),
+          'X-Kagaz-Pages-Skipped': String(ocr.metadata.pagesSkipped),
+        });
+      } else {
+        if (!isPreset(selection)) throw new HeavyToolError('invalid-request');
+        const compressed = await compressPdf(
+          workspace.input,
+          workspace.output,
+          selection,
+          controller.signal,
+          this.options,
+        );
+        result = compressed;
+        response.set({
+          'Content-Disposition': 'attachment; filename="kagaz-compressed.pdf"',
+          'Content-Length': String(compressed.metadata.compressedBytes),
+          'X-Kagaz-Original-Bytes': String(compressed.metadata.originalBytes),
+          'X-Kagaz-Compressed-Bytes': String(
+            compressed.metadata.compressedBytes,
+          ),
+          'X-Kagaz-Saved-Bytes': String(compressed.metadata.savedBytes),
+          'X-Kagaz-Saved-Percent': String(compressed.metadata.savedPercent),
+          'X-Kagaz-Preset': compressed.metadata.preset,
+          'X-Kagaz-Outcome': compressed.metadata.outcome,
+        });
+      }
       await pipeline(createReadStream(result.path), response, {
         signal: controller.signal,
       });
@@ -108,6 +157,8 @@ export class ToolService {
       if (safe.code !== 'cancelled')
         console.warn('Heavy tool request failed', { code: safe.code });
       if (!response.headersSent && !response.destroyed) {
+        response.removeHeader('Content-Length');
+        response.removeHeader('Content-Disposition');
         response.set('Connection', 'close');
         if (safe.code === 'server-busy') response.set('Retry-After', '5');
         response.status(safe.status).json(safe.response);
@@ -118,6 +169,7 @@ export class ToolService {
       request.removeListener('aborted', abort);
       response.removeListener('close', abort);
       try {
+        await stopBudget?.();
         await workspace?.cleanup();
       } finally {
         release?.();

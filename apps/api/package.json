@@ -5,7 +5,8 @@
   "type": "module",
   "main": "dist/index.js",
   "files": [
-    "dist"
+    "dist",
+    "native"
   ],
   "scripts": {
     "build": "tsc -p tsconfig.build.json",

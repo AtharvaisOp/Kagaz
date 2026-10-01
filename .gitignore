@@ -11,3 +11,4 @@ dist/
 Thumbs.db
 .vercel/
 coverage/
+__pycache__/

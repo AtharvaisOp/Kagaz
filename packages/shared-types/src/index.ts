@@ -14,6 +14,9 @@ export type HeavyToolErrorCode =
   | 'processing-timeout'
   | 'server-busy'
   | 'processing-failed'
+  | 'unsupported-language'
+  | 'no-ocr-needed'
+  | 'ocr-failed'
   | 'cancelled';
 
 export interface HeavyToolErrorResponse {
@@ -31,4 +34,14 @@ export interface CompressionMetadata {
   readonly savedPercent: number;
   readonly preset: CompressionPreset;
   readonly outcome: 'compressed' | 'unchanged';
+}
+
+export interface OcrMetadata {
+  readonly originalBytes: number;
+  readonly outputBytes: number;
+  readonly pages: number;
+  readonly language: 'eng';
+  /** Pages given a validated text layer, rather than an engine exit-code estimate. */
+  readonly pagesOcred: number;
+  readonly pagesSkipped: number;
 }

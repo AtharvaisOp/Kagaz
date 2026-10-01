@@ -1,4 +1,4 @@
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, rm, access } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -27,6 +27,16 @@ function run(
   });
 }
 describe('native process lifecycle', () => {
+  it('kills descendants even when the parent exits before escalation', async () => {
+    const marker = join(cwd, 'escaped-child');
+    const childCode = `process.on('SIGTERM',()=>{}); setTimeout(()=>require('node:fs').writeFileSync(${JSON.stringify(marker)},'escaped'),1200); setInterval(()=>{},1000)`;
+    const parentCode = `require('node:child_process').spawn(process.execPath,['-e',${JSON.stringify(childCode)}],{stdio:'ignore'}); process.on('SIGTERM',()=>process.exit(0)); setInterval(()=>{},1000)`;
+    await expect(run(parentCode, undefined, 400)).rejects.toMatchObject({
+      code: 'processing-timeout',
+    });
+    await new Promise((resolve) => setTimeout(resolve, 1400));
+    await expect(access(marker)).rejects.toMatchObject({ code: 'ENOENT' });
+  });
   it('passes arguments literally without invoking a shell and captures exit status', async () => {
     const trick = '$(touch escaped); & ..\\secret.pdf';
     const result = await run(

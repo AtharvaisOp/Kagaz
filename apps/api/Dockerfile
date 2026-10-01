@@ -17,7 +17,7 @@ RUN pnpm --filter @kagaz/api... build && pnpm --filter @kagaz/api deploy --prod 
 
 FROM node:22.20.0-bookworm-slim AS runner
 
-RUN apt-get update && apt-get install -y --no-install-recommends ghostscript qpdf util-linux \
+RUN apt-get update && apt-get install -y --no-install-recommends ghostscript qpdf util-linux ocrmypdf tesseract-ocr-eng \
     && rm -rf /var/lib/apt/lists/*
 
 ENV NODE_ENV=production

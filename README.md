@@ -3,8 +3,8 @@
 Kagaz is a browser-first PDF workspace for combining and arranging documents
 locally. Open one or several PDFs, inspect their pages, reorder them, rotate or
 delete pages, extract a range, and download the result without sending PDF
-bytes to a server. **Compress PDF** is an explicit server operation: only after
-you press Compress does Kagaz upload a flattened export of the current workspace
+bytes to a server. **Compress PDF** and **OCR PDF** are explicit server operations: only after
+you submit a tool does Kagaz upload a flattened export of the current workspace
 to its API. Ordinary editing and export remain browser-local.
 
 ## Phase 1 capabilities
@@ -95,14 +95,15 @@ repeatable browser scripts, performance observations, and remaining limitations.
 
 ## Privacy-first architecture
 
-PDF source files stay in the browser for editing and ordinary export. Compression
+PDF source files stay in the browser for editing and ordinary export. Compression and OCR
 temporarily sends one generated, flattened PDF containing the current page order,
 rotations, annotations, images, filled forms and visual signatures. It never sends
 individual source files. Existing form/signature export blockers apply before any
-upload. Compression creates a derivative download and leaves the workspace intact.
+upload. Each server tool creates a derivative download and leaves the workspace intact.
 
 The API streams uploads to an isolated temporary directory, validates with qpdf,
-runs Ghostscript, validates the result and streams it back. Temporary files are
+runs Ghostscript for compression or OCRmyPDF/Tesseract for English OCR, validates
+the result and streams it back. Temporary files are
 deleted after processing/download, errors, disconnection and orderly shutdown.
 There is no permanent PDF storage, database persistence or content analytics.
 Logs contain error codes rather than PDF contents, filenames or native stderr.
@@ -165,7 +166,9 @@ pnpm format:check
 The web app runs at `http://localhost:5173`; the API defaults to
 `http://localhost:4000`. Editing and ordinary export do not require the API.
 Compression requires Ghostscript and qpdf on PATH, or their executable paths
-in the API environment. On Debian/Ubuntu: `apt-get install ghostscript qpdf util-linux`.
+in the API environment. OCR additionally requires OCRmyPDF, Tesseract English data
+and Python with OCRmyPDF's dependencies. On Debian/Ubuntu:
+`apt-get install ghostscript qpdf util-linux ocrmypdf tesseract-ocr-eng`.
 On Windows, set `GHOSTSCRIPT_PATH` to `gswin64c.exe` and `QPDF_PATH` to `qpdf.exe`.
 The Linux runner uses `prlimit` from util-linux for resource bounds. API integration
 tests deliberately require these native tools; they are not silently skipped.
@@ -196,7 +199,10 @@ are needed.
 | `CORS_ORIGINS` | `http://localhost:5173` | Comma-separated API origins.                          |
 
 `GHOSTSCRIPT_PATH` (default `gs`) and `QPDF_PATH` (default `qpdf`) optionally
-select native executables using server-controlled configuration. No secrets are
+select native executables using server-controlled configuration. `OCRMYPDF_PATH`
+(default `ocrmypdf`) and `OCR_PYTHON_PATH` (default `python3`) select the OCR runtime;
+OCRmyPDF locates Ghostscript and Tesseract on PATH. Export these variables into the
+shell for repository tests as well as API development. No secrets are
 required for local development.
 
 ## Compression contract and limits
@@ -233,6 +239,44 @@ AcroForms, malformed structures and qpdf recovery warnings are rejected.
 
 See [Phase 4A engineering and verification](docs/phase-4a.md) for implementation
 boundaries, repeatable container/browser checks, security review and limitations.
+
+## English searchable PDF OCR
+
+Choose **OCR PDF**, read the privacy notice and press **Start OCR**. Kagaz prepares
+the current flattened workspace using the same guarded browser export as Download
+and compression, uploads exactly that derivative, and offers **Download searchable
+PDF**. Current page order, deletions, rotations, annotations, forms and visual
+signatures are included. The active workspace is unchanged. Cancel aborts the
+request; Retry takes a fresh snapshot only after another explicit submit.
+Progress uses preparation and upload/processing stages without estimated percentages.
+
+`POST /tools/ocr` accepts one multipart `file` and `language=eng`. Success returns
+`application/pdf` and exposed `X-Kagaz-Original-Bytes`, `X-Kagaz-Output-Bytes`,
+`X-Kagaz-Pages`, `X-Kagaz-Ocr-Language`, `X-Kagaz-Pages-Ocred` and
+`X-Kagaz-Pages-Skipped`. Shared errors add `unsupported-language`, `no-ocr-needed`
+and `ocr-failed`. Counts describe validated searchable additions and skipped
+existing-text/blank pages, rather than estimates from native logs.
+
+OCRmyPDF uses `--skip-text`, standard PDF output, English hOCR text layers, no image
+optimization and no image preprocessing. Original image bytes, page geometry and
+original drawing streams must survive; existing digital text must remain extractable,
+and pages requiring OCR must yield meaningful text. Blank vector pages are preserved.
+A wholly digital/blank PDF returns `no-ocr-needed`; image pages with no recognized
+text fail validation rather than claiming searchability. Output may grow in size.
+
+OCR has separate limits: **10 MiB, 20 pages, 14 inches per side, 400 DPI, 16 MP
+per image/raster**, 40 MiB output, a 240-second native deadline and a 300-second
+total deadline including queue time. Linux native processes have 768 MiB address
+space, 240 CPU seconds and 40 MiB per-file limits; aggregate temporary files are
+monitored against a 192 MiB budget. These process bounds complement container/host
+memory and ephemeral disk limits. Windows development lacks Linux resource bounds.
+Compression retains its existing policies. Both tools share one admission slot and
+two abortable FIFO waiters. Do not increase OCR concurrency on Render's limited
+free CPU without measurements.
+
+See [Phase 4B engineering and verification](docs/phase-4b.md) for architecture,
+synthetic fixtures, Docker/browser checks, performance, security and limitations.
+OCR uses no cloud API, permanent storage or OCR text/content logging.
 
 ## Deployment
 
@@ -271,7 +315,8 @@ The Render Blueprint uses the `main` branch, Docker, the Singapore region,
 and `/health` as its health check. `CORS_ORIGINS` is configured for the
 intended production frontend origin. Phase 4A retains the free tier, existing
 health check, region, branch and normal auto-deploy configuration. Docker installs
-only Ghostscript, qpdf and util-linux, then runs as the unprivileged Node user.
+Ghostscript, qpdf, util-linux, OCRmyPDF and English Tesseract data with their required
+dependencies, then runs as the unprivileged Node user. LibreOffice is not installed.
 No persistent disk is assumed. This phase does not manually trigger deployment.
 
 ## Current limitations
@@ -285,7 +330,10 @@ No persistent disk is assumed. This phase does not manually trigger deployment.
 - Visual signatures are not cryptographic digital signatures. Certificate
   signing, verification, and signature persistence are not implemented.
 - Password fields and push-button or PDF JavaScript behavior are not exported.
-- OCR and conversion are not implemented.
+- OCR supports English only and recognition is imperfect; review searchable text.
+- Pages with any existing text are skipped, including pages mixing digital text
+  and scans. No automatic language detection, forced OCR, rotation correction or
+  deskew is provided. Conversion is not implemented.
 - Compression is lossy for images and may change document-level metadata and
   other non-visible features. It targets a flattened visual derivative rather
   than archival equivalence. Savings depend on PDF content.

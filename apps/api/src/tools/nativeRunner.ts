@@ -1,4 +1,4 @@
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { checkAbort, HeavyToolError } from './errors.js';
 
 export interface NativeRequest {
@@ -8,6 +8,11 @@ export interface NativeRequest {
   readonly signal: AbortSignal;
   readonly timeoutMs?: number;
   readonly resourceLimits?: boolean;
+  readonly limits?: {
+    readonly addressSpace: number;
+    readonly cpuSeconds: number;
+    readonly fileBytes: number;
+  };
 }
 
 export interface NativeResult {
@@ -29,9 +34,9 @@ export const runNative: NativeRunner = (request) => {
     const executable = limited ? '/usr/bin/prlimit' : request.executable;
     const args = limited
       ? [
-          '--as=402653184',
-          '--cpu=60',
-          '--fsize=41943040',
+          `--as=${request.limits?.addressSpace ?? 402653184}`,
+          `--cpu=${request.limits?.cpuSeconds ?? 60}`,
+          `--fsize=${request.limits?.fileBytes ?? 41943040}`,
           '--',
           request.executable,
           ...request.args,
@@ -52,16 +57,27 @@ export const runNative: NativeRunner = (request) => {
         TMPDIR: request.cwd,
         HOME: request.cwd,
         LANG: 'C',
+        OMP_THREAD_LIMIT: '1',
+        OPENBLAS_NUM_THREADS: '1',
+        PYTHONDONTWRITEBYTECODE: '1',
       },
     });
     let stdout = Buffer.alloc(0),
       stderr = Buffer.alloc(0);
     let failure: HeavyToolError | null = null;
-    let escalation: NodeJS.Timeout | undefined;
+    let termination: Promise<void> | undefined;
     const kill = (signal: NodeJS.Signals) => {
       try {
         if (grouped && child.pid) process.kill(-child.pid, signal);
-        else child.kill(signal);
+        else if (child.pid) {
+          // OCRmyPDF has descendants. Terminating only Python would leave OCR running.
+          spawnSync('taskkill.exe', ['/PID', String(child.pid), '/T', '/F'], {
+            shell: false,
+            windowsHide: true,
+            stdio: 'ignore',
+            timeout: 5000,
+          });
+        }
       } catch {
         /* Process may have already exited. */
       }
@@ -70,7 +86,13 @@ export const runNative: NativeRunner = (request) => {
       if (failure) return;
       failure = error;
       kill('SIGTERM');
-      escalation = setTimeout(() => kill('SIGKILL'), 250);
+      // Do not cancel escalation when the parent closes: a descendant may ignore TERM.
+      termination = new Promise<void>((resolve) => {
+        setTimeout(() => {
+          kill('SIGKILL');
+          resolve();
+        }, 250);
+      });
     };
     const abort = () =>
       stop(
@@ -102,10 +124,11 @@ export const runNative: NativeRunner = (request) => {
     });
     child.on('close', (code) => {
       clearTimeout(timeout);
-      clearTimeout(escalation);
       request.signal.removeEventListener('abort', abort);
-      if (failure) reject(failure);
-      else if (code === null) reject(new HeavyToolError('processing-failed'));
+      if (failure) {
+        const error = failure;
+        void (termination ?? Promise.resolve()).then(() => reject(error));
+      } else if (code === null) reject(new HeavyToolError('processing-failed'));
       else
         resolve({
           exitCode: code,
