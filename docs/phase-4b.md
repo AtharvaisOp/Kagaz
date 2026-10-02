@@ -214,6 +214,61 @@ bytes and took 13.04 seconds. A mixed three-page document used 130,578 bytes,
 produced 136,050 bytes and took 12.50 seconds, OCRing two pages and skipping one.
 These synthetic fixtures do not establish a Render production speed guarantee.
 
+## Observed production-container verification
+
+Status: **PASS**. [CI run 36](https://github.com/AtharvaisOp/Kagaz/actions/runs/36969527901)
+completed successfully for `461a327821bd3b98d7f82d8ec9660cc86f72bfad`.
+The production image, constrained native/API tests, full Phase 4A browser regression
+and Phase 4B editor verification all passed. This was actual Docker execution on
+the GitHub runner; Docker remains unavailable on the local Windows host.
+
+Installed versions: OCRmyPDF **14.0.1+dfsg1**, Tesseract **5.3.0**,
+Ghostscript **10.00.0**, qpdf **11.3.0**. English and the distro-required small
+orientation pack are present; LibreOffice is absent. The image runs as UID 1000.
+The constrained OCR test used read-only root, no added capabilities, no new
+privileges, 64 PIDs, 512 MiB memory, half a CPU and 256 MiB tmpfs.
+
+Image sizes reported by Docker: **496,738,567 bytes** (473.73 MiB) for OCR,
+**309,061,492 bytes** (294.74 MiB) for the comparison image,
+an increase of **187,677,075 bytes** (178.98 MiB).
+
+| Synthetic document                       | Input bytes | Output bytes |  Elapsed |
+| ---------------------------------------- | ----------: | -----------: | -------: |
+| One scanned page                         |      65,440 |       68,425 |  2.391 s |
+| Ten scanned pages                        |      66,799 |       79,865 | 10.780 s |
+| Mixed: one digital + three scanned pages |      66,040 |       71,405 |  4.178 s |
+
+Timings include upload, native and independent output validation, download,
+PDF.js extraction/render comparison and a separate qpdf check. The ten-page
+fixture shares a high-quality embedded image; its compact input does not represent
+ten independently photographed pages. Peak whole-container cgroup memory was
+**132,280,320 bytes** (126.15 MiB), including the synthetic native diagnostic.
+There was no observed OOM, timeout or leftover private workspace. These small,
+controlled fixtures support MVP feasibility, not a Render speed guarantee.
+
+The browser tests downloaded real searchable outputs for one/multi-page scans,
+mixed text, edited/reordered/deleted/rotated pages, annotations, filled forms and
+visual signatures. Expected OCR words and retained digital text were found with
+PDF.js; pixel comparisons and pdf-lib reloads passed. Cancel/retry, network/server
+failure, export blockers, explicit-only upload observation, keyboard focus,
+reduced motion and four responsive widths passed. Compression worked afterward.
+Skewed, low-quality and blank-plus-scan fixtures, digital/blank no-OCR responses,
+malformed input, unsupported language, non-root execution and empty temp roots
+also passed in the constrained container.
+
+Earlier CI failures exposed a browser assertion that raced React's blocker render,
+a read-only Docker fixture-copy restriction, and the disk monitor rejecting
+OCRmyPDF's internal symlinks. The repaired tests await the visible blocker and
+write synthetic bytes through stdin into tmpfs. The monitor now constrains internal
+links without following them; external-link rejection remains tested. No native
+stderr or document text was added to production logs/responses. CI-only diagnostics
+use the committed public synthetic fixture and redact its private workspace path.
+
+No production deployment was triggered manually. The existing Render Dockerfile
+configuration remains the deployment path; the normal image rebuild includes the
+OCR binaries. Environment defaults and optional binary overrides are documented
+in `.env.example`. No database, credentials or language-service setup is required.
+
 ## Sources
 
 - [OCRmyPDF existing text, limits and hOCR](https://ocrmypdf.readthedocs.io/en/v14.0.1/advanced.html)
@@ -232,8 +287,8 @@ These synthetic fixtures do not establish a Render production speed guarantee.
 - [x] Synthetic clean/skewed/multi-page/mixed/marked/blank/low-quality/rotated quality fixtures and meaningful failure tests.
 - [x] Accessible English/privacy/stage/cancel/retry/download dialog with restrained reduced-motion-aware feedback.
 - [x] Docker and CI verification scripts cover binaries, compression, OCR, searchability, performance, non-root execution and cleanup.
-- [ ] Final complete quality-gate run and actual production container/browser verification.
-- [ ] Commit/push origin/main without force and confirm exact-SHA CI success.
+- [x] Final complete quality-gate run and actual production container/browser verification.
+- [x] Commit/push origin/main without force and confirm exact-SHA CI success.
 
 ## Important files changed
 
