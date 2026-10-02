@@ -190,13 +190,49 @@ introduced.
 
 CI builds the Phase 4B Dockerfile from the phase-start SHA and the new production
 image from the same application tree, then records both image sizes and the
-LibreOffice/package versions. It executes real conversions against the new image
-under the Phase 4B 512 MiB/0.5 CPU/256 MiB tmpfs limits. The generated
-`phase4c-container.json` artifact records each fixture's input/output bytes,
-runtime, expected pages and sampled private-workspace size, along with the
-production image delta, package versions and cgroup memory high-water mark. The
-observed values for the successful exact-SHA run are recorded here after CI
-completes.
+LibreOffice/package versions. The measured baseline image was 496,782,209 bytes
+(about 473.8 MiB); the production image was 844,657,390 bytes (about 805.4 MiB),
+an increase of 347,875,181 bytes (about 331.8 MiB). Debian installed
+`libreoffice-writer-nogui`, `libreoffice-impress-nogui` and
+`libreoffice-calc-nogui`, with their headless core/draw dependencies, rather
+than a GUI desktop. The verified LibreOffice version is 7.4.7.2
+40(Build:2). The image also records qpdf 11.3.0, Ghostscript 10.00.0,
+OCRmyPDF 14.0.1+dfsg1 and Tesseract 5.3.0; all were present and passed their
+existing checks.
+
+The production image ran under the Phase 4B 512 MiB/0.5 CPU/256 MiB tmpfs
+limits. CI then repeated representative conversions at 512 MiB/0.1 CPU with
+the same 256 MiB tmpfs to model Render's current free web-service compute plan
+([compute plan limits](https://render.com/docs/compute-plans)). These are small
+deterministic fixtures, so the timings describe this test environment rather
+than a service guarantee:
+
+| Fixture                   | Input → PDF bytes | Pages | Runtime at 0.5 CPU | Sampled workspace at 0.5 CPU | Runtime at 0.1 CPU |
+| ------------------------- | ----------------: | ----: | -----------------: | ---------------------------: | -----------------: |
+| Paragraph DOCX            |   36,467 → 27,102 |     1 |           4,292 ms |                609,548 bytes |          33,198 ms |
+| Image and page-break DOCX |   95,888 → 57,379 |     2 |           4,700 ms |                668,969 bytes |                  — |
+| Three-slide PPTX          |   88,290 → 45,683 |     3 |           4,548 ms |                377,894 bytes |          35,397 ms |
+| One-sheet XLSX            |    5,296 → 16,868 |     1 |           3,770 ms |                294,824 bytes |          27,801 ms |
+| Two-sheet XLSX            |    5,966 → 18,136 |     2 |           3,710 ms |                258,524 bytes |                  — |
+
+The converter container's cgroup memory high-water mark was 196,325,376 bytes
+(187.2 MiB) at 0.5 CPU and 197,824,512 bytes (188.7 MiB) at 0.1 CPU. These are
+whole-container high-water readings, not LibreOffice process RSS. The largest
+sampled private workspace among these fixtures was 668,969 bytes; this is a
+sampled fixture measurement, not an output or temporary-disk quota. All five
+fixtures completed at 0.5 CPU; the representative DOCX, PPTX and XLSX also
+completed at 0.1 CPU, taking 27.8–35.4 seconds. This shows the small documents
+fit the constrained envelope, but leaves limited latency margin for large or
+complex inputs. The API still enforces one active heavy operation and fixed
+input, expanded-size, timeout, output, page, memory, process and temporary-space
+limits. Render Free filesystems are ephemeral and free services spin down after
+inactivity ([free service limitations](https://render.com/docs/free)); users
+should expect cold starts and the measured CPU-limited conversion latency.
+
+The generated `phase4c-container.json` artifact records each fixture's
+input/output bytes, runtime, expected pages and sampled private-workspace size,
+along with package versions, production image delta, cgroup memory high-water
+marks and all 41 rejected Office attack probes.
 
 The public deterministic fixtures cover multiple formatted DOCX paragraphs, an
 embedded image and explicit page break, a three-slide PPTX with text and an image,
