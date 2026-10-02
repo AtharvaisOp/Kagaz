@@ -87,17 +87,13 @@ jobs:
         env:
           KAGAZ_ARTIFACT_DIR: ${{ runner.temp }}/phase4a-artifacts
         run: |
-          docker run -d --name kagaz-browser-api --init --memory=512m --cpus=0.5 -p 4000:4000 kagaz-api:verify
           pnpm --filter @kagaz/web dev --host 127.0.0.1 > /tmp/kagaz-web.log 2>&1 &
-          for i in $(seq 1 30); do curl -fsS http://localhost:5173/ > /dev/null && curl -fsS http://localhost:4000/health > /dev/null && break; sleep 1; done
+          for i in $(seq 1 30); do curl -fsS http://localhost:5173/ > /dev/null && break; sleep 1; done
+          node scripts/verify-phase4b-container.mjs
+          docker run -d --name kagaz-browser-api --init --memory=512m --cpus=0.5 -p 4000:4000 kagaz-api:verify
+          for i in $(seq 1 30); do curl -fsS http://localhost:4000/health > /dev/null && break; sleep 1; done
           node scripts/verify-phase4a.mjs
           node scripts/verify-phase4b.mjs
-      - name: Verify OCR container, searchability, fidelity, limits and performance
-        env:
-          KAGAZ_ARTIFACT_DIR: ${{ runner.temp }}/phase4a-artifacts
-        run: |
-          docker stop kagaz-browser-api
-          node scripts/verify-phase4b-container.mjs
       - name: Save verification artifacts
         if: always()
         uses: actions/upload-artifact@v4

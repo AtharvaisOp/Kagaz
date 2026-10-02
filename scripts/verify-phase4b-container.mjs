@@ -78,6 +78,43 @@ try {
   assert(
     !docker(['exec', container, 'sh', '-c', 'command -v soffice || true']),
   );
+  // Diagnose only this public synthetic fixture, outside the HTTP/logging path.
+  // Use exactly the production runner and limits before expensive browser checks.
+  await writeFile(`${root}/native-diagnostic.pdf`, await scanFixture());
+  docker([
+    'cp',
+    `${root}/native-diagnostic.pdf`,
+    `${container}:/tmp/ocr-fixture.pdf`,
+  ]);
+  docker([
+    'exec',
+    container,
+    'node',
+    '--input-type=module',
+    '-e',
+    `
+    import { copyFile } from 'node:fs/promises';
+    import { basename } from 'node:path';
+    import { ocrPdf } from './dist/tools/ocr.js';
+    import { runNative } from './dist/tools/nativeRunner.js';
+    import { createTempWorkspace } from './dist/tools/workspace.js';
+    const workspace = await createTempWorkspace();
+    try {
+      await copyFile('/tmp/ocr-fixture.pdf', workspace.input);
+      await ocrPdf(workspace.input, workspace.output, new AbortController().signal, {
+        runner: async (request) => {
+          const result = await runNative(request);
+          if (result.exitCode !== 0) console.error(JSON.stringify({
+            syntheticFixture: true, tool: basename(request.executable), exitCode: result.exitCode,
+            diagnostic: (result.stderr || result.stdout).replaceAll(workspace.directory, '<synthetic>'),
+          }));
+          return result;
+        },
+      });
+    } finally { await workspace.cleanup(); }
+  `,
+  ]);
+  docker(['exec', container, 'rm', '/tmp/ocr-fixture.pdf']);
   browser = await chromium.launch({ headless: true });
   const page = await browser.newPage();
   await page.goto(process.env.KAGAZ_WEB_URL ?? 'http://localhost:5173');
