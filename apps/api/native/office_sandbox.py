@@ -56,5 +56,9 @@ if __name__ == '__main__':
     try:
         deny_network()
         os.execv(sys.argv[1], sys.argv[1:])
+    except OSError:
+        print('office-exec-failed', file=sys.stderr)
+        sys.exit(1)
     except Exception:
+        print('office-sandbox-setup-failed', file=sys.stderr)
         sys.exit(1)

@@ -337,7 +337,7 @@ try {
       container,
       'python3',
       '/app/native/office_sandbox.py',
-      'python3',
+      '/usr/bin/python3',
       '-c',
       networkProbe,
     ]),

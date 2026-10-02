@@ -350,13 +350,20 @@ describe('LibreOffice conversion policy', () => {
           '    print("internet-available")',
         ].join('\n'),
       );
+      const interpreter = spawnSync(
+        process.env.OCR_PYTHON_PATH ?? 'python3',
+        ['-c', 'import sys; print(sys.executable)'],
+        { encoding: 'utf8' },
+      );
+      if (interpreter.status !== 0 || !interpreter.stdout.trim())
+        throw new Error('Could not resolve the test Python executable.');
       const result = await runNative({
         executable: process.env.OCR_PYTHON_PATH ?? 'python3',
         args: [
           fileURLToPath(
             new URL('../../native/office_sandbox.py', import.meta.url),
           ),
-          process.env.OCR_PYTHON_PATH ?? 'python3',
+          interpreter.stdout.trim(),
           probe,
         ],
         cwd: directory,
