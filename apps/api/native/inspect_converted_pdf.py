@@ -8,6 +8,28 @@ from pdfminer.high_level import extract_pages
 
 logging.disable(logging.CRITICAL)
 
+
+def validate_open_action(root):
+    action = root.get('/OpenAction')
+    if action is None:
+        return
+    if isinstance(action, pikepdf.Dictionary):
+        if action.get('/S') != '/GoTo' or '/D' not in action:
+            raise ValueError('pdf-openaction-unsafe')
+        action = action['/D']
+    # An array or named destination is local to this PDF. A local GoTo action
+    # is also safe; the general action inventory below rejects remote actions.
+    if isinstance(action, pikepdf.Array):
+        if (len(action) < 2 or len(action) > 6 or
+                not isinstance(action[0], pikepdf.Dictionary) or
+                action[0].get('/Type') != '/Page' or
+                action[1] not in ('/XYZ', '/Fit', '/FitH', '/FitV', '/FitR',
+                                  '/FitB', '/FitBH', '/FitBV')):
+            raise ValueError('pdf-openaction-invalid-destination')
+    elif not isinstance(action, (pikepdf.Name, pikepdf.String)):
+        raise ValueError('pdf-openaction-invalid-destination')
+
+
 try:
     with pikepdf.open(sys.argv[1], attempt_recovery=False) as pdf:
         if pdf.is_encrypted:
@@ -16,8 +38,7 @@ try:
             raise ValueError('pdf-page-count-invalid')
         if '/AcroForm' in pdf.Root:
             raise ValueError('pdf-acroform-present')
-        if '/OpenAction' in pdf.Root:
-            raise ValueError('pdf-openaction-present')
+        validate_open_action(pdf.Root)
         for obj in pdf.objects:
             if isinstance(obj, pikepdf.Dictionary) and (obj.get('/S') in (
                     '/JavaScript', '/Launch', '/URI', '/GoToR', '/GoToE', '/SubmitForm', '/ImportData') or
