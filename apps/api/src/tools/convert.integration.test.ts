@@ -57,6 +57,12 @@ describe.skipIf(process.platform !== 'linux')(
                     syntheticFixture: name,
                     stage,
                     exitCode: nativeResult.exitCode,
+                    stdout: nativeResult.stdout
+                      .replaceAll(request.cwd, '<private-workspace>')
+                      .slice(0, 1024),
+                    stderr: nativeResult.stderr
+                      .replaceAll(request.cwd, '<private-workspace>')
+                      .slice(0, 1024),
                   }),
                 );
                 return nativeResult;
