@@ -76,9 +76,6 @@ try {
   const languages = docker(['exec', container, 'tesseract', '--list-langs']);
   assert(languages.includes('eng'));
   assert(!languages.includes('\nfra'));
-  assert(
-    !docker(['exec', container, 'sh', '-c', 'command -v soffice || true']),
-  );
   // Diagnose only this public synthetic fixture, outside the HTTP/logging path.
   // Use exactly the production runner and limits before expensive browser checks.
   await writeFile(`${root}/native-diagnostic.pdf`, await scanFixture());

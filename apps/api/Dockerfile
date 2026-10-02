@@ -18,9 +18,12 @@ RUN pnpm --filter @kagaz/api... build && pnpm --filter @kagaz/api deploy --prod 
 FROM node:22.20.0-bookworm-slim AS runner
 
 RUN apt-get update && apt-get install -y --no-install-recommends ghostscript qpdf util-linux ocrmypdf tesseract-ocr-eng \
+    libreoffice-writer-nogui libreoffice-impress-nogui libreoffice-calc-nogui \
+    fonts-liberation fonts-dejavu-core libseccomp2 \
     && rm -rf /var/lib/apt/lists/*
 
 ENV NODE_ENV=production
+ENV LIBREOFFICE_PATH=/usr/lib/libreoffice/program/soffice.bin
 WORKDIR /app
 
 COPY --from=builder /prod/api ./

@@ -1,11 +1,16 @@
 import { readdir, lstat, realpath, readlink } from 'node:fs/promises';
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { HeavyToolError } from './errors.js';
+import type { HeavyToolErrorCode } from '@kagaz/shared-types';
 
 /** Bounds the aggregate intermediates as well as the runner's individual file limit. */
 export function watchWorkspaceBudget(
   directory: string,
   controller: AbortController,
+  policy: { readonly bytes: number; readonly error: HeavyToolErrorCode } = {
+    bytes: 192 * 1024 * 1024,
+    error: 'ocr-failed',
+  },
 ) {
   let pending = Promise.resolve();
   let stopped = false;
@@ -42,14 +47,14 @@ export function watchWorkspaceBudget(
           ))
             throw error;
         }
-        if (bytes > 192 * 1024 * 1024) throw new Error('workspace bytes');
+        if (bytes > policy.bytes) throw new Error('workspace bytes');
       }
     };
     try {
       workspaceRoot = await realpath(directory);
       await visit(directory, 0);
     } catch {
-      controller.abort(new HeavyToolError('ocr-failed'));
+      controller.abort(new HeavyToolError(policy.error));
     }
   };
   let scanning = false;

@@ -2022,6 +2022,61 @@ input:focus-visible + * {
   animation: compression-enter 160ms ease-out;
 }
 
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.conversion-file label {
+  display: block;
+  margin-bottom: 12px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.conversion-file input {
+  max-width: 100%;
+  font-size: 12px;
+}
+
+.conversion-file input::file-selector-button {
+  margin-right: 12px;
+  padding: 10px 12px;
+  border: 1px solid #27272a;
+  border-radius: 8px;
+  color: #e4e4e7;
+  background: #1a1a1a;
+  cursor: pointer;
+  transition: border-color 140ms ease;
+}
+
+.conversion-file input::file-selector-button:hover {
+  border-color: #06b6d4;
+}
+
+.conversion-selected {
+  padding: 12px 0;
+  font-size: 12px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
+.conversion-selected strong,
+.conversion-selected span {
+  display: block;
+}
+
+.conversion-selected span {
+  color: #a1a1aa;
+}
+
+@media (max-width: 480px) {
+  .header-actions .privacy-status {
+    display: none;
+  }
+}
+
 .compress-dialog::backdrop {
   background: rgb(0 0 0 / 72%);
 }

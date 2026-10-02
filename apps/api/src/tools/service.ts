@@ -4,10 +4,15 @@ import type { Request, Response } from 'express';
 import { compressPdf, type CompressionEngineOptions } from './compress.js';
 import { HeavyToolError } from './errors.js';
 import { ExecutionLimiter } from './limiter.js';
-import { isPreset, receivePdf } from './upload.js';
+import { receiveUpload } from './upload.js';
 import { createTempWorkspace } from './workspace.js';
 import { ocrPdf, OCR_POLICY, type OcrEngineOptions } from './ocr.js';
 import { watchWorkspaceBudget } from './workspaceBudget.js';
+import {
+  convertToPdf,
+  CONVERSION_POLICY,
+  type ConversionEngineOptions,
+} from './convert.js';
 
 export const COMPRESSION_HEADERS = [
   'X-Kagaz-Original-Bytes',
@@ -25,9 +30,15 @@ export const OCR_HEADERS = [
   'X-Kagaz-Pages-Ocred',
   'X-Kagaz-Pages-Skipped',
 ];
+export const CONVERSION_HEADERS = [
+  'X-Kagaz-Original-Bytes',
+  'X-Kagaz-Output-Bytes',
+  'X-Kagaz-Pages',
+  'X-Kagaz-Input-Format',
+];
 
 export interface ToolServiceOptions
-  extends CompressionEngineOptions, OcrEngineOptions {
+  extends CompressionEngineOptions, OcrEngineOptions, ConversionEngineOptions {
   readonly tempRoot?: string;
   readonly concurrency?: number;
   readonly queueLimit?: number;
@@ -49,7 +60,7 @@ export class ToolService {
   handle(
     request: Request,
     response: Response,
-    operation: 'compress' | 'ocr' = 'compress',
+    operation: 'compress' | 'ocr' | 'convert-to-pdf' = 'compress',
   ): Promise<void> {
     const task = this.process(request, response, operation);
     this.work.add(task);
@@ -68,7 +79,7 @@ export class ToolService {
   private async process(
     request: Request,
     response: Response,
-    operation: 'compress' | 'ocr',
+    operation: 'compress' | 'ocr' | 'convert-to-pdf',
   ): Promise<void> {
     response.set({
       'Cache-Control': 'no-store',
@@ -85,7 +96,11 @@ export class ToolService {
     const deadline = setTimeout(
       () => controller.abort(new HeavyToolError('processing-timeout')),
       this.options.requestTimeoutMs ??
-        (operation === 'ocr' ? OCR_POLICY.requestTimeoutMs : 120_000),
+        (operation === 'convert-to-pdf'
+          ? CONVERSION_POLICY.requestTimeoutMs
+          : operation === 'ocr'
+            ? OCR_POLICY.requestTimeoutMs
+            : 120_000),
     );
     let release: (() => void) | undefined;
     let workspace: Awaited<ReturnType<typeof createTempWorkspace>> | undefined;
@@ -96,14 +111,39 @@ export class ToolService {
       workspace = await createTempWorkspace(this.options.tempRoot);
       if (operation === 'ocr')
         stopBudget = watchWorkspaceBudget(workspace.directory, controller);
-      const selection = await receivePdf(
+      if (operation === 'convert-to-pdf')
+        stopBudget = watchWorkspaceBudget(workspace.directory, controller, {
+          bytes: CONVERSION_POLICY.workspaceBytes,
+          error: 'conversion-failed',
+        });
+      const selection = await receiveUpload(
         request,
         workspace.input,
         controller.signal,
         operation,
       );
       let result: { path: string };
-      if (operation === 'ocr') {
+      if (operation === 'convert-to-pdf') {
+        if (selection.operation !== 'convert-to-pdf')
+          throw new HeavyToolError('invalid-request');
+        const converted = await convertToPdf(
+          workspace.input,
+          selection.declaredFormat,
+          controller.signal,
+          this.options,
+        );
+        result = converted;
+        response.set({
+          'Content-Disposition': 'attachment; filename="kagaz-converted.pdf"',
+          'Content-Length': String(converted.metadata.outputBytes),
+          'X-Kagaz-Original-Bytes': String(converted.metadata.originalBytes),
+          'X-Kagaz-Output-Bytes': String(converted.metadata.outputBytes),
+          'X-Kagaz-Pages': String(converted.metadata.pages),
+          'X-Kagaz-Input-Format': converted.metadata.inputFormat,
+        });
+      } else if (operation === 'ocr') {
+        if (selection.operation !== 'ocr')
+          throw new HeavyToolError('invalid-request');
         const ocr = await ocrPdf(
           workspace.input,
           workspace.output,
@@ -122,11 +162,12 @@ export class ToolService {
           'X-Kagaz-Pages-Skipped': String(ocr.metadata.pagesSkipped),
         });
       } else {
-        if (!isPreset(selection)) throw new HeavyToolError('invalid-request');
+        if (selection.operation !== 'compress')
+          throw new HeavyToolError('invalid-request');
         const compressed = await compressPdf(
           workspace.input,
           workspace.output,
-          selection,
+          selection.preset,
           controller.signal,
           this.options,
         );

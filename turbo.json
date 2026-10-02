@@ -14,6 +14,7 @@
         "QPDF_PATH",
         "OCRMYPDF_PATH",
         "OCR_PYTHON_PATH",
+        "LIBREOFFICE_PATH",
         "VITE_API_URL"
       ],
       "cache": false,
@@ -30,7 +31,8 @@
         "GHOSTSCRIPT_PATH",
         "QPDF_PATH",
         "OCRMYPDF_PATH",
-        "OCR_PYTHON_PATH"
+        "OCR_PYTHON_PATH",
+        "LIBREOFFICE_PATH"
       ],
       "outputs": []
     }

@@ -1,28 +1,52 @@
 export class HeavyPdfError extends Error {}
 
-export async function uploadHeavyPdf<M>(options: {
-  readonly bytes: Uint8Array;
-  readonly field: string;
-  readonly value: string;
-  readonly signal: AbortSignal;
-  readonly onProcessing: () => void;
-  readonly apiUrl: string;
-  readonly operation: 'compress' | 'ocr';
-  readonly maximumInput: number;
-  readonly sizeHeader: string;
-  readonly errors: Readonly<Record<string, string>>;
-  readonly validate: (headers: Headers, actualBytes: number) => M;
-}): Promise<{ bytes: Uint8Array; metadata: M }> {
-  const { bytes, signal, onProcessing, apiUrl } = options;
-  if (bytes.byteLength > options.maximumInput)
+export async function uploadHeavyPdf<M>(
+  options: (
+    | {
+        readonly bytes: Uint8Array;
+        readonly file?: never;
+        readonly field: string;
+        readonly value: string;
+      }
+    | {
+        readonly file: File;
+        readonly uploadFilename?: string;
+        readonly bytes?: never;
+        readonly field?: never;
+        readonly value?: never;
+      }
+  ) & {
+    readonly signal: AbortSignal;
+    readonly onProcessing: () => void;
+    readonly apiUrl: string;
+    readonly operation: 'compress' | 'ocr' | 'convert-to-pdf';
+    readonly maximumInput: number;
+    readonly sizeHeader: string;
+    readonly errors: Readonly<Record<string, string>>;
+    readonly validate: (headers: Headers, actualBytes: number) => M;
+  },
+): Promise<{ bytes: Uint8Array; metadata: M }> {
+  const { signal, onProcessing, apiUrl } = options;
+  signal.throwIfAborted();
+  if (
+    (options.file?.size ?? options.bytes?.byteLength ?? 0) >
+    options.maximumInput
+  )
     throw new HeavyPdfError(options.errors['file-too-large']);
   const form = new FormData();
-  form.append(
-    'file',
-    new Blob([bytes.slice()], { type: 'application/pdf' }),
-    'workspace.pdf',
-  );
-  form.append(options.field, options.value);
+  if (options.file)
+    form.append(
+      'file',
+      options.file,
+      options.uploadFilename ?? 'selected-document',
+    );
+  else
+    form.append(
+      'file',
+      new Blob([options.bytes.slice()], { type: 'application/pdf' }),
+      'workspace.pdf',
+    );
+  if (options.field) form.append(options.field, options.value);
   // Fetch has no trustworthy upload percentage. Report an indeterminate network stage.
   onProcessing();
   let response: Response;

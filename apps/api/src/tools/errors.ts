@@ -4,23 +4,29 @@ import type {
 } from '@kagaz/shared-types';
 
 const messages: Record<HeavyToolErrorCode, string> = {
-  'invalid-request': 'Send exactly one PDF and supported tool options.',
+  'invalid-request': 'Send exactly one file and supported tool options.',
   'invalid-pdf': 'This PDF is empty, damaged, or cannot be safely read.',
   'file-too-large':
-    'This file exceeds the tool limit: 20 MiB for compression or 10 MiB for OCR.',
+    'This file exceeds the tool limit: 20 MiB for compression or 10 MiB for OCR and Office conversion.',
   'unsupported-pdf':
     'This PDF is encrypted, contains unsafe or interactive structures, or exceeds this tool’s page or image limits.',
   'processing-timeout':
-    'Processing took too long. Try a smaller PDF or try again.',
+    'Processing took too long. Try a smaller document or try again.',
   'server-busy': 'The server is busy. Please try again in a moment.',
   'processing-failed':
-    'The server could not safely process this PDF. Your workspace is intact.',
+    'The server could not safely process this file. Your workspace is intact.',
   'unsupported-language':
     'Only English OCR is supported. Select English and retry.',
   'no-ocr-needed':
     'No scanned pages need OCR. Existing text remains usable; blank pages have no text to recognize.',
   'ocr-failed':
     'The server could not validate a searchable PDF. Try a clearer scan or fewer pages. Your workspace is intact.',
+  'unsupported-format':
+    'Choose a DOCX, PPTX or XLSX document. Legacy and macro-enabled Office files are unsupported.',
+  'unsafe-document':
+    'This document is damaged, exceeds archive limits, or contains unsupported active content or external resources.',
+  'conversion-failed':
+    'The server could not safely convert this document. Try a simpler document. Your workspace is intact.',
   cancelled: 'Processing was cancelled.',
 };
 
@@ -37,6 +43,8 @@ export class HeavyToolError extends Error {
       case 'unsupported-pdf':
       case 'unsupported-language':
       case 'no-ocr-needed':
+      case 'unsupported-format':
+      case 'unsafe-document':
         return 422;
       case 'server-busy':
         return 503;
@@ -44,6 +52,7 @@ export class HeavyToolError extends Error {
         return 504;
       case 'processing-failed':
       case 'ocr-failed':
+      case 'conversion-failed':
         return 500;
       case 'cancelled':
         return 499;

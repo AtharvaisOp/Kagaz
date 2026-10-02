@@ -6,6 +6,7 @@ import type { ErrorRequestHandler, Express } from 'express';
 import {
   COMPRESSION_HEADERS,
   OCR_HEADERS,
+  CONVERSION_HEADERS,
   ToolService,
 } from './tools/service.js';
 
@@ -18,7 +19,11 @@ export function createApp(
   app.disable('x-powered-by');
   app.use(
     cors({
-      exposedHeaders: [...COMPRESSION_HEADERS, ...OCR_HEADERS],
+      exposedHeaders: [
+        ...COMPRESSION_HEADERS,
+        ...OCR_HEADERS,
+        ...CONVERSION_HEADERS,
+      ],
       methods: ['GET', 'POST', 'OPTIONS'],
       origin(origin, callback) {
         if (!origin || allowedOrigins.includes(origin)) {
@@ -59,6 +64,9 @@ export function createApp(
   );
   app.post('/tools/ocr', (request, response) =>
     tools.handle(request, response, 'ocr'),
+  );
+  app.post('/tools/convert-to-pdf', (request, response) =>
+    tools.handle(request, response, 'convert-to-pdf'),
   );
 
   // Multipart tools own their parser and limits. Future JSON routes use this one.

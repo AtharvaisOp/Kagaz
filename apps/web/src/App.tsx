@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 
 import { AppHeader } from './components/AppHeader';
 import { FilePicker } from './components/FilePicker';
@@ -9,6 +9,7 @@ import { usePdfWorkspace } from './features/pdf-workspace/hooks/usePdfWorkspace'
 import { usePdfExport } from './features/pdf-workspace/hooks/usePdfExport';
 import { usePdfForms } from './features/pdf-forms/hooks/usePdfForms';
 import { useEditorHistory } from './features/editor-history/useEditorHistory';
+import { ConvertDialog } from './features/office-conversion/ConvertDialog';
 
 import type { FileLoadIssue } from './features/pdf-workspace/loading/types';
 
@@ -17,6 +18,12 @@ const MAX_ZOOM = 200;
 const ZOOM_STEP = 10;
 
 export function App() {
+  const [convertOpen, setConvertOpen] = useState(false);
+  const convertTrigger = useRef<HTMLButtonElement>(null);
+  const closeConvert = useCallback(() => {
+    setConvertOpen(false);
+    window.requestAnimationFrame(() => convertTrigger.current?.focus());
+  }, []);
   const [zoom, setZoom] = useState(100);
   const {
     workspace,
@@ -93,7 +100,11 @@ export function App() {
 
   return (
     <main className="app-shell">
-      <AppHeader />
+      <AppHeader
+        onOpenConvert={() => setConvertOpen(true)}
+        convertTrigger={convertTrigger}
+      />
+      {convertOpen ? <ConvertDialog onClose={closeConvert} /> : null}
       {workspace.sessionStatus === 'empty' && loading.status === 'idle' ? (
         <section className="upload-layout">
           <div className="ambient-grid" aria-hidden="true" />

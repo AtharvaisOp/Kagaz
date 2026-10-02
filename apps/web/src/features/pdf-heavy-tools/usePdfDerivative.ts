@@ -19,6 +19,36 @@ export function usePdfDerivative<Selection, M>(
   ) => Promise<{ bytes: Uint8Array; metadata: M }>,
   suffix: string,
 ) {
+  return useDerivative<Selection, M>(
+    async (selection, signal, onProcessing) => {
+      const generated = await prepareWorkspace(signal);
+      signal.throwIfAborted();
+      const response = await upload(
+        generated.bytes,
+        selection,
+        signal,
+        onProcessing,
+      );
+      return {
+        ...response,
+        fileName: generated.fileName.replace(/\.pdf$/i, `-${suffix}.pdf`),
+      };
+    },
+  );
+}
+
+/** One lifecycle for workspace exports and separately selected document derivatives. */
+export function useDerivative<Selection, M>(
+  execute: (
+    selection: Selection,
+    signal: AbortSignal,
+    onProcessing: () => void,
+  ) => Promise<{
+    bytes: Uint8Array;
+    metadata: M;
+    fileName: string;
+  }>,
+) {
   const [state, setState] = useState<DerivativeState<M>>({ status: 'idle' });
   const active = useRef<AbortController | null>(null);
   const result = useRef<{ bytes: Uint8Array; fileName: string } | null>(null);
@@ -35,22 +65,15 @@ export function usePdfDerivative<Selection, M>(
     result.current = null;
     setState({ status: 'preparing' });
     try {
-      const generated = await prepareWorkspace(controller.signal);
-      if (controller.signal.aborted) return;
-      const compressed = await upload(
-        generated.bytes,
-        selection,
-        controller.signal,
-        () => {
-          if (!controller.signal.aborted) setState({ status: 'processing' });
-        },
-      );
+      const converted = await execute(selection, controller.signal, () => {
+        if (!controller.signal.aborted) setState({ status: 'processing' });
+      });
       if (controller.signal.aborted) return;
       result.current = {
-        bytes: compressed.bytes,
-        fileName: generated.fileName.replace(/\.pdf$/i, `-${suffix}.pdf`),
+        bytes: converted.bytes,
+        fileName: converted.fileName,
       };
-      setState({ status: 'success', metadata: compressed.metadata });
+      setState({ status: 'success', metadata: converted.metadata });
     } catch (error) {
       if (!controller.signal.aborted)
         setState({
@@ -68,6 +91,10 @@ export function usePdfDerivative<Selection, M>(
     if (result.current)
       downloadPdf(result.current.bytes, result.current.fileName);
   };
+  const reset = () => {
+    cancel();
+    setState({ status: 'idle' });
+  };
   useEffect(
     () => () => {
       active.current?.abort();
@@ -75,5 +102,5 @@ export function usePdfDerivative<Selection, M>(
     },
     [],
   );
-  return { state, start, cancel, download };
+  return { state, start, cancel, reset, download };
 }

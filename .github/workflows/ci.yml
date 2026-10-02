@@ -42,7 +42,9 @@ jobs:
         # The Docker job below verifies the production image independently.
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends ghostscript qpdf ocrmypdf tesseract-ocr-eng
+          sudo apt-get install -y --no-install-recommends ghostscript qpdf ocrmypdf tesseract-ocr-eng \
+            libreoffice-writer-nogui libreoffice-impress-nogui libreoffice-calc-nogui \
+            fonts-liberation fonts-dejavu-core libseccomp2
           pnpm test
 
       - name: Build
@@ -54,7 +56,7 @@ jobs:
       - name: Diff check
         run: git diff --check
 
-  compression-container:
+  production-container:
     needs: quality
     runs-on: ubuntu-latest
     steps:
@@ -76,30 +78,35 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: Build production API image
         run: |
-          git show 7fa5d2a4601c4d750da95cbf96137f5c6bb65dd2:apps/api/Dockerfile > /tmp/kagaz-baseline.Dockerfile
+          git show dad197377a2219619f3774179519b99df78cadf4:apps/api/Dockerfile > /tmp/kagaz-baseline.Dockerfile
           docker build -f /tmp/kagaz-baseline.Dockerfile -t kagaz-api:baseline .
           docker build -f apps/api/Dockerfile -t kagaz-api:verify .
+      - name: Verify Office conversion, output integrity, attacks, isolation and resource use
+        env:
+          KAGAZ_ARTIFACT_DIR: ${{ runner.temp }}/phase4c-artifacts
+        run: node scripts/verify-phase4c-container.mjs
       - name: Verify container health, tools, compression, failures and cleanup
         run: node scripts/verify-phase4a-container.mjs
       - name: Install browser
         run: pnpm exec playwright install --with-deps chromium
       - name: Verify editor and real container together
         env:
-          KAGAZ_ARTIFACT_DIR: ${{ runner.temp }}/phase4a-artifacts
+          KAGAZ_ARTIFACT_DIR: ${{ runner.temp }}/phase4c-artifacts
         run: |
           pnpm --filter @kagaz/web dev --host 127.0.0.1 > /tmp/kagaz-web.log 2>&1 &
           for i in $(seq 1 30); do curl -fsS http://localhost:5173/ > /dev/null && break; sleep 1; done
           node scripts/verify-phase4b-container.mjs
-          docker run -d --name kagaz-browser-api --init --memory=512m --cpus=0.5 -p 4000:4000 kagaz-api:verify
+          docker run -d --name kagaz-browser-api --init --memory=512m --cpus=0.5 --read-only --tmpfs /tmp:rw,noexec,nosuid,size=256m --cap-drop=ALL --security-opt=no-new-privileges --pids-limit=64 -p 127.0.0.1:4000:4000 kagaz-api:verify
           for i in $(seq 1 30); do curl -fsS http://localhost:4000/health > /dev/null && break; sleep 1; done
           node scripts/verify-phase4a.mjs
           node scripts/verify-phase4b.mjs
+          node scripts/verify-phase4c.mjs
       - name: Save verification artifacts
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: phase4a-verification
-          path: ${{ runner.temp }}/phase4a-artifacts
+          name: phase4c-verification
+          path: ${{ runner.temp }}/phase4c-artifacts
           if-no-files-found: ignore
       - name: Container diagnostics and cleanup
         if: always()

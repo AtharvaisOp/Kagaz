@@ -3,9 +3,11 @@
 Kagaz is a browser-first PDF workspace for combining and arranging documents
 locally. Open one or several PDFs, inspect their pages, reorder them, rotate or
 delete pages, extract a range, and download the result without sending PDF
-bytes to a server. **Compress PDF** and **OCR PDF** are explicit server operations: only after
-you submit a tool does Kagaz upload a flattened export of the current workspace
-to its API. Ordinary editing and export remain browser-local.
+bytes to a server. **Compress PDF** and **OCR PDF** are explicit server operations:
+only after submission does Kagaz upload a flattened export of the current PDF
+workspace. **Convert to PDF** uploads a separately selected DOCX, PPTX or XLSX
+only after the user submits conversion. Those temporary server operations return
+derivative downloads; ordinary PDF editing and export remain browser-local.
 
 ## Phase 1 capabilities
 
@@ -143,6 +145,7 @@ initial application bundle or uploading any bytes.
 - Express 5 and Docker for the API foundation
 - Ghostscript for compression, qpdf for structural validation, Busboy for streamed uploads
 - OCRmyPDF and Tesseract for English searchable PDF derivatives
+- LibreOffice headless for DOCX, PPTX and XLSX to PDF conversion
 - GitHub Actions, Vercel, and Render deployment paths
 
 ## Local development
@@ -163,8 +166,12 @@ The web app runs at `http://localhost:5173`; the API defaults to
 `http://localhost:4000`. Editing and ordinary export do not require the API.
 Compression requires Ghostscript and qpdf on PATH, or their executable paths
 in the API environment. OCR additionally requires OCRmyPDF, Tesseract English data
-and Python with OCRmyPDF's dependencies. On Debian/Ubuntu:
-`apt-get install ghostscript qpdf util-linux ocrmypdf tesseract-ocr-eng`.
+and Python with OCRmyPDF's dependencies. Office conversion also requires the
+headless LibreOffice Writer/Impress/Calc packages, Liberation/DejaVu fonts and
+libseccomp on Linux. On Debian/Ubuntu, install the equivalents of:
+`ghostscript qpdf util-linux ocrmypdf tesseract-ocr-eng libreoffice-writer-nogui
+libreoffice-impress-nogui libreoffice-calc-nogui fonts-liberation fonts-dejavu-core
+libseccomp2`.
 On Windows, set `GHOSTSCRIPT_PATH` to `gswin64c.exe` and `QPDF_PATH` to `qpdf.exe`.
 The Linux runner uses `prlimit` from util-linux for resource bounds. API integration
 tests deliberately require these native tools; they are not silently skipped.
@@ -189,17 +196,19 @@ is `apps/api/dist/index.js`.
 Copy `apps/api/.env.example` to `apps/api/.env` only when custom local values
 are needed.
 
-| Variable       | Default                 | Purpose                                               |
-| -------------- | ----------------------- | ----------------------------------------------------- |
-| `PORT`         | `4000`                  | API listening port; hosting platforms may provide it. |
-| `CORS_ORIGINS` | `http://localhost:5173` | Comma-separated API origins.                          |
+| Variable           | Default                                    | Purpose                                               |
+| ------------------ | ------------------------------------------ | ----------------------------------------------------- |
+| `PORT`             | `4000`                                     | API listening port; hosting platforms may provide it. |
+| `CORS_ORIGINS`     | `http://localhost:5173`                    | Comma-separated API origins.                          |
+| `LIBREOFFICE_PATH` | `/usr/lib/libreoffice/program/soffice.bin` | Server-selected headless LibreOffice binary.          |
 
 `GHOSTSCRIPT_PATH` (default `gs`) and `QPDF_PATH` (default `qpdf`) optionally
 select native executables using server-controlled configuration. `OCRMYPDF_PATH`
 (default `ocrmypdf`) and `OCR_PYTHON_PATH` (default `python3`) select the OCR runtime;
 OCRmyPDF locates Ghostscript and Tesseract on PATH. Export these variables into the
 shell for repository tests as well as API development. No secrets are
-required for local development.
+required for local development. The LibreOffice executable remains
+server-controlled; uploads cannot choose its path, filters or arguments.
 
 ## Compression contract and limits
 
@@ -274,6 +283,43 @@ See [Phase 4B engineering and verification](docs/phase-4b.md) for architecture,
 synthetic fixtures, Docker/browser checks, performance, security and limitations.
 OCR uses no cloud API, permanent storage or OCR text/content logging.
 
+## Office documents to PDF
+
+Choose **Convert to PDF** from the empty state or editor header. Kagaz shows the
+privacy notice and checks only the selected filename extension in the browser;
+selecting a file does not upload it. Press **Convert** to upload that document
+temporarily for server-side conversion. The API identifies the OOXML package
+structure itself, rejects macro-enabled or active/external content, and returns a
+validated PDF derivative download. It does not open, replace or modify the active
+PDF workspace. The upload and request-scoped LibreOffice profile are deleted
+after success, failure, cancellation or orderly shutdown. No document is
+persistently stored, entered into a database, or used for content analytics.
+
+`POST /tools/convert-to-pdf` accepts exactly one multipart `file` with a DOCX,
+PPTX or XLSX package. The response is `application/pdf`; exposed metadata headers
+report the detected input format, input/output bytes and validated PDF page count.
+The server requires the declared filename family to match the package, then uses
+a fixed family-specific PDF export filter. Legacy DOC/PPT/XLS, macro-enabled
+DOCM/PPTM/XLSM, encrypted or malformed ZIP packages, macros, external
+relationships, embedded packages and unsupported active content fail closed.
+
+OOXML packages are inspected in place without archive extraction. ZIP metadata,
+local headers and central-directory records must agree; entry count, expanded
+bytes, entry bytes and compression ratio are bounded. Every relationship must
+resolve inside the package and external targets are rejected. LibreOffice gets a
+fresh private user profile for each request. On Linux, a seccomp filter preserves
+local Unix sockets needed for its private instance pipe and denies network socket
+creation in the office process tree. Its output must pass a PDF signature check,
+qpdf structure/encryption/page checks, and an independent pikepdf/PDFMiner reload
+before the API streams it back.
+
+Spreadsheet output follows each workbook's saved print area and page setup.
+Fonts, pagination, line breaks and layout can differ from Microsoft Office; the
+conversion is a practical derivative, not a pixel-fidelity promise. See
+[Phase 4C architecture, security and measured verification](docs/phase-4c.md) for
+operation limits, Docker impact, representative runtime/memory measurements,
+browser and native checks, and hosting constraints.
+
 ## Deployment
 
 ### Vercel
@@ -311,9 +357,10 @@ The Render Blueprint uses the `main` branch, Docker, the Singapore region,
 and `/health` as its health check. `CORS_ORIGINS` is configured for the
 intended production frontend origin. Phase 4A retains the free tier, existing
 health check, region, branch and normal auto-deploy configuration. Docker installs
-Ghostscript, qpdf, util-linux, OCRmyPDF and English Tesseract data with their required
-dependencies, then runs as the unprivileged Node user. LibreOffice is not installed.
-No persistent disk is assumed. This phase does not manually trigger deployment.
+Ghostscript, qpdf, util-linux, OCRmyPDF, English Tesseract data, minimal headless
+LibreOffice Writer/Impress/Calc packages, Liberation/DejaVu fonts and libseccomp,
+then runs as the unprivileged Node user. No persistent disk is assumed. This phase
+does not manually trigger deployment.
 
 ## Current limitations
 
@@ -327,9 +374,11 @@ No persistent disk is assumed. This phase does not manually trigger deployment.
   signing, verification, and signature persistence are not implemented.
 - Password fields and push-button or PDF JavaScript behavior are not exported.
 - OCR supports English only and recognition is imperfect; review searchable text.
+- Office conversion supports DOCX, PPTX and XLSX. Layout and fonts can differ from
+  Microsoft Office; spreadsheets follow their saved print settings.
 - Pages with any existing text are skipped, including pages mixing digital text
   and scans. No automatic language detection, forced OCR, rotation correction or
-  deskew is provided. Conversion is not implemented.
+  deskew is provided.
 - Compression is lossy for images and may change document-level metadata and
   other non-visible features. It targets a flattened visual derivative rather
   than archival equivalence. Savings depend on PDF content.
@@ -347,7 +396,9 @@ No persistent disk is assumed. This phase does not manually trigger deployment.
 
 - Phase 2 â€” annotations (complete)
 - Phase 3 â€” forms and signatures
-- Phase 4 â€” server-backed heavy processing such as OCR and conversion
+- Phase 4A/4B â€” server-backed compression and OCR (complete)
+- Phase 4C â€” Office to PDF conversion (complete)
+- Phase 4D â€” further heavy-tool hardening (not started)
 
 The browser-local architecture remains the default for operations that can be
 performed safely on the device.

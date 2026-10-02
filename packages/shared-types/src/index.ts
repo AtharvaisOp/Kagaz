@@ -17,6 +17,9 @@ export type HeavyToolErrorCode =
   | 'unsupported-language'
   | 'no-ocr-needed'
   | 'ocr-failed'
+  | 'unsupported-format'
+  | 'unsafe-document'
+  | 'conversion-failed'
   | 'cancelled';
 
 export interface HeavyToolErrorResponse {
@@ -44,4 +47,12 @@ export interface OcrMetadata {
   /** Pages given a validated text layer, rather than an engine exit-code estimate. */
   readonly pagesOcred: number;
   readonly pagesSkipped: number;
+}
+
+export type OfficeFormat = 'docx' | 'pptx' | 'xlsx';
+export interface ConversionMetadata {
+  readonly inputFormat: OfficeFormat;
+  readonly originalBytes: number;
+  readonly outputBytes: number;
+  readonly pages: number;
 }

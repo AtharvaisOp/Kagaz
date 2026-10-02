@@ -3,26 +3,40 @@ import { createWriteStream } from 'node:fs';
 import { pipeline } from 'node:stream/promises';
 import { Transform } from 'node:stream';
 import type { Request } from 'express';
-import type { CompressionPreset } from '@kagaz/shared-types';
+import type { CompressionPreset, OfficeFormat } from '@kagaz/shared-types';
 import { checkAbort, HeavyToolError } from './errors.js';
 
 export const MAX_INPUT_BYTES = 20 * 1024 * 1024;
 export const MAX_OCR_INPUT_BYTES = 10 * 1024 * 1024;
+export const MAX_CONVERSION_INPUT_BYTES = 10 * 1024 * 1024;
 export function isPreset(value: string): value is CompressionPreset {
   return (
     value === 'high-quality' || value === 'balanced' || value === 'maximum'
   );
 }
 
+export type UploadSelection =
+  | { readonly operation: 'compress'; readonly preset: CompressionPreset }
+  | { readonly operation: 'ocr'; readonly language: 'eng' }
+  | {
+      readonly operation: 'convert-to-pdf';
+      readonly declaredFormat: OfficeFormat | null;
+    };
+
 /** Streams one bounded part to disk. All writes settle before cleanup can begin. */
-export async function receivePdf(
+export async function receiveUpload(
   request: Request,
   path: string,
   signal: AbortSignal,
-  operation: 'compress' | 'ocr' = 'compress',
-): Promise<CompressionPreset | 'eng'> {
+  operation: 'compress' | 'ocr' | 'convert-to-pdf' = 'compress',
+): Promise<UploadSelection> {
   checkAbort(signal);
-  const maximum = operation === 'ocr' ? MAX_OCR_INPUT_BYTES : MAX_INPUT_BYTES;
+  const maximum =
+    operation === 'convert-to-pdf'
+      ? MAX_CONVERSION_INPUT_BYTES
+      : operation === 'ocr'
+        ? MAX_OCR_INPUT_BYTES
+        : MAX_INPUT_BYTES;
   const MAX_BODY_BYTES = maximum + 64 * 1024;
   if (Number(request.headers['content-length']) > MAX_BODY_BYTES)
     throw new HeavyToolError('file-too-large');
@@ -32,9 +46,9 @@ export async function receivePdf(
       headers: request.headers,
       limits: {
         files: 1,
-        fields: 1,
+        fields: operation === 'convert-to-pdf' ? 0 : 1,
         // Busboy emits partsLimit upon reaching the count, including the last part.
-        parts: 3,
+        parts: operation === 'convert-to-pdf' ? 2 : 3,
         fileSize: maximum + 1,
         fieldSize: 32,
         fieldNameSize: 32,
@@ -47,6 +61,7 @@ export async function receivePdf(
   let bytes = 0,
     fileCount = 0;
   let preset: CompressionPreset | 'eng' | undefined;
+  let declaredFormat: OfficeFormat | null = null;
   let failure: unknown;
   const writes: Promise<void>[] = [];
   const counter = new Transform({
@@ -75,15 +90,23 @@ export async function receivePdf(
     () => fail(new HeavyToolError('processing-timeout')),
     30_000,
   );
-  parser.on('file', (name, file) => {
+  parser.on('file', (name, file, info) => {
     fileCount += 1;
     if (name !== 'file') {
       file.resume();
       fail(new HeavyToolError('invalid-request'));
       return;
     }
+    if (operation === 'convert-to-pdf') {
+      const match = /\.([a-z0-9]+)$/i.exec(info.filename ?? '');
+      const extension = match?.[1]?.toLowerCase();
+      declaredFormat =
+        extension === 'docx' || extension === 'pptx' || extension === 'xlsx'
+          ? extension
+          : null;
+    }
     file.on('limit', () => fail(new HeavyToolError('file-too-large')));
-    // info.filename, MIME and extension deliberately have no authority here.
+    // The extension is only a consistency claim; package inspection is authoritative.
     writes.push(
       pipeline(file, createWriteStream(path, { flags: 'wx', mode: 0o600 }), {
         signal,
@@ -138,6 +161,13 @@ export async function receivePdf(
     throw failure instanceof HeavyToolError
       ? failure
       : new HeavyToolError('invalid-request');
-  if (fileCount !== 1 || !preset) throw new HeavyToolError('invalid-request');
-  return preset;
+  if (fileCount !== 1 || (operation !== 'convert-to-pdf' && !preset))
+    throw new HeavyToolError('invalid-request');
+  if (operation === 'convert-to-pdf') return { operation, declaredFormat };
+  if (operation === 'ocr') {
+    if (preset !== 'eng') throw new HeavyToolError('invalid-request');
+    return { operation, language: 'eng' };
+  }
+  if (!preset || preset === 'eng') throw new HeavyToolError('invalid-request');
+  return { operation, preset };
 }

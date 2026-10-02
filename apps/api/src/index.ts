@@ -10,6 +10,7 @@ const tools = new ToolService({
   qpdf: process.env.QPDF_PATH,
   ocrmypdf: process.env.OCRMYPDF_PATH,
   python: process.env.OCR_PYTHON_PATH,
+  libreoffice: process.env.LIBREOFFICE_PATH,
 });
 const app = createApp(config.allowedOrigins, tools);
 

@@ -142,11 +142,16 @@ describe('explicit compression upload', () => {
         () => {},
       ),
     ).rejects.toThrow('Check your connection');
+    const fetchMock = vi
+      .fn()
+      .mockRejectedValue(new Error('raw network internals'));
+    vi.stubGlobal('fetch', fetchMock);
     const controller = new AbortController();
     controller.abort();
     await expect(
       uploadCompression(input, 'balanced', controller.signal, () => {}),
-    ).rejects.toThrow('raw network internals');
+    ).rejects.toMatchObject({ name: 'AbortError' });
+    expect(fetchMock).not.toHaveBeenCalled();
   });
   it('rejects oversized generated PDF before starting a request', async () => {
     const mock = vi.fn();
