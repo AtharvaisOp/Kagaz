@@ -5,7 +5,6 @@ import type { OfficeFormat } from '@kagaz/shared-types';
 import { describe, expect, it } from 'vitest';
 import { officeFixture } from '../../../../scripts/office-fixtures.mjs';
 import { convertToPdf } from './convert.js';
-import { runNative } from './nativeRunner.js';
 
 const python = process.env.OCR_PYTHON_PATH ?? 'python3';
 const libreoffice =
@@ -42,31 +41,6 @@ describe.skipIf(process.platform !== 'linux')(
               python,
               libreoffice,
               qpdf,
-              runner: async (request) => {
-                const nativeResult = await runNative(request);
-                const script = request.args[0] ?? '';
-                const stage = script.endsWith('inspect_office.py')
-                  ? 'ooxml-inspection'
-                  : script.endsWith('office_sandbox.py')
-                    ? 'libreoffice'
-                    : script.endsWith('inspect_converted_pdf.py')
-                      ? 'independent-pdf-inspection'
-                      : `qpdf-${request.args[0] ?? 'unknown'}`;
-                console.log(
-                  JSON.stringify({
-                    syntheticFixture: name,
-                    stage,
-                    exitCode: nativeResult.exitCode,
-                    stdout: nativeResult.stdout
-                      .replaceAll(request.cwd, '<private-workspace>')
-                      .slice(0, 1024),
-                    stderr: nativeResult.stderr
-                      .replaceAll(request.cwd, '<private-workspace>')
-                      .slice(0, 1024),
-                  }),
-                );
-                return nativeResult;
-              },
             },
           );
           const output = await readFile(result.path);

@@ -329,7 +329,13 @@ try {
     })
     .waitFor();
   assert(
-    !/\d+%/.test(await dialog().getByRole('status').innerText()),
+    !/\d+%/.test(
+      await dialog()
+        .getByText('Uploading, checking and converting on the server…', {
+          exact: true,
+        })
+        .innerText(),
+    ),
     'Conversion must not display fake percentage progress.',
   );
   await dialog()
