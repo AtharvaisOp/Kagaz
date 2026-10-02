@@ -12,10 +12,11 @@ const container = `kagaz-ocr-verify-${process.pid}`,
 const root = process.env.KAGAZ_ARTIFACT_DIR;
 assert(root, 'Set KAGAZ_ARTIFACT_DIR outside the repository.');
 await mkdir(root, { recursive: true });
-const docker = (args) => {
+const docker = (args, input) => {
   const result = spawnSync('docker', args, {
     encoding: 'utf8',
     timeout: 30000,
+    input,
   });
   assert.equal(result.status, 0, result.stderr || result.error?.message);
   return result.stdout.trim();
@@ -81,11 +82,20 @@ try {
   // Diagnose only this public synthetic fixture, outside the HTTP/logging path.
   // Use exactly the production runner and limits before expensive browser checks.
   await writeFile(`${root}/native-diagnostic.pdf`, await scanFixture());
-  docker([
-    'cp',
-    `${root}/native-diagnostic.pdf`,
-    `${container}:/tmp/ocr-fixture.pdf`,
-  ]);
+  const copyToTmp = (path, bytes) =>
+    docker(
+      [
+        'exec',
+        '-i',
+        container,
+        'node',
+        '-e',
+        "require('node:fs').writeFileSync(process.argv[1], require('node:fs').readFileSync(0), {mode: 0o600})",
+        path,
+      ],
+      bytes,
+    );
+  copyToTmp('/tmp/ocr-fixture.pdf', await scanFixture());
   docker([
     'exec',
     container,
@@ -164,11 +174,7 @@ try {
     }
     // Structural checks also run in the route; check independently by copying the returned bytes.
     // The image's non-root user reads only this synthetic fixture in /tmp.
-    docker([
-      'cp',
-      `${root}/container-${fixture.name}.pdf`,
-      `${container}:/tmp/verify-output.pdf`,
-    ]);
+    copyToTmp('/tmp/verify-output.pdf', output);
     docker(['exec', container, 'qpdf', '--check', '/tmp/verify-output.pdf']);
     docker(['exec', container, 'rm', '/tmp/verify-output.pdf']);
     results.push({
