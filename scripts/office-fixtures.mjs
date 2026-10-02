@@ -171,7 +171,9 @@ function boundedExpansion(size) {
     seed ^= seed << 13;
     seed ^= seed >>> 17;
     seed ^= seed << 5;
-    pattern[offset] = seed & 0xff;
+    // A sparse pseudo-random pattern stays below the 100:1 ZIP-ratio ceiling
+    // while compressing large limit fixtures below the 10 MiB upload ceiling.
+    pattern[offset] = offset % 16 === 0 ? seed & 0xff : 0;
   }
   const repeats = Math.ceil(size / pattern.length);
   return Buffer.concat(
@@ -343,16 +345,16 @@ export async function officeAttack(kind) {
       for (let n = 0; n < 2049; n++) add(`docProps/part${n}.xml`);
       break;
     case 'individual-limit': {
-      // A 16 MiB + 1 payload compresses below the 10 MiB package limit while
-      // staying under the 100:1 ratio ceiling, isolating the per-entry guard.
-      add('word/large.png', boundedExpansion(16 * 1024 * 1024 + 1));
+      // An 8 MiB + 1 payload stays below the upload bound and ratio ceiling,
+      // isolating the per-entry guard.
+      add('word/large.png', boundedExpansion(8 * 1024 * 1024 + 1));
       break;
     }
     case 'expanded-limit': {
-      // Five independently moderate-ratio entries exceed the 64 MiB aggregate
-      // cap while the complete archive remains comfortably below 10 MiB.
-      for (let n = 0; n < 5; n++)
-        add(`word/large${n}.png`, boundedExpansion(14 * 1024 * 1024));
+      // Nine sub-limit entries exceed 64 MiB aggregate while the complete
+      // archive remains below the upload bound and each ratio stays under 100:1.
+      for (let n = 0; n < 9; n++)
+        add(`word/large${n}.png`, boundedExpansion((15 * 1024 * 1024) / 2));
       break;
     }
     case 'embedded-executable':

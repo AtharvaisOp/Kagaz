@@ -385,7 +385,12 @@ try {
         : 'docx',
   ])) {
     const filename = `selected-document.${family}`;
-    const response = await postOffice(await officeAttack(attack), filename);
+    const attackBytes = await officeAttack(attack);
+    assert(
+      attackBytes.byteLength <= 10 * 1024 * 1024,
+      `${attack} must reach OOXML validation within the multipart limit.`,
+    );
+    const response = await postOffice(attackBytes, filename);
     if (response.status !== 422)
       assert.fail(`${attack}: ${await response.text()}`);
     assert.match(

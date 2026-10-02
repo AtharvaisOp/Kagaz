@@ -92,7 +92,7 @@ layers fail closed if package checks encounter unknown XML, ZIP or content types
 | ---------------------------- | ---------------------------------------: |
 | Uploaded file                |                                   10 MiB |
 | ZIP entries                  |                                    2,048 |
-| Expanded bytes per entry     |                                   16 MiB |
+| Expanded bytes per entry     |                                    8 MiB |
 | Aggregate expanded ZIP bytes |                                   64 MiB |
 | Entry compression ratio      |                                    100:1 |
 | XML size and structure       | 16 MiB per part; 200,000 nodes; depth 64 |

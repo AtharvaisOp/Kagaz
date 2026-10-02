@@ -80,6 +80,15 @@ describe('bounded OOXML structural inspection', () => {
     20_000,
   );
 
+  it.each(['individual-limit', 'expanded-limit'])(
+    'keeps the %s archive attack below the multipart input limit',
+    async (attack) => {
+      expect((await officeAttack(attack)).byteLength).toBeLessThan(
+        10 * 1024 * 1024,
+      );
+    },
+  );
+
   it('classifies non-ZIP input as unsupported and malformed ZIP input as unsafe', async () => {
     const legacy = await inspect(await officeAttack('legacy-encryption'));
     expect(legacy.exitCode).toBe(3);

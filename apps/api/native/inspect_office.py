@@ -17,7 +17,7 @@ from xml.etree import ElementTree as ET
 logging.disable(logging.CRITICAL)
 
 MAX_INPUT = 10 * 1024 * 1024
-MAX_ENTRY = 16 * 1024 * 1024
+MAX_ENTRY = 8 * 1024 * 1024
 MAX_EXPANDED = 64 * 1024 * 1024
 MAX_ENTRIES = 2048
 MAX_RATIO = 100
