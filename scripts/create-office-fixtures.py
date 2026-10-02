@@ -32,6 +32,10 @@ def save(document, name):
             data = source.read(part)
             if part.endswith('.rels') or part == '[Content_Types].xml':
                 xml = ET.fromstring(data)
+                # Keep each OPC root namespace as the default namespace. Some
+                # LibreOffice import filters rely on the conventional package
+                # serialization even though prefixed names are XML-equivalent.
+                ET.register_namespace('', xml.tag.partition('}')[0].removeprefix('{'))
                 for child in list(xml):
                     if 'printerSettings' in child.get('Type', '') or child.get('Extension') == 'bin':
                         xml.remove(child)

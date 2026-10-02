@@ -10,8 +10,14 @@ logging.disable(logging.CRITICAL)
 
 try:
     with pikepdf.open(sys.argv[1], attempt_recovery=False) as pdf:
-        if pdf.is_encrypted or not 0 < len(pdf.pages) <= 50 or '/AcroForm' in pdf.Root or '/OpenAction' in pdf.Root:
-            raise ValueError('pdf-forbidden-properties')
+        if pdf.is_encrypted:
+            raise ValueError('pdf-encrypted')
+        if not 0 < len(pdf.pages) <= 50:
+            raise ValueError('pdf-page-count-invalid')
+        if '/AcroForm' in pdf.Root:
+            raise ValueError('pdf-acroform-present')
+        if '/OpenAction' in pdf.Root:
+            raise ValueError('pdf-openaction-present')
         for obj in pdf.objects:
             if isinstance(obj, pikepdf.Dictionary) and (obj.get('/S') in (
                     '/JavaScript', '/Launch', '/URI', '/GoToR', '/GoToE', '/SubmitForm', '/ImportData') or
