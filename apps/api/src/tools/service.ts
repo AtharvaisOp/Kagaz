@@ -103,7 +103,6 @@ export class ToolService {
         operation,
       );
       let result: { path: string };
-      response.type('application/pdf');
       if (operation === 'ocr') {
         const ocr = await ocrPdf(
           workspace.input,
@@ -145,6 +144,7 @@ export class ToolService {
           'X-Kagaz-Outcome': compressed.metadata.outcome,
         });
       }
+      response.type('application/pdf');
       await pipeline(createReadStream(result.path), response, {
         signal: controller.signal,
       });
@@ -161,7 +161,10 @@ export class ToolService {
         response.removeHeader('Content-Disposition');
         response.set('Connection', 'close');
         if (safe.code === 'server-busy') response.set('Retry-After', '5');
-        response.status(safe.status).json(safe.response);
+        response
+          .status(safe.status)
+          .type('application/json')
+          .json(safe.response);
         request.resume();
       }
     } finally {

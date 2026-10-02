@@ -69,6 +69,7 @@ function form(bytes = input, language = 'eng', filename = 'workspace.pdf') {
 }
 async function code(response: Response, status: number, expected: string) {
   expect(response.status).toBe(status);
+  expect(response.headers.get('content-type')).toMatch(/^application\/json\b/);
   const text = await response.text();
   expect(text).toContain(expected);
   expect(text).not.toContain(root);

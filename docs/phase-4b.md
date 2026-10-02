@@ -89,6 +89,9 @@ language, pages OCRed and pages skipped. Output may legitimately be larger.
 `unsupported-language`, `no-ocr-needed` and `ocr-failed` extend existing typed
 errors. CORS exposes metadata only to configured origins and rejects denied
 origins before parsing. CORS is not authentication or a distributed quota.
+PDF response type is set only after successful processing and validation. Shared
+OCR/compression error tests require `application/json`, preventing native-validation
+failures from inheriting a PDF content type.
 
 Header, encryption, strict qpdf structural checks, page counts and AcroForm
 inventory are shared with compression. The OCR preflight additionally checks

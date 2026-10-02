@@ -83,6 +83,7 @@ async function post(url: string, body = form(), signal?: AbortSignal) {
 }
 async function errorCode(response: Response, status: number, code: string) {
   expect(response.status).toBe(status);
+  expect(response.headers.get('content-type')).toMatch(/^application\/json\b/);
   const body: unknown = await response.json();
   expect(body).toMatchObject({ error: { code } });
   expect(JSON.stringify(body)).not.toContain(root);
