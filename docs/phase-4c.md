@@ -207,21 +207,22 @@ the same 256 MiB tmpfs to model Render's current free web-service compute plan
 deterministic fixtures, so the timings describe this test environment rather
 than a service guarantee:
 
-| Fixture                   | Input → PDF bytes | Pages | Runtime at 0.5 CPU | Sampled workspace at 0.5 CPU | Runtime at 0.1 CPU |
-| ------------------------- | ----------------: | ----: | -----------------: | ---------------------------: | -----------------: |
-| Paragraph DOCX            |   36,467 → 27,102 |     1 |           4,292 ms |                609,548 bytes |          33,198 ms |
-| Image and page-break DOCX |   95,888 → 57,379 |     2 |           4,700 ms |                668,969 bytes |                  — |
-| Three-slide PPTX          |   88,290 → 45,683 |     3 |           4,548 ms |                377,894 bytes |          35,397 ms |
-| One-sheet XLSX            |    5,296 → 16,868 |     1 |           3,770 ms |                294,824 bytes |          27,801 ms |
-| Two-sheet XLSX            |    5,966 → 18,136 |     2 |           3,710 ms |                258,524 bytes |                  — |
+| Fixture                   | Input → PDF bytes | Pages | Runtime at 0.5 CPU | Sampled workspace at 0.5 CPU | Runtime at 0.1 CPU | Sampled workspace at 0.1 CPU |
+| ------------------------- | ----------------: | ----: | -----------------: | ---------------------------: | -----------------: | ---------------------------: |
+| Paragraph DOCX            |   36,467 → 27,102 |     1 |           4,240 ms |                609,548 bytes |          33,794 ms |                325,995 bytes |
+| Image and page-break DOCX |   95,888 → 57,379 |     2 |           5,060 ms |                744,667 bytes |                  — |                            — |
+| Three-slide PPTX          |   88,290 → 45,683 |     3 |           4,783 ms |                377,894 bytes |          34,501 ms |                377,894 bytes |
+| One-sheet XLSX            |    5,296 → 16,868 |     1 |           3,795 ms |                294,824 bytes |          27,296 ms |                294,824 bytes |
+| Two-sheet XLSX            |    5,966 → 18,136 |     2 |           3,707 ms |                258,524 bytes |                  — |                            — |
 
-The converter container's cgroup memory high-water mark was 196,325,376 bytes
-(187.2 MiB) at 0.5 CPU and 197,824,512 bytes (188.7 MiB) at 0.1 CPU. These are
+The converter container's cgroup memory high-water mark was 196,841,472 bytes
+(187.7 MiB) at 0.5 CPU and 198,344,704 bytes (189.2 MiB) at 0.1 CPU. These are
 whole-container high-water readings, not LibreOffice process RSS. The largest
-sampled private workspace among these fixtures was 668,969 bytes; this is a
-sampled fixture measurement, not an output or temporary-disk quota. All five
-fixtures completed at 0.5 CPU; the representative DOCX, PPTX and XLSX also
-completed at 0.1 CPU, taking 27.8–35.4 seconds. This shows the small documents
+sampled private workspace among these fixtures was 744,667 bytes at 0.5 CPU and
+377,894 bytes at 0.1 CPU; these are sampled fixture measurements, not an output
+or temporary-disk quota. All five fixtures completed at 0.5 CPU; the
+representative DOCX, PPTX and XLSX also completed at 0.1 CPU, taking 27.3–33.8
+seconds. This shows the small documents
 fit the constrained envelope, but leaves limited latency margin for large or
 complex inputs. The API still enforces one active heavy operation and fixed
 input, expanded-size, timeout, output, page, memory, process and temporary-space
