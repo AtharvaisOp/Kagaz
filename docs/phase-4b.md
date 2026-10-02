@@ -67,6 +67,12 @@ monitor has a sampling interval, so it is not an exact filesystem quota. Deploy
 on ephemeral bounded storage and keep host/container limits enforced. Windows
 development lacks `prlimit`; production Linux is the authoritative resource test.
 
+OCRmyPDF creates internal symbolic links on Linux. The disk inventory permits
+only links whose lexical and canonical targets remain inside the private workspace.
+It does not traverse links or double-count their targets. External links fail closed,
+including dangling external targets. Real filesystem tests cover internal links and
+external-link rejection on Linux and Windows (junctions).
+
 The native runner still uses fixed executable/argument arrays, `shell: false`,
 closed stdin, an environment allowlist and bounded/drained diagnostics. OCR
 thread counts are bounded in its environment. SIGTERM escalates to process-group
@@ -190,8 +196,10 @@ verification reports. It does not deploy production.
 ## Observed local verification
 
 The final local gate run used pnpm 12.3.4. Frozen installation, lint, typecheck,
-build, format check and diff check passed. All 541 tests passed: the original 471
-plus 70 additions (84 API and 457 web tests overall). Both Phase 4A and Phase 4B
+build, format check and diff check passed. The first complete run passed 541 tests:
+the original 471 plus 70 additions (84 API and 457 web tests overall). After adding
+two filesystem regressions for production OCRmyPDF's internal links, the local
+gates passed with 543 tests (86 API and 457 web, 72 additions). Both Phase 4A and Phase 4B
 browser scripts passed against the running web app and built API.
 
 The Windows verification runtime was OCRmyPDF 16.10.4, Tesseract 5.4.0.20240606,

@@ -1,4 +1,12 @@
-import { mkdtemp, open, readdir, rm } from 'node:fs/promises';
+import {
+  mkdir,
+  mkdtemp,
+  open,
+  readdir,
+  rm,
+  symlink,
+  writeFile,
+} from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { expect, it } from 'vitest';
@@ -32,4 +40,48 @@ it('stops inventory before cleanup and permits normal private intermediates', as
   expect(controller.signal.aborted).toBe(false);
   expect(await readdir(directory)).toEqual([]);
   await rm(directory, { recursive: true, force: true });
+});
+
+it('permits OCRmyPDF links to private intermediates without traversing them', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'kagaz-budget-'));
+  const controller = new AbortController();
+  await mkdir(join(directory, 'data'));
+  await writeFile(join(directory, 'data', 'input.pdf'), 'synthetic fixture');
+  await symlink(
+    join(directory, 'data'),
+    join(directory, 'internal-link'),
+    process.platform === 'win32' ? 'junction' : 'dir',
+  );
+  const stop = watchWorkspaceBudget(directory, controller);
+  try {
+    await new Promise((resolve) => setTimeout(resolve, 750));
+    expect(controller.signal.aborted).toBe(false);
+  } finally {
+    await stop();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+it('rejects links that resolve outside the isolated workspace', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'kagaz-budget-'));
+  const outside = await mkdtemp(join(tmpdir(), 'kagaz-budget-external-'));
+  const controller = new AbortController();
+  await symlink(
+    outside,
+    join(directory, 'external-link'),
+    process.platform === 'win32' ? 'junction' : 'dir',
+  );
+  const stop = watchWorkspaceBudget(directory, controller);
+  try {
+    await new Promise<void>((resolve) =>
+      controller.signal.addEventListener('abort', () => resolve(), {
+        once: true,
+      }),
+    );
+    expect(controller.signal.reason).toMatchObject({ code: 'ocr-failed' });
+  } finally {
+    await stop();
+    await rm(directory, { recursive: true, force: true });
+    await rm(outside, { recursive: true, force: true });
+  }
 });
