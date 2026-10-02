@@ -196,11 +196,11 @@ is `apps/api/dist/index.js`.
 Copy `apps/api/.env.example` to `apps/api/.env` only when custom local values
 are needed.
 
-| Variable           | Default                                    | Purpose                                               |
-| ------------------ | ------------------------------------------ | ----------------------------------------------------- |
-| `PORT`             | `4000`                                     | API listening port; hosting platforms may provide it. |
-| `CORS_ORIGINS`     | `http://localhost:5173`                    | Comma-separated API origins.                          |
-| `LIBREOFFICE_PATH` | `/usr/lib/libreoffice/program/soffice.bin` | Server-selected headless LibreOffice binary.          |
+| Variable           | Default                                 | Purpose                                               |
+| ------------------ | --------------------------------------- | ----------------------------------------------------- |
+| `PORT`             | `4000`                                  | API listening port; hosting platforms may provide it. |
+| `CORS_ORIGINS`     | `http://localhost:5173`                 | Comma-separated API origins.                          |
+| `LIBREOFFICE_PATH` | `/usr/lib/libreoffice/program/oosplash` | Server-selected native LibreOffice headless launcher. |
 
 `GHOSTSCRIPT_PATH` (default `gs`) and `QPDF_PATH` (default `qpdf`) optionally
 select native executables using server-controlled configuration. `OCRMYPDF_PATH`

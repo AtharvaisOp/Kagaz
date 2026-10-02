@@ -180,7 +180,7 @@ async function convertFixture(
   );
   return convertToPdf(input, format, new AbortController().signal, {
     python: 'server-python',
-    libreoffice: '/server/soffice.bin',
+    libreoffice: '/server/oosplash',
     qpdf: 'server-qpdf',
     runner: nativeRunner({ format, ...options }, calls),
   });
@@ -218,7 +218,7 @@ describe('LibreOffice conversion policy', () => {
       );
       expect(conversion).toBeDefined();
       expect(conversion?.executable).toBe('server-python');
-      expect(conversion?.args).toContain('/server/soffice.bin');
+      expect(conversion?.args).toContain('/server/oosplash');
       expect(conversion?.args).toContain('--headless');
       expect(conversion?.args).toContain('--nologo');
       expect(conversion?.args).toContain('--nodefault');

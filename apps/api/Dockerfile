@@ -23,7 +23,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends ghostscript qpd
     && rm -rf /var/lib/apt/lists/*
 
 ENV NODE_ENV=production
-ENV LIBREOFFICE_PATH=/usr/lib/libreoffice/program/soffice.bin
+ENV LIBREOFFICE_PATH=/usr/lib/libreoffice/program/oosplash
 WORKDIR /app
 
 COPY --from=builder /prod/api ./

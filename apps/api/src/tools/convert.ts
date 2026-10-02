@@ -126,11 +126,13 @@ export async function convertToPdf(
         ? { ExportHiddenSlides: { type: 'boolean', value: 'true' } }
         : {}),
     };
-    // Exec soffice.bin directly: no shell launcher, global profile or client options.
+    // Exec LibreOffice's native oosplash startup binary directly. The packaged
+    // shell launcher does environment discovery; oosplash is the native entry
+    // point and bootstraps soffice.bin without running a shell.
     // The inherited seccomp policy denies non-Unix sockets in every descendant.
     const result = await run(python, [
       native('office_sandbox.py'),
-      options.libreoffice ?? '/usr/lib/libreoffice/program/soffice.bin',
+      options.libreoffice ?? '/usr/lib/libreoffice/program/oosplash',
       `-env:UserInstallation=${pathToFileURL(profile).href}`,
       '--headless',
       '--nologo',

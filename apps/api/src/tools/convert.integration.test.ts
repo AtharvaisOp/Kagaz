@@ -9,7 +9,7 @@ import { runNative } from './nativeRunner.js';
 
 const python = process.env.OCR_PYTHON_PATH ?? 'python3';
 const libreoffice =
-  process.env.LIBREOFFICE_PATH ?? '/usr/lib/libreoffice/program/soffice.bin';
+  process.env.LIBREOFFICE_PATH ?? '/usr/lib/libreoffice/program/oosplash';
 const qpdf = process.env.QPDF_PATH ?? 'qpdf';
 const cases: readonly {
   readonly name: string;
@@ -52,17 +52,11 @@ describe.skipIf(process.platform !== 'linux')(
                     : script.endsWith('inspect_converted_pdf.py')
                       ? 'independent-pdf-inspection'
                       : `qpdf-${request.args[0] ?? 'unknown'}`;
-                const redact = (value: string) =>
-                  value
-                    .replaceAll(request.cwd, '<private-workspace>')
-                    .slice(0, 1024);
                 console.log(
                   JSON.stringify({
                     syntheticFixture: name,
                     stage,
                     exitCode: nativeResult.exitCode,
-                    stdout: redact(nativeResult.stdout),
-                    stderr: redact(nativeResult.stderr),
                   }),
                 );
                 return nativeResult;

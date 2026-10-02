@@ -286,7 +286,7 @@ try {
     libreoffice: docker([
       'exec',
       container,
-      '/usr/lib/libreoffice/program/soffice.bin',
+      '/usr/lib/libreoffice/program/oosplash',
       '--version',
     ]),
   };
