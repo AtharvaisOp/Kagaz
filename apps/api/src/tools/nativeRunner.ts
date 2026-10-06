@@ -1,4 +1,6 @@
 import { spawn, spawnSync } from 'node:child_process';
+import { readdir, readFile } from 'node:fs/promises';
+import { setTimeout as delay } from 'node:timers/promises';
 import { checkAbort, HeavyToolError } from './errors.js';
 
 export interface NativeRequest {
@@ -23,6 +25,46 @@ export interface NativeResult {
 
 export type NativeRunner = (request: NativeRequest) => Promise<NativeResult>;
 const DIAGNOSTIC_LIMIT = 16 * 1024;
+export const DEFAULT_NATIVE_POLICY = {
+  timeoutMs: 60_000,
+  limits: {
+    addressSpace: 384 * 1024 * 1024,
+    cpuSeconds: 60,
+    fileBytes: 40 * 1024 * 1024,
+  },
+} as const;
+
+async function waitForLinuxGroup(group: number): Promise<void> {
+  // The parent close event cannot acknowledge descendants with independent
+  // stdio. SIGKILL stops user code; wait for kernel exit before files are removed.
+  // Reaped or zombie descendants cannot write. Container init reaps the latter.
+  for (;;) {
+    const processes = (await readdir('/proc')).filter((name) =>
+      /^\d+$/.test(name),
+    );
+    let living = false;
+    for (const pid of processes) {
+      try {
+        const stat = await readFile(`/proc/${pid}/stat`, 'utf8');
+        const fields = stat.slice(stat.lastIndexOf(') ') + 2).split(' ');
+        if (Number(fields[2]) === group && fields[0] !== 'Z') {
+          living = true;
+          break;
+        }
+      } catch (error) {
+        if (!(
+          error instanceof Error &&
+          'code' in error &&
+          (error.code === 'ENOENT' || error.code === 'ESRCH')
+        ))
+          throw error;
+      }
+    }
+    if (!living) return;
+    // Retain admission on uninterruptible kernel I/O until the process exits.
+    await delay(10);
+  }
+}
 
 /** Resolves only after close, so callers may safely remove files after termination. */
 export const runNative: NativeRunner = (request) => {
@@ -34,9 +76,9 @@ export const runNative: NativeRunner = (request) => {
     const executable = limited ? '/usr/bin/prlimit' : request.executable;
     const args = limited
       ? [
-          `--as=${request.limits?.addressSpace ?? 402653184}`,
-          `--cpu=${request.limits?.cpuSeconds ?? 60}`,
-          `--fsize=${request.limits?.fileBytes ?? 41943040}`,
+          `--as=${request.limits?.addressSpace ?? DEFAULT_NATIVE_POLICY.limits.addressSpace}`,
+          `--cpu=${request.limits?.cpuSeconds ?? DEFAULT_NATIVE_POLICY.limits.cpuSeconds}`,
+          `--fsize=${request.limits?.fileBytes ?? DEFAULT_NATIVE_POLICY.limits.fileBytes}`,
           '--',
           request.executable,
           ...request.args,
@@ -65,11 +107,13 @@ export const runNative: NativeRunner = (request) => {
     let stdout = Buffer.alloc(0),
       stderr = Buffer.alloc(0);
     let failure: HeavyToolError | null = null;
-    let termination: Promise<void> | undefined;
+    let escalation: ReturnType<typeof setTimeout> | undefined;
     const kill = (signal: NodeJS.Signals) => {
       try {
-        if (grouped && child.pid) process.kill(-child.pid, signal);
-        else if (child.pid) {
+        if (grouped && child.pid) {
+          process.kill(-child.pid, signal);
+          return true;
+        } else if (child.pid) {
           // OCRmyPDF has descendants. Terminating only Python would leave OCR running.
           spawnSync('taskkill.exe', ['/PID', String(child.pid), '/T', '/F'], {
             shell: false,
@@ -81,18 +125,18 @@ export const runNative: NativeRunner = (request) => {
       } catch {
         /* Process may have already exited. */
       }
+      return false;
     };
     const stop = (error: HeavyToolError) => {
       if (failure) return;
       failure = error;
       kill('SIGTERM');
-      // Do not cancel escalation when the parent closes: a descendant may ignore TERM.
-      termination = new Promise<void>((resolve) => {
-        setTimeout(() => {
-          kill('SIGKILL');
-          resolve();
-        }, 250);
-      });
+      // Escalate if the parent ignores TERM. Close also retires any remaining
+      // group, so a retired numeric group is never signalled by a later timer.
+      escalation = setTimeout(() => {
+        escalation = undefined;
+        kill('SIGKILL');
+      }, 250);
     };
     const abort = () =>
       stop(
@@ -102,7 +146,7 @@ export const runNative: NativeRunner = (request) => {
       );
     const timeout = setTimeout(
       () => stop(new HeavyToolError('processing-timeout')),
-      request.timeoutMs ?? 60_000,
+      request.timeoutMs ?? DEFAULT_NATIVE_POLICY.timeoutMs,
     );
     request.signal.addEventListener('abort', abort, { once: true });
     child.stdout.on('data', (chunk: Buffer) => {
@@ -125,16 +169,30 @@ export const runNative: NativeRunner = (request) => {
     child.on('close', (code) => {
       clearTimeout(timeout);
       request.signal.removeEventListener('abort', abort);
-      if (failure) {
-        const error = failure;
-        void (termination ?? Promise.resolve()).then(() => reject(error));
-      } else if (code === null) reject(new HeavyToolError('processing-failed'));
-      else
-        resolve({
-          exitCode: code,
-          stdout: stdout.toString('utf8'),
-          stderr: stderr.toString('utf8'),
-        });
+      // A successful parent can leave descendants with closed/inherited-free
+      // stdio. Close proves only the parent exited; retire its remaining group
+      // before cleanup and admission release. Unix groups remain addressable
+      // while any descendant is alive, even after their leader exits.
+      const groupSent = grouped && kill('SIGKILL');
+      clearTimeout(escalation);
+      const settle = async () => {
+        if (groupSent && process.platform === 'linux' && child.pid)
+          await waitForLinuxGroup(child.pid);
+        if (failure) reject(failure);
+        // util-linux reserves 126/127 for an unusable/missing exec target.
+        // The wrapper can start successfully while the server-selected tool cannot.
+        else if (code === null || (limited && (code === 126 || code === 127)))
+          reject(new HeavyToolError('processing-failed'));
+        else
+          resolve({
+            exitCode: code,
+            stdout: stdout.toString('utf8'),
+            stderr: stderr.toString('utf8'),
+          });
+      };
+      void settle().catch(() =>
+        reject(new HeavyToolError('processing-failed')),
+      );
     });
     if (request.signal.aborted) abort();
   });

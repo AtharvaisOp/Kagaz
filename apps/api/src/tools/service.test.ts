@@ -1,4 +1,4 @@
-import { mkdtemp, readdir, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, open, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { once } from 'node:events';
@@ -43,8 +43,9 @@ const successRunner: NativeRunner = async (request) => {
   }
   return {
     exitCode: request.args[0] === '--is-encrypted' ? 2 : 0,
-    stdout:
-      request.args[0] === '--show-npages'
+    stdout: request.args[0]?.endsWith('inspect_pdf.py')
+      ? JSON.stringify({ pages: 1 })
+      : request.args[0] === '--show-npages'
         ? '1\n'
         : request.args[0] === '--json'
           ? JSON.stringify({ acroform: { hasacroform: false } })
@@ -109,6 +110,54 @@ describe('compression HTTP boundary', () => {
         : successRunner(request),
     );
     await errorCode(await post(url), 400, 'invalid-pdf');
+  });
+  it('rejects unsafe nested PDF objects before starting Ghostscript', async () => {
+    const runner = vi.fn<NativeRunner>(async (request) =>
+      request.args[0]?.endsWith('inspect_pdf.py')
+        ? { exitCode: 2, stdout: '', stderr: 'native-secret' }
+        : successRunner(request),
+    );
+    await errorCode(await post(await start(runner)), 422, 'unsupported-pdf');
+    expect(
+      runner.mock.calls.some(([request]) => request.executable === 'gs'),
+    ).toBe(false);
+  });
+  it.each(['truncated', 'page-mismatch'])(
+    'fails closed when the independent security inventory is %s',
+    async (mode) => {
+      const runner = vi.fn<NativeRunner>(async (request) =>
+        request.args[0]?.endsWith('inspect_pdf.py')
+          ? {
+              exitCode: 0,
+              stdout: mode === 'truncated' ? '{broken' : '{"pages":2}',
+              stderr: '',
+            }
+          : successRunner(request),
+      );
+      await errorCode(await post(await start(runner)), 400, 'invalid-pdf');
+      expect(
+        runner.mock.calls.some(([request]) => request.executable === 'gs'),
+      ).toBe(false);
+    },
+  );
+  it('rejects an unsafe derivative even when its size would return unchanged input', async () => {
+    const url = await start(async (request) => {
+      if (request.executable === 'gs') {
+        const path = request.args
+          .find((arg) => arg.startsWith('-sOutputFile='))
+          ?.slice(13);
+        if (!path) throw new Error();
+        await writeFile(path, input);
+        return { exitCode: 0, stdout: '', stderr: '' };
+      }
+      if (
+        request.args[0]?.endsWith('inspect_pdf.py') &&
+        request.args[1]?.endsWith('output.pdf')
+      )
+        return { exitCode: 2, stdout: '', stderr: 'native-secret' };
+      return successRunner(request);
+    });
+    await errorCode(await post(url), 500, 'processing-failed');
   });
   it('times out incomplete uploads and deletes their partial file', async () => {
     const url = await start(successRunner, { requestTimeoutMs: 100 });
@@ -335,6 +384,41 @@ describe('compression HTTP boundary', () => {
     });
     await errorCode(await post(url), 504, 'processing-timeout');
   });
+  it('bounds aggregate compression intermediates and releases capacity after cleanup', async () => {
+    let expand = true;
+    const url = await start(async (request) => {
+      if (request.executable !== 'gs' || !expand) return successRunner(request);
+      expand = false;
+      for (let index = 0; index < 4; index++) {
+        const file = await open(
+          join(request.cwd, `intermediate-${index}`),
+          'wx',
+        );
+        try {
+          // Each file fits the native individual-file bound; their sum does not.
+          await file.truncate(33 * 1024 * 1024);
+        } finally {
+          await file.close();
+        }
+      }
+      return new Promise((_resolve, reject) => {
+        const abort = () => {
+          const reason: unknown = request.signal.reason;
+          reject(
+            reason instanceof Error ? reason : new HeavyToolError('cancelled'),
+          );
+        };
+        if (request.signal.aborted) abort();
+        else request.signal.addEventListener('abort', abort, { once: true });
+      });
+    });
+    await errorCode(await post(url), 500, 'processing-failed');
+    const recovered = await post(url);
+    expect(recovered.status).toBe(200);
+    await recovered.arrayBuffer();
+    await tools?.shutdown();
+    expect(await readdir(root)).toEqual([]);
+  });
   it('rejects disallowed CORS origins before upload and exposes metadata to allowed ones', async () => {
     const runner = vi.fn(successRunner),
       url = await start(runner);
@@ -435,5 +519,28 @@ describe('compression HTTP boundary', () => {
       headers: { 'Content-Type': 'multipart/form-data; boundary=test' },
     });
     await errorCode(response, 400, 'invalid-request');
+  });
+  it('rejects oversized multipart headers using the parser actual 16 KiB bound', async () => {
+    const runner = vi.fn(successRunner);
+    const url = await start(runner);
+    const response = await fetch(`${url}/tools/compress`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'multipart/form-data; boundary=test' },
+      body:
+        '--test\r\nContent-Disposition: form-data; name="file"; filename="f.pdf"\r\n' +
+        `X-Unknown: ${'x'.repeat(16 * 1024)}\r\n\r\n` +
+        '%PDF-1.7\nfixture\r\n--test--\r\n',
+    });
+    await errorCode(response, 400, 'invalid-request');
+    expect(runner).not.toHaveBeenCalled();
+  });
+  it('rejects long multipart field names instead of accepting a truncated prefix', async () => {
+    const runner = vi.fn(successRunner);
+    const url = await start(runner);
+    const body = form();
+    body.set(`preset${'x'.repeat(128)}`, 'balanced');
+    body.delete('preset');
+    await errorCode(await post(url, body), 400, 'invalid-request');
+    expect(runner).not.toHaveBeenCalled();
   });
 });

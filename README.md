@@ -103,9 +103,11 @@ rotations, annotations, images, filled forms and visual signatures. It never sen
 individual source files. Existing form/signature export blockers apply before any
 upload. Each server tool creates a derivative download and leaves the workspace intact.
 
-The API streams uploads to an isolated temporary directory, validates with qpdf,
-runs Ghostscript for compression or OCRmyPDF/Tesseract for English OCR, validates
-the result and streams it back. Temporary files are
+Office conversion sends only the separately selected Office document after explicit
+submission. The API streams uploads to a private temporary directory, checks PDF
+structure with qpdf and bounded pikepdf inspection, or checks OOXML before
+LibreOffice. It runs the selected native operation, validates the result and
+streams it back. Temporary files are
 deleted after processing/download, errors, disconnection and orderly shutdown.
 There is no permanent PDF storage, database persistence or content analytics.
 Logs contain error codes rather than PDF contents, filenames or native stderr.
@@ -120,7 +122,9 @@ Browser
 
 Backend
 +-- Explicit /tools/compress or /tools/ocr
-    +-- isolated native processing > validation > download > cleanup
+|   +-- flattened workspace > native processing > validation > download > cleanup
++-- Explicit /tools/convert-to-pdf
+    +-- separately selected Office document > inspection > conversion > validation > cleanup
 ```
 
 PDF.js is responsible for preview and rendering. The workspace and annotation
@@ -164,8 +168,8 @@ pnpm format:check
 
 The web app runs at `http://localhost:5173`; the API defaults to
 `http://localhost:4000`. Editing and ordinary export do not require the API.
-Compression requires Ghostscript and qpdf on PATH, or their executable paths
-in the API environment. OCR additionally requires OCRmyPDF, Tesseract English data
+Compression requires Ghostscript, qpdf and Python with pikepdf on PATH, or their
+executable paths in the API environment. OCR additionally requires OCRmyPDF, Tesseract English data
 and Python with OCRmyPDF's dependencies. Office conversion also requires the
 headless LibreOffice Writer/Impress/Calc packages, Liberation/DejaVu fonts and
 libseccomp on Linux. On Debian/Ubuntu, install the equivalents of:
@@ -204,7 +208,8 @@ are needed.
 
 `GHOSTSCRIPT_PATH` (default `gs`) and `QPDF_PATH` (default `qpdf`) optionally
 select native executables using server-controlled configuration. `OCRMYPDF_PATH`
-(default `ocrmypdf`) and `OCR_PYTHON_PATH` (default `python3`) select the OCR runtime;
+(default `ocrmypdf`) selects OCRmyPDF. `OCR_PYTHON_PATH` (default `python3`) selects
+Python for all PDF/Office inspectors;
 OCRmyPDF locates Ghostscript and Tesseract on PATH. Export these variables into the
 shell for repository tests as well as API development. No secrets are
 required for local development. The LibreOffice executable remains
@@ -239,8 +244,13 @@ so both disk use and native concurrency are bounded. Overflow returns `server-bu
 (503 with `Retry-After`). Multipart body overhead is capped at 64 KiB, upload time
 at 30 seconds, each native process at 60 seconds, and the total request including
 queue time at 120 seconds. Linux native processes have a 384 MiB address-space
-limit, 60 CPU seconds and a 40 MiB file-size limit. Encrypted files, interactive
-AcroForms, malformed structures and qpdf recovery warnings are rejected.
+limit, 60 CPU seconds and a 40 MiB file-size limit. Aggregate private workspace
+use is monitored against 128 MiB. Multipart part headers have a 16 KiB parser
+bound. Encrypted files, interactive AcroForms, digital-signature structures,
+active actions, attachments, external streams, executable PostScript XObjects,
+malformed structures and qpdf recovery warnings are rejected on input and output.
+The browser gives compression 150 seconds before aborting, allowing the server's
+120-second deadline to return a typed error.
 
 See [Phase 4A engineering and verification](docs/phase-4a.md) for implementation
 boundaries, repeatable container/browser checks, security review and limitations.
@@ -275,7 +285,7 @@ total deadline including queue time. Linux native processes have 768 MiB address
 space, 240 CPU seconds and 40 MiB per-file limits; aggregate temporary files are
 monitored against a 192 MiB budget. These process bounds complement container/host
 memory and ephemeral disk limits. Windows development lacks Linux resource bounds.
-Compression retains its existing policies. Both tools share one admission slot and
+All three server tools share one admission slot and
 two abortable FIFO waiters. Do not increase OCR concurrency on Render's limited
 free CPU without measurements.
 
@@ -304,8 +314,9 @@ DOCM/PPTM/XLSM, encrypted or malformed ZIP packages, macros, external
 relationships, embedded packages and unsupported active content fail closed.
 
 OOXML packages are inspected in place without archive extraction. ZIP metadata,
-local headers and central-directory records must agree; entry count, expanded
-bytes, entry bytes and compression ratio are bounded. Every relationship must
+local headers and central-directory records must agree with actual decompressed
+bytes and CRC, including directory records. Entry count, expanded bytes, entry
+bytes, compression ratio and cumulative XML nodes are bounded. Every relationship must
 resolve inside the package and external targets are rejected. LibreOffice gets a
 fresh private user profile for each request. On Linux, a seccomp filter preserves
 local Unix sockets needed for its private instance pipe and denies network socket
@@ -335,14 +346,12 @@ The intended frontend configuration uses the repository root:
 - Output Directory: `apps/web/dist`
 
 The configured production-origin candidate is
-`https://kagaz-personal.vercel.app`. For compression, set the frontend build
+`https://kagaz-personal.vercel.app`. For all three server tools, set the frontend build
 variable `VITE_API_URL=https://kagaz-api.onrender.com` before the next normal
 deployment. Source editing and ordinary export work without this variable.
 
-During the final Phase 1 audit, that domain was reachable but still served
-the older single-document viewer. Promote the latest `main` deployment before
-using it as the Phase 1 product URL. The previously known preview URL was
-Vercel-authenticated in the audit environment.
+Verify the production deployment's commit and API build variable in Vercel after
+promotion; repository configuration alone does not prove the live version.
 
 ### Render
 
@@ -355,12 +364,17 @@ https://kagaz-api.onrender.com/health
 
 The Render Blueprint uses the `main` branch, Docker, the Singapore region,
 and `/health` as its health check. `CORS_ORIGINS` is configured for the
-intended production frontend origin. Phase 4A retains the free tier, existing
-health check, region, branch and normal auto-deploy configuration. Docker installs
+intended production frontend origin. The free tier, health check, region, branch
+and commit-triggered auto-deploy configuration are retained. The Node 22.23.3 /
+Debian Trixie production image installs
 Ghostscript, qpdf, util-linux, OCRmyPDF, English Tesseract data, minimal headless
 LibreOffice Writer/Impress/Calc packages, Liberation/DejaVu fonts and libseccomp,
-then runs as the unprivileged Node user. No persistent disk is assumed. This phase
-does not manually trigger deployment.
+then runs as the unprivileged Node user. No persistent disk is assumed. Render
+Free provides 512 MiB RAM and 0.1 CPU. The read-only root filesystem, 256 MiB
+temporary filesystem, dropped capabilities and 64-task limit in CI's Docker
+verification are additional tested runtime settings; `render.yaml` does not
+declare those Docker flags. See [Phase 4D audit](docs/phase-4d.md) for deployment
+evidence, resource measurements and remaining isolation limits.
 
 ## Current limitations
 
@@ -394,10 +408,11 @@ does not manually trigger deployment.
 
 ## Roadmap
 
-- Phase 2 â€” annotations (complete)
-- Phase 3 â€” forms and signatures
-- Phase 4A/4B â€” server-backed compression and OCR (complete)
-- Phase 4C â€” Office to PDF conversion (complete)
+- Phase 2 — annotations (complete)
+- Phase 3 — forms and visual signatures (complete)
+- Phase 4A/4B — server-backed compression and OCR (complete)
+- Phase 4C — Office to PDF conversion (complete)
+- Phase 4D — [heavy-tool hardening and measured resource audit](docs/phase-4d.md)
 - Phase 4D â€” further heavy-tool hardening (not started)
 
 The browser-local architecture remains the default for operations that can be

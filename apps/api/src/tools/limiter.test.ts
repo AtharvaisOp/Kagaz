@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { ExecutionLimiter } from './limiter.js';
+import { HeavyToolError } from './errors.js';
 
 describe('bounded request admission', () => {
   it('holds deterministic capacity and releases queued work FIFO only once', async () => {
@@ -30,6 +31,20 @@ describe('bounded request admission', () => {
     waiting.abort();
     await rejected;
     release();
+    (await limiter.acquire(new AbortController().signal))();
+  });
+  it('preserves a queued deadline and admits the next waiter without starvation', async () => {
+    const limiter = new ExecutionLimiter(1, 2);
+    const release = await limiter.acquire(new AbortController().signal);
+    const expired = new AbortController();
+    const timedOut = expect(
+      limiter.acquire(expired.signal),
+    ).rejects.toMatchObject({ code: 'processing-timeout' });
+    const next = limiter.acquire(new AbortController().signal);
+    expired.abort(new HeavyToolError('processing-timeout'));
+    await timedOut;
+    release();
+    (await next)();
     (await limiter.acquire(new AbortController().signal))();
   });
   it('rejects overload, pre-aborted acquisition, and shutdown without deadlock', async () => {

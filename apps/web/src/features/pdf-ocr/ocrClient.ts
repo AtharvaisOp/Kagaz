@@ -10,7 +10,7 @@ export const OCR_ERRORS: Readonly<Record<string, string>> = {
   'file-too-large':
     'OCR supports PDFs up to 10 MiB. Extract fewer pages and try again.',
   'unsupported-pdf':
-    'OCR supports up to 20 pages, at most 14 inches per side and 400 DPI. Encrypted PDFs and interactive forms cannot be processed.',
+    'OCR supports up to 20 pages, at most 14 inches per side and 400 DPI. Submit a flattened PDF without encryption, interactive forms, digital-signature structures or active content.',
   'processing-timeout':
     'OCR took too long. Extract fewer pages or use a clearer scan and retry.',
   'server-busy': 'The server is busy. Please try again in a moment.',

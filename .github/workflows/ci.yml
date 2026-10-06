@@ -25,7 +25,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 22.20.0
+          node-version: 22.23.3
           cache: pnpm
 
       - name: Install dependencies
@@ -72,13 +72,13 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 22.20.0
+          node-version: 22.23.3
           cache: pnpm
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
       - name: Build production API image
         run: |
-          git show dad197377a2219619f3774179519b99df78cadf4:apps/api/Dockerfile > /tmp/kagaz-baseline.Dockerfile
+          git show 193f59719fcebe4c1011ebb0386891f9f5c68088:apps/api/Dockerfile > /tmp/kagaz-baseline.Dockerfile
           docker build -f /tmp/kagaz-baseline.Dockerfile -t kagaz-api:baseline .
           docker build -f apps/api/Dockerfile -t kagaz-api:verify .
       - name: Verify Office conversion, output integrity, attacks, isolation and resource use
@@ -87,6 +87,10 @@ jobs:
         run: node scripts/verify-phase4c-container.mjs
       - name: Verify container health, tools, compression, failures and cleanup
         run: node scripts/verify-phase4a-container.mjs
+      - name: Audit constrained resource scaling, cancellation and shutdown
+        env:
+          KAGAZ_ARTIFACT_DIR: ${{ runner.temp }}/phase4c-artifacts
+        run: node scripts/verify-phase4d-container.mjs
       - name: Install browser
         run: pnpm exec playwright install --with-deps chromium
       - name: Verify editor and real container together
@@ -105,7 +109,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: phase4c-verification
+          name: phase4d-verification
           path: ${{ runner.temp }}/phase4c-artifacts
           if-no-files-found: ignore
       - name: Container diagnostics and cleanup

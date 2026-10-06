@@ -81,7 +81,7 @@ function crc32(bytes) {
 }
 export function zipEntries(
   entries,
-  { flags = 0, stored = false, mode = 0o600 } = {},
+  { flags = 0, stored = false, mode = 0o600, compressedSuffix } = {},
 ) {
   const locals = [],
     central = [];
@@ -89,7 +89,12 @@ export function zipEntries(
   for (const [name, data] of entries) {
     const nameBytes = Buffer.from(name),
       bytes = Buffer.from(data),
-      compressed = stored ? bytes : deflateRawSync(bytes);
+      compressed = stored
+        ? bytes
+        : Buffer.concat([
+            deflateRawSync(bytes),
+            compressedSuffix ?? Buffer.alloc(0),
+          ]);
     const local = Buffer.alloc(30),
       directory = Buffer.alloc(46);
     local.writeUInt32LE(0x04034b50, 0);
@@ -162,6 +167,10 @@ export const OFFICE_ATTACKS = [
   'trailing-payload',
   'local-header-mismatch',
   'crc-corrupt',
+  'underdeclared-deflate',
+  'trailing-deflate',
+  'directory-deflate',
+  'aggregate-xml-nodes',
 ];
 
 function boundedExpansion(size) {
@@ -402,8 +411,54 @@ export async function officeAttack(kind) {
       break;
     case 'legacy-encryption':
       return Buffer.from([0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1]);
+    case 'underdeclared-deflate':
+      add('docProps/hidden.xml', '<x/>' + '<script/>'.repeat(100_000));
+      break;
+    case 'directory-deflate':
+      add('docProps/hidden/', '<script/>'.repeat(100_000));
+      break;
+    case 'trailing-deflate':
+      return zipEntries(entries, {
+        compressedSuffix: Buffer.from('hidden payload'),
+      });
+    case 'aggregate-xml-nodes':
+      for (let n = 0; n < 2; n++)
+        add(`docProps/nodes${n}.xml`, '<x>' + '<n/>'.repeat(120_000) + '</x>');
+      return zipEntries(entries, { stored: true });
   }
   const result = zipEntries(entries, { flags, mode });
+  if (kind === 'underdeclared-deflate' || kind === 'directory-deflate') {
+    const end = result.lastIndexOf(Buffer.from('PK\x05\x06'));
+    let cursor = result.readUInt32LE(end + 16);
+    while (cursor < end) {
+      const nameLength = result.readUInt16LE(cursor + 28);
+      const name = result
+        .subarray(cursor + 46, cursor + 46 + nameLength)
+        .toString();
+      if (
+        name ===
+        (kind === 'underdeclared-deflate'
+          ? 'docProps/hidden.xml'
+          : 'docProps/hidden/')
+      ) {
+        const local = result.readUInt32LE(cursor + 42);
+        const prefix =
+          kind === 'underdeclared-deflate'
+            ? Buffer.from('<x/>')
+            : Buffer.alloc(0);
+        result.writeUInt32LE(prefix.length, local + 22);
+        result.writeUInt32LE(prefix.length, cursor + 24);
+        result.writeUInt32LE(crc32(prefix), local + 14);
+        result.writeUInt32LE(crc32(prefix), cursor + 16);
+        break;
+      }
+      cursor +=
+        46 +
+        nameLength +
+        result.readUInt16LE(cursor + 30) +
+        result.readUInt16LE(cursor + 32);
+    }
+  }
   if (kind === 'trailing-payload')
     return Buffer.concat([result, Buffer.from('payload')]);
   if (kind === 'local-header-mismatch') result[30] ^= 1;

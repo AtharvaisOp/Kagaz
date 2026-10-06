@@ -11,6 +11,7 @@ import stat
 import struct
 import sys
 import zipfile
+import zlib
 from pathlib import Path
 from xml.etree import ElementTree as ET
 
@@ -21,6 +22,7 @@ MAX_ENTRY = 8 * 1024 * 1024
 MAX_EXPANDED = 64 * 1024 * 1024
 MAX_ENTRIES = 2048
 MAX_RATIO = 100
+MAX_XML_NODES = 200_000
 CT = 'http://schemas.openxmlformats.org/package/2006/content-types'
 REL = 'http://schemas.openxmlformats.org/package/2006/relationships'
 OFFICE_RELS = ('http://schemas.openxmlformats.org/officeDocument/2006/relationships/',
@@ -58,16 +60,32 @@ def safe_name(name):
     return name
 
 
-def xml(data):
+def xml(data, package_nodes):
     text = data.decode('utf-8-sig', errors='strict')
     require('<!DOCTYPE' not in text.upper() and '<!ENTITY' not in text.upper())
-    root = ET.fromstring(text)
-    stack = [(root, 0)]
+    parser = ET.XMLPullParser(events=('start', 'end'))
+    root = None
+    depth = 0
     nodes = 0
+    # Enforce the cumulative retained-tree budget while parsing. Feeding small
+    # chunks bounds event allocation before the next structural-budget check.
+    for offset in range(0, len(text), 64 * 1024):
+        parser.feed(text[offset:offset + 64 * 1024])
+        for event, element in parser.read_events():
+            if event == 'start':
+                nodes += 1
+                package_nodes[0] += 1
+                require(nodes <= MAX_XML_NODES and package_nodes[0] <= MAX_XML_NODES and depth <= 64)
+                if root is None:
+                    root = element
+                depth += 1
+            else:
+                depth -= 1
+    parser.close()
+    require(root is not None and depth == 0)
+    stack = [root]
     while stack:
-        element, depth = stack.pop()
-        nodes += 1
-        require(nodes <= 200_000 and depth <= 64)
+        element = stack.pop()
         local = element.tag.rsplit('}', 1)[-1].lower()
         require(not any(token in local for token in BLOCKED))
         require(local not in ('object', 'control', 'dde', 'ddelink', 'ddelinks',
@@ -97,7 +115,7 @@ def xml(data):
             formula = element.text or ''
             require(formula.strip())
             safe_formula(formula)
-        stack.extend((child, depth + 1) for child in element)
+        stack.extend(element)
     return root
 
 
@@ -172,7 +190,27 @@ def zip_structure(path, archive):
                 position += 4 + length
         directory_cursor += 46 + name_len + extra_len + comment_len
     require(directory_cursor == end)
-    return infos
+    return infos, data
+
+
+def entry_bytes(info, archive_data):
+    start = info.header_offset + 30
+    name_length, extra_length = struct.unpack_from('<2H', archive_data, info.header_offset + 26)
+    start += name_length + extra_length
+    compressed = archive_data[start:start + info.compress_size]
+    if info.compress_type == zipfile.ZIP_STORED:
+        require(info.compress_size == info.file_size)
+        data = compressed
+    else:
+        # ZipExtFile truncates to the declared expanded size. An adversary can
+        # give it a matching prefix CRC while hiding additional DEFLATE output.
+        # Independently require a complete, single bounded stream and exact size.
+        decoder = zlib.decompressobj(-15)
+        data = decoder.decompress(compressed, MAX_ENTRY + 1)
+        require(len(data) <= MAX_ENTRY and decoder.eof
+                and not decoder.unconsumed_tail and not decoder.unused_data)
+    require(len(data) == info.file_size and zlib.crc32(data) == info.CRC)
+    return data
 
 
 def inspect(path):
@@ -183,29 +221,20 @@ def inspect(path):
     if magic != b'PK\x03\x04':
         raise Unsupported()
     with zipfile.ZipFile(path) as archive:
-        infos = zip_structure(path, archive)
+        infos, archive_data = zip_structure(path, archive)
         roots = {}
         media = {}
         total = 0
+        package_nodes = [0]
         for info in infos:
+            data = entry_bytes(info, archive_data)
             if info.is_dir():
                 require(info.file_size == 0)
                 continue
             extension = info.filename.rsplit('.', 1)[-1].lower()
             require(extension in {'xml', 'rels', *IMAGES})
-            chunks = []
-            consumed = 0
-            with archive.open(info) as entry:
-                while True:
-                    chunk = entry.read(min(64 * 1024, MAX_ENTRY + 1 - consumed))
-                    if not chunk:
-                        break
-                    consumed += len(chunk)
-                    total += len(chunk)
-                    require(consumed <= MAX_ENTRY and total <= MAX_EXPANDED)
-                    chunks.append(chunk)
-            require(consumed == info.file_size)
-            data = b''.join(chunks)
+            total += len(data)
+            require(total <= MAX_EXPANDED)
             if extension in IMAGES:
                 from PIL import Image
                 import io
@@ -215,7 +244,7 @@ def inspect(path):
                     image.verify()
                 media[info.filename] = IMAGES[extension]
             else:
-                roots[info.filename] = xml(data)
+                roots[info.filename] = xml(data, package_nodes)
         types = roots.get('[Content_Types].xml')
         require(types is not None and types.tag == f'{{{CT}}}Types')
         overrides, defaults = {}, {}

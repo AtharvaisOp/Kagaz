@@ -272,7 +272,8 @@ pagination, theme interpretation, charts, equations, shapes and workbook print
 areas can differ from Microsoft Office. No Microsoft Office pixel fidelity is
 promised.
 
-Phase 4D has not started. Its next work may audit resource ceilings, package
-coverage, LibreOffice updates and hosting capacity against new evidence. Keep the
+The subsequent [Phase 4D audit](phase-4d.md) records current resource ceilings,
+package security updates and hosting capacity against new evidence. This document's
+versions and measurements describe Phase 4C's historical implementation. Keep the
 single shared heavy-tool admission policy and do not weaken the existing PDF,
 OCR, compression or conversion checks to increase throughput.

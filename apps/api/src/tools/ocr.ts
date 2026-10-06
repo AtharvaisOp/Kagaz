@@ -11,10 +11,12 @@ import {
 import { MAX_OCR_INPUT_BYTES } from './upload.js';
 
 export const OCR_POLICY = {
+  inputBytes: MAX_OCR_INPUT_BYTES,
   pages: 20,
   outputBytes: 40 * 1024 * 1024,
   timeoutMs: 240_000,
   requestTimeoutMs: 300_000,
+  workspaceBytes: 192 * 1024 * 1024,
   limits: {
     addressSpace: 768 * 1024 * 1024,
     cpuSeconds: 240,
@@ -72,7 +74,7 @@ export async function ocrPdf(
       limits: OCR_POLICY.limits,
     });
   const qpdf = options.qpdf ?? 'qpdf';
-  const originalBytes = await pdfHeader(input, MAX_OCR_INPUT_BYTES);
+  const originalBytes = await pdfHeader(input, OCR_POLICY.inputBytes);
   const pages = await validatePdf(input, signal, run, qpdf, OCR_POLICY.pages);
   await validateFlattenedPdf(input, run, qpdf);
   const inspect = async (paths: string[]) => {

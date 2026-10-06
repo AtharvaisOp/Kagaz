@@ -5,9 +5,10 @@ import type { ConversionMetadata, OfficeFormat } from '@kagaz/shared-types';
 import { checkAbort, HeavyToolError } from './errors.js';
 import { runNative, type NativeRunner } from './nativeRunner.js';
 import { pdfHeader, validatePdf } from './pdfValidation.js';
+import { MAX_CONVERSION_INPUT_BYTES } from './upload.js';
 
 export const CONVERSION_POLICY = {
-  inputBytes: 10 * 1024 * 1024,
+  inputBytes: MAX_CONVERSION_INPUT_BYTES,
   outputBytes: 40 * 1024 * 1024,
   pages: 50,
   timeoutMs: 120_000,

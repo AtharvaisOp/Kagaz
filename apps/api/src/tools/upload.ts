@@ -51,8 +51,9 @@ export async function receiveUpload(
         parts: operation === 'convert-to-pdf' ? 2 : 3,
         fileSize: maximum + 1,
         fieldSize: 32,
-        fieldNameSize: 32,
-        headerPairs: 32,
+        // Busboy 1.6 multipart headers use its fixed 16 KiB parser bound;
+        // fieldNameSize/headerPairs options do not change that implementation.
+        // Exact part names below and the total-body counter provide our bounds.
       },
     });
   } catch {
@@ -135,7 +136,9 @@ export async function receiveUpload(
   parser.on('fieldsLimit', () => fail(new HeavyToolError('invalid-request')));
   parser.on('partsLimit', () => fail(new HeavyToolError('invalid-request')));
   parser.on('error', () => {
-    failure ??= new HeavyToolError('invalid-request');
+    // Some Busboy header errors are emitted directly without destroying the
+    // parser. Explicit deferred destruction guarantees close and prompt cleanup.
+    fail(new HeavyToolError('invalid-request'));
   });
   counter.on('error', fail);
   const requestError = () => fail(new HeavyToolError('cancelled'));

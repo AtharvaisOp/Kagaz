@@ -19,8 +19,35 @@ function headers() {
     'X-Kagaz-Outcome': 'compressed',
   });
 }
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => {
+  vi.unstubAllGlobals();
+  vi.restoreAllMocks();
+});
 describe('explicit compression upload', () => {
+  it('bounds a stalled server with a friendly deadline and preserves user cancellation', async () => {
+    const deadline = new AbortController();
+    deadline.abort(new DOMException('Timed out', 'TimeoutError'));
+    const timeout = vi
+      .spyOn(AbortSignal, 'timeout')
+      .mockReturnValue(deadline.signal);
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    await expect(
+      uploadCompression(
+        input,
+        'balanced',
+        new AbortController().signal,
+        () => {},
+      ),
+    ).rejects.toThrow('server took too long');
+    expect(timeout).toHaveBeenCalledWith(150_000);
+    expect(fetchMock).not.toHaveBeenCalled();
+    const controller = new AbortController();
+    controller.abort();
+    await expect(
+      uploadCompression(input, 'balanced', controller.signal, () => {}),
+    ).rejects.toMatchObject({ name: 'AbortError' });
+  });
   it('bounds streamed response bytes even when the server lies about the body', async () => {
     vi.stubGlobal(
       'fetch',
@@ -56,7 +83,8 @@ describe('explicit compression upload', () => {
     expect(processing).toHaveBeenCalledOnce();
     const [url, options] = fetchMock.mock.calls[0]!;
     expect(url).toBe('https://api.example/tools/compress');
-    expect(options?.signal).toBe(signal);
+    expect(options?.signal).toBeInstanceOf(AbortSignal);
+    expect(options?.signal?.aborted).toBe(false);
     expect(options?.credentials).toBe('omit');
     const body = options?.body;
     expect(body).toBeInstanceOf(FormData);

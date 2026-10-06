@@ -1,7 +1,11 @@
 import { createReadStream } from 'node:fs';
 import { pipeline } from 'node:stream/promises';
 import type { Request, Response } from 'express';
-import { compressPdf, type CompressionEngineOptions } from './compress.js';
+import {
+  compressPdf,
+  COMPRESSION_POLICY,
+  type CompressionEngineOptions,
+} from './compress.js';
 import { HeavyToolError } from './errors.js';
 import { ExecutionLimiter } from './limiter.js';
 import { receiveUpload } from './upload.js';
@@ -100,7 +104,7 @@ export class ToolService {
           ? CONVERSION_POLICY.requestTimeoutMs
           : operation === 'ocr'
             ? OCR_POLICY.requestTimeoutMs
-            : 120_000),
+            : COMPRESSION_POLICY.requestTimeoutMs),
     );
     let release: (() => void) | undefined;
     let workspace: Awaited<ReturnType<typeof createTempWorkspace>> | undefined;
@@ -109,8 +113,16 @@ export class ToolService {
       if (this.closed) throw new HeavyToolError('server-busy');
       release = await this.limiter.acquire(controller.signal);
       workspace = await createTempWorkspace(this.options.tempRoot);
+      if (operation === 'compress')
+        stopBudget = watchWorkspaceBudget(workspace.directory, controller, {
+          bytes: COMPRESSION_POLICY.workspaceBytes,
+          error: 'processing-failed',
+        });
       if (operation === 'ocr')
-        stopBudget = watchWorkspaceBudget(workspace.directory, controller);
+        stopBudget = watchWorkspaceBudget(workspace.directory, controller, {
+          bytes: OCR_POLICY.workspaceBytes,
+          error: 'ocr-failed',
+        });
       if (operation === 'convert-to-pdf')
         stopBudget = watchWorkspaceBudget(workspace.directory, controller, {
           bytes: CONVERSION_POLICY.workspaceBytes,

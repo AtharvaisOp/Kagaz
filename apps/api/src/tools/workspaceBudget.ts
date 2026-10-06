@@ -7,10 +7,7 @@ import type { HeavyToolErrorCode } from '@kagaz/shared-types';
 export function watchWorkspaceBudget(
   directory: string,
   controller: AbortController,
-  policy: { readonly bytes: number; readonly error: HeavyToolErrorCode } = {
-    bytes: 192 * 1024 * 1024,
-    error: 'ocr-failed',
-  },
+  policy: { readonly bytes: number; readonly error: HeavyToolErrorCode },
 ) {
   let pending = Promise.resolve();
   let stopped = false;
@@ -40,12 +37,28 @@ export function watchWorkspaceBudget(
           else bytes += (await lstat(child)).size;
         } catch (error) {
           // Engines remove intermediates while this asynchronous inventory runs.
-          if (!(
+          if (
             error instanceof Error &&
             'code' in error &&
             error.code === 'ENOENT'
-          ))
-            throw error;
+          ) {
+            // ENOENT from realpath is not proof that the entry disappeared.
+            // An existing dangling link has no verified canonical destination.
+            if (entry.isSymbolicLink()) {
+              try {
+                await lstat(child);
+              } catch (missing) {
+                if (
+                  missing instanceof Error &&
+                  'code' in missing &&
+                  missing.code === 'ENOENT'
+                )
+                  continue;
+                throw missing;
+              }
+              throw error;
+            }
+          } else throw error;
         }
         if (bytes > policy.bytes) throw new Error('workspace bytes');
       }

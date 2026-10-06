@@ -27,6 +27,30 @@ function run(
   });
 }
 describe('native process lifecycle', () => {
+  it.runIf(process.platform === 'linux')(
+    'maps a missing resource-wrapped executable to a server failure',
+    async () => {
+      await expect(
+        runNative({
+          executable: join(cwd, 'missing-wrapped-native'),
+          args: [],
+          cwd,
+          signal: new AbortController().signal,
+        }),
+      ).rejects.toMatchObject({ code: 'processing-failed' });
+    },
+  );
+  it.runIf(process.platform !== 'win32')(
+    'retires descendants after a successful parent exits with independent stdio',
+    async () => {
+      const marker = join(cwd, 'escaped-success-child');
+      const childCode = `setTimeout(()=>require('node:fs').writeFileSync(${JSON.stringify(marker)},'escaped'),600); setInterval(()=>{},1000)`;
+      const parentCode = `require('node:child_process').spawn(process.execPath,['-e',${JSON.stringify(childCode)}],{stdio:'ignore'}); process.exit(0)`;
+      expect((await run(parentCode)).exitCode).toBe(0);
+      await new Promise((resolve) => setTimeout(resolve, 800));
+      await expect(access(marker)).rejects.toMatchObject({ code: 'ENOENT' });
+    },
+  );
   it('kills descendants even when the parent exits before escalation', async () => {
     const marker = join(cwd, 'escaped-child');
     const childCode = `process.on('SIGTERM',()=>{}); setTimeout(()=>require('node:fs').writeFileSync(${JSON.stringify(marker)},'escaped'),1200); setInterval(()=>{},1000)`;

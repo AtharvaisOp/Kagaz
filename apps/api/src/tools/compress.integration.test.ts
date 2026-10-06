@@ -3,6 +3,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
   PDFDocument,
+  PDFName,
+  PDFString,
   concatTransformationMatrix,
   drawObject,
   popGraphicsState,
@@ -25,9 +27,43 @@ afterEach(async () => {
 const binaries = {
   gs: process.env.GHOSTSCRIPT_PATH ?? 'gs',
   qpdf: process.env.QPDF_PATH ?? 'qpdf',
+  python: process.env.OCR_PYTHON_PATH ?? 'python3',
 };
 
 describe('real Ghostscript and qpdf', () => {
+  it.each(['JavaScript', 'URI'])(
+    'rejects a direct nested %s action before compression or unchanged fallback',
+    async (action) => {
+      const workspace = await createTempWorkspace(root);
+      try {
+        const doc = await PDFDocument.create();
+        doc.addPage().drawText('Safe visual content with unsafe hidden action');
+        doc.catalog.set(
+          PDFName.of('OpenAction'),
+          doc.context.obj({
+            S: action,
+            ...(action === 'JavaScript'
+              ? { JS: PDFString.of('app.alert("synthetic fixture")') }
+              : { URI: PDFString.of('https://example.invalid/fixture') }),
+          }),
+        );
+        await writeFile(workspace.input, await doc.save());
+        await expect(
+          compressPdf(
+            workspace.input,
+            workspace.output,
+            'high-quality',
+            new AbortController().signal,
+            binaries,
+          ),
+        ).rejects.toMatchObject({ code: 'unsupported-pdf' });
+        expect(await readdir(workspace.directory)).toEqual(['input.pdf']);
+      } finally {
+        await workspace.cleanup();
+      }
+    },
+    15_000,
+  );
   it.each<CompressionPreset>(['high-quality', 'balanced', 'maximum'])(
     'validates and compresses image content using %s',
     async (preset) => {

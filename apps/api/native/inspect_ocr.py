@@ -14,6 +14,7 @@ import pikepdf
 from pdfminer.high_level import extract_pages
 from pdfminer.layout import LTChar, LTContainer, LTTextContainer
 from ocrmypdf.pdfinfo import PdfInfo
+from pdf_safety import validate_pdf_structure
 
 logging.disable(logging.CRITICAL)
 
@@ -54,11 +55,7 @@ def images(resources, depth=0, seen=None):
 
 def inventory(path):
     with pikepdf.open(path, attempt_recovery=False) as pdf:
-        if len(pdf.pages) > 20:
-            raise ValueError('pages')
-        for obj in pdf.objects:
-            if isinstance(obj, pikepdf.Dictionary) and (obj.get('/Type') == '/Sig' or '/ByteRange' in obj or '/XFA' in obj or obj.get('/S') == '/JavaScript'):
-                raise ValueError('unsafe source structure')
+        validate_pdf_structure(pdf, 20)
         result = []
         for page in pdf.pages:
             if page.obj.get('/Annots'):

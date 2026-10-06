@@ -1,10 +1,39 @@
 import { open } from 'node:fs/promises';
+import { fileURLToPath } from 'node:url';
 import { checkAbort, HeavyToolError } from './errors.js';
 import type { NativeResult } from './nativeRunner.js';
 export type PdfCommand = (
   executable: string,
   args: string[],
 ) => Promise<NativeResult>;
+const securityInspector = fileURLToPath(
+  new URL('../../native/inspect_pdf.py', import.meta.url),
+);
+
+/** Inspect nested PDF objects, including direct actions omitted by qpdf's form inventory. */
+export async function validateSafePdf(
+  path: string,
+  pages: number,
+  run: PdfCommand,
+  python: string,
+): Promise<void> {
+  const result = await run(python, [securityInspector, path, String(pages)]);
+  if (result.exitCode === 2) throw new HeavyToolError('unsupported-pdf');
+  if (result.exitCode !== 0) throw new HeavyToolError('invalid-pdf');
+  let facts: unknown;
+  try {
+    facts = JSON.parse(result.stdout);
+  } catch {
+    throw new HeavyToolError('invalid-pdf');
+  }
+  if (
+    typeof facts !== 'object' ||
+    facts === null ||
+    !('pages' in facts) ||
+    facts.pages !== pages
+  )
+    throw new HeavyToolError('invalid-pdf');
+}
 
 export async function pdfHeader(
   path: string,

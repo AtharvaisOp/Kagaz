@@ -1,5 +1,33 @@
 export class HeavyPdfError extends Error {}
 
+const MAXIMUM_ERROR_BYTES = 8 * 1024;
+
+async function readErrorPayload(response: Response): Promise<unknown> {
+  const reader = response.body?.getReader();
+  if (!reader) return null;
+  const decoder = new TextDecoder();
+  let bytes = 0;
+  let text = '';
+  try {
+    while (true) {
+      const chunk = await reader.read();
+      if (chunk.done) break;
+      bytes += chunk.value.byteLength;
+      if (bytes > MAXIMUM_ERROR_BYTES) {
+        await reader.cancel().catch(() => {});
+        return null;
+      }
+      text += decoder.decode(chunk.value, { stream: true });
+    }
+    return JSON.parse(text + decoder.decode());
+  } catch (error) {
+    await reader.cancel().catch(() => {});
+    throw error;
+  } finally {
+    reader.releaseLock();
+  }
+}
+
 export async function uploadHeavyPdf<M>(
   options: (
     | {
@@ -70,7 +98,8 @@ export async function uploadHeavyPdf<M>(
   if (!response.ok) {
     let message = 'The processing server is unavailable. Please retry.';
     try {
-      const payload: unknown = await response.json();
+      // A proxy error can be arbitrarily large; only retain the small safe envelope.
+      const payload = await readErrorPayload(response);
       if (
         typeof payload === 'object' &&
         payload !== null &&
@@ -86,10 +115,18 @@ export async function uploadHeavyPdf<M>(
     } catch {
       /* Proxies may return HTML; never expose it to the user. */
     }
+    signal.throwIfAborted();
     throw new HeavyPdfError(message);
   }
-  if (!response.headers.get('Content-Type')?.startsWith('application/pdf'))
+  const mediaType = response.headers
+    .get('Content-Type')
+    ?.split(';')[0]
+    ?.trim()
+    .toLowerCase();
+  if (mediaType !== 'application/pdf') {
+    await response.body?.cancel().catch(() => {});
     throw new HeavyPdfError('The server did not return a PDF. Please retry.');
+  }
   const declaredSize = Number(response.headers.get(options.sizeHeader));
   try {
     options.validate(response.headers, declaredSize);
@@ -130,7 +167,9 @@ export async function uploadHeavyPdf<M>(
     output.set(chunk, offset);
     offset += chunk.length;
   }
-  if (new TextDecoder().decode(output.subarray(0, 5)) !== '%PDF-')
+  if (
+    !/^%PDF-[12]\.[0-9]/.test(new TextDecoder().decode(output.subarray(0, 8)))
+  )
     throw new HeavyPdfError(
       'The server returned an invalid PDF. Please retry.',
     );

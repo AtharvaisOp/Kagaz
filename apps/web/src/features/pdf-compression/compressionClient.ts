@@ -26,8 +26,9 @@ export function readCompressionMetadata(
   const outcome = headers.get('X-Kagaz-Outcome');
   if (
     number('X-Kagaz-Original-Bytes') !== originalBytes ||
+    !Number.isSafeInteger(compressedBytes) ||
     compressedBytes !== actualBytes ||
-    compressedBytes <= 0 ||
+    compressedBytes < 8 ||
     compressedBytes > originalBytes ||
     savedBytes !== originalBytes - compressedBytes ||
     !Number.isFinite(savedPercent) ||
@@ -59,7 +60,7 @@ const FRIENDLY_ERRORS: Readonly<
   'file-too-large':
     'Compression supports PDFs up to 20 MiB. Extract fewer pages and try again.',
   'unsupported-pdf':
-    'The server cannot process encrypted PDFs, interactive forms, or PDFs over 300 pages.',
+    'Compression accepts flattened PDFs up to 300 pages. Encryption, interactive forms, digital-signature structures and active content are unsupported.',
   'processing-timeout': 'The server took too long. Try a smaller PDF or retry.',
   'server-busy': 'The server is busy. Please try again in a moment.',
   'processing-failed':
@@ -80,18 +81,25 @@ export async function uploadCompression(
   onProcessing: () => void,
   apiUrl = import.meta.env.VITE_API_URL ?? '',
 ): Promise<{ bytes: Uint8Array; metadata: CompressionMetadata }> {
-  return uploadHeavyPdf({
-    bytes,
-    signal,
-    onProcessing,
-    apiUrl,
-    operation: 'compress',
-    field: 'preset',
-    value: preset,
-    maximumInput: 20 * 1024 * 1024,
-    sizeHeader: 'X-Kagaz-Compressed-Bytes',
-    errors: FRIENDLY_ERRORS,
-    validate: (headers, size) =>
-      readCompressionMetadata(headers, preset, bytes.byteLength, size),
-  });
+  const bounded = AbortSignal.any([signal, AbortSignal.timeout(150_000)]);
+  try {
+    return await uploadHeavyPdf({
+      bytes,
+      signal: bounded,
+      onProcessing,
+      apiUrl,
+      operation: 'compress',
+      field: 'preset',
+      value: preset,
+      maximumInput: 20 * 1024 * 1024,
+      sizeHeader: 'X-Kagaz-Compressed-Bytes',
+      errors: FRIENDLY_ERRORS,
+      validate: (headers, size) =>
+        readCompressionMetadata(headers, preset, bytes.byteLength, size),
+    });
+  } catch (error) {
+    if (bounded.aborted && !signal.aborted)
+      throw new CompressionError(FRIENDLY_ERRORS['processing-timeout']);
+    throw error;
+  }
 }

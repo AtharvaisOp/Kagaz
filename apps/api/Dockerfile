@@ -1,4 +1,4 @@
-FROM node:22.20.0-bookworm-slim AS builder
+FROM node:22.23.3-trixie-slim AS builder
 
 ENV PNPM_HOME=/pnpm
 ENV PATH=$PNPM_HOME:$PATH
@@ -15,7 +15,7 @@ COPY apps/api apps/api
 COPY packages/shared-types packages/shared-types
 RUN pnpm --filter @kagaz/api... build && pnpm --filter @kagaz/api deploy --prod /prod/api
 
-FROM node:22.20.0-bookworm-slim AS runner
+FROM node:22.23.3-trixie-slim AS runner
 
 RUN apt-get update && apt-get install -y --no-install-recommends ghostscript qpdf util-linux ocrmypdf tesseract-ocr-eng \
     libreoffice-writer-nogui libreoffice-impress-nogui libreoffice-calc-nogui \

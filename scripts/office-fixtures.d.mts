@@ -11,5 +11,10 @@ export function officeAttack(kind: string): Promise<Buffer>;
 export function archiveEntries(bytes: Buffer): [string, Buffer][];
 export function zipEntries(
   entries: [string, Buffer][],
-  options?: { flags?: number; stored?: boolean; mode?: number },
+  options?: {
+    flags?: number;
+    stored?: boolean;
+    mode?: number;
+    compressedSuffix?: Buffer;
+  },
 ): Buffer;
