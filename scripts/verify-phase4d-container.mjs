@@ -529,6 +529,7 @@ async function profileStages(operation, bytes) {
     import { basename } from 'node:path';
     import { compressPdf } from './dist/tools/compress.js';
     import { convertToPdf } from './dist/tools/convert.js';
+    import { ocrPdf } from './dist/tools/ocr.js';
     import { runNative } from './dist/tools/nativeRunner.js';
     import { createTempWorkspace } from './dist/tools/workspace.js';
     const workspace = await createTempWorkspace();
@@ -538,7 +539,8 @@ async function profileStages(operation, bytes) {
       const result = await runNative(request);
       stages.push({ tool: basename(request.executable),
         stage: request.args[0].endsWith('.py') ? basename(request.args[0]) : request.args[0],
-        elapsedMs: Math.round(performance.now() - started), exitCode: result.exitCode });
+        elapsedMs: Math.round(performance.now() - started), exitCode: result.exitCode,
+        fileSizeLimitDetected: /File too large|file size limit|SIGXFSZ/i.test(result.stderr) });
       return result;
     };
     try {
@@ -546,8 +548,14 @@ async function profileStages(operation, bytes) {
       const signal = AbortSignal.timeout(180_000);
       if (process.argv[1] === 'compress')
         await compressPdf(workspace.input, workspace.output, 'balanced', signal, { runner });
-      else await convertToPdf(workspace.input, 'docx', signal, { runner });
-      console.log(JSON.stringify({ nativeStages: true, operation: process.argv[1], cpuCores: 0.1, stages }));
+      else if (process.argv[1] === 'ocr') {
+        let failureCode;
+        try { await ocrPdf(workspace.input, workspace.output, signal, { runner }); }
+        catch (error) { failureCode = error.code; }
+        if (failureCode !== 'ocr-failed') throw new Error('Expected bounded raster failure');
+        console.log(JSON.stringify({ nativeStages: true, operation: 'ocr-raster-ceiling', cpuCores: 0.1, failureCode, stages }));
+      } else await convertToPdf(workspace.input, 'docx', signal, { runner });
+      if (process.argv[1] !== 'ocr') console.log(JSON.stringify({ nativeStages: true, operation: process.argv[1], cpuCores: 0.1, stages }));
     } finally { await workspace.cleanup(); await rm('/tmp/audit-fixture'); }
   `,
         operation,
@@ -651,6 +659,7 @@ try {
   );
   await profileStages('compress', await compressionFixture(0));
   await profileStages('convert-to-pdf', await officeFixture('paragraphs.docx'));
+  await profileStages('ocr', maximumRaster);
   await verifyQueue(await independentScans(10));
   await verifyLifecycle(await independentScans(20));
   const report = {
