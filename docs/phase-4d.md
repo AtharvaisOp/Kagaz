@@ -1,8 +1,9 @@
 # Phase 4D — heavy-tool hardening and deployment-envelope audit
 
-Phase status: **PASS**. The complete implementation passed Linux CI run 50;
-subsequent audit-only commits extend the evidence without changing application
-behavior. The final branch must also pass CI before main is updated.
+Phase status: **PASS**. The complete implementation passed Linux CI runs 50, 53
+and 54. Run 54 verified `f1de7705d9b27f093ded7de2a7dfd0098184d127` before its
+fast-forward promotion to main. Subsequent release-record changes affect only this
+document; application code is unchanged.
 
 ## Starting state and baseline
 
@@ -365,10 +366,61 @@ The audit-created token is specifically revoked without regeneration; no existin
 protection settings or tokens are intentionally changed. Credential values are
 excluded from this record.
 
+## Final release verification
+
+[CI run 54](https://github.com/AtharvaisOp/Kagaz/actions/runs/37616451426)
+passed frozen installation, lint, typecheck, 206 API tests, 477 web tests, build,
+formatting, diff checks, production image verification, the constrained audit and
+all three browser suites. No native tests were skipped in Linux. Its browser
+reports have empty error arrays; all 45 hostile Office probes were rejected.
+PR #1 merged by fast-forward when main was pushed to the exact verified SHA.
+
+Run 54's additional 0.1 CPU / 512 MiB observations were: 19.4 MB compression
+20.829 s / 75.04 MiB charged peak; 20-page OCR 198.708 s / 140.34 MiB; fresh-profile
+DOCX 17.504 s / 180.21 MiB. Cancellation cleanup took 232 ms and supervised shutdown
+154 ms, with recovery, clean exit and no remaining known native processes. The
+813.27 MiB image and audited native package revisions match the retained run 50
+record. These are independent observations, not latency guarantees.
+
+The 16 MP diagnostic passed qpdf and input inspection, then OCRmyPDF exited 7
+(`child_process_error`). Its bounded diagnostic flags did not identify a file-size
+limit. This narrows the failing stage but does not establish the underlying child
+failure; no native stderr is published. No OOM, PID exhaustion or deadline expiry
+occurred. The existing resource ceilings remain unchanged.
+
+Both automatic deployments reached the verified SHA: Render
+`dep-db33djbrjlhs73827ti0` became live and Vercel
+`dpl_E6wtzc7P28cjLw9YgXfH9r72LCPc` became READY with
+`kagaz-personal.vercel.app` assigned. The configured production API origin was
+verified in a frontend build and then through the live conversion dialog. Selecting
+a public synthetic DOCX required explicit Convert submission, showed the working
+state and then PDF ready: one page, 35.6 KiB input / 31.0 KiB output. Its screenshot
+was inspected against design.md. The desktop browser's download-event capture
+timed out; CI independently verified returned/downloaded PDF bytes.
+
+Sequential synthetic requests to the hardened public API returned 200 for
+compression (5.613 s), one-page English OCR (18.104 s) and DOCX conversion (18.743 s).
+PDF header/media type, byte metadata, page count, CORS and no-store assertions
+passed. Malformed PDF returned invalid-pdf/400; a harmless active-action PDF
+returned unsupported-pdf/422. A separate 20-page OCR request passed in 146.987 s:
+1,297,207 input bytes, 1,324,084 output bytes, 20 pages recognized, zero skipped,
+valid PDF/page metadata and the same privacy headers. No personal files were used.
+
+After these requests, Render's one-minute metrics were available: maximum reported
+memory sample 158,863,360 bytes (151.50 MiB), CPU usage up to 0.15 core, reported CPU
+limit 0.15 and memory limit approximately 512 MiB. These provider samples are not
+the container sampler's exact peaks. The published Free plan remains 0.1 CPU;
+CI's 0.1 CPU tests are the retained conservative envelope. Earlier empty metric
+queries are historical observations, not claims of zero usage.
+
+The CLI-created automation bypass was revoked without regeneration. Follow-up
+project inspection confirmed zero bypass entries. No paid resources or hosting
+plan changed. Later documentation-only deploys use identical application sources.
+
 ## Acceptance and next-phase handoff
 
-The implementation acceptance below is supported by run 50's executed evidence.
-The final audit commit's CI is checked before main is updated.
+The acceptance below is supported by retained run 50 measurements, final run 54
+quality/container/browser gates and the executed production verification above.
 
 - [x] Starting repository state, history and architecture reviewed.
 - [x] Baseline commands recorded without suppressing failures.
