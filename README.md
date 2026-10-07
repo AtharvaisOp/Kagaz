@@ -340,7 +340,7 @@ The intended frontend configuration uses the repository root:
 - Repository: `AtharvaisOp/Kagaz`
 - Root Directory: `./`
 - Framework: Vite
-- Node.js: 22.x
+- Node.js: 24.x (verified current Vercel project setting; API/CI use 22.23.3)
 - Install Command: `pnpm install --frozen-lockfile`
 - Build Command: `pnpm --filter @kagaz/web build`
 - Output Directory: `apps/web/dist`
@@ -412,7 +412,7 @@ evidence, resource measurements and remaining isolation limits.
 - Phase 3 — forms and visual signatures (complete)
 - Phase 4A/4B — server-backed compression and OCR (complete)
 - Phase 4C — Office to PDF conversion (complete)
-- Phase 4D — [heavy-tool hardening and measured resource audit](docs/phase-4d.md)
+- Phase 4D — [heavy-tool hardening and measured resource audit](docs/phase-4d.md) (complete)
 - Phase 4D â€” further heavy-tool hardening (not started)
 
 The browser-local architecture remains the default for operations that can be

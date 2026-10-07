@@ -1,0 +1,471 @@
+{
+  "run": 50,
+  "url": "https://github.com/AtharvaisOp/Kagaz/actions/runs/37500390164",
+  "testedSha": "ce5e15b0092307dfb14fe9ea84c62ba09de3d901",
+  "audit": {
+    "samplingIntervalMs": 250,
+    "runtime": {
+      "node": "v22.23.3",
+      "python": "Python 3.13.5",
+      "packages": [
+        "ghostscript=10.05.1~dfsg-1+deb13u2",
+        "libreoffice-core-nogui=4:25.2.3-2+deb13u8",
+        "libseccomp2=2.6.0-2",
+        "ocrmypdf=16.7.0+dfsg1-3",
+        "python3-pdfminer=20221105+dfsg-1.1~deb13u1",
+        "python3-pikepdf=9.5.2+dfsg-1+b2",
+        "qpdf=12.2.0-1",
+        "tesseract-ocr=5.5.0-1+b1",
+        "tesseract-ocr-eng=1:4.1.0-2",
+        "util-linux=2.41.5-0+deb13u1"
+      ],
+      "largestPackages": "[{\"installedKiB\": 107346, \"package\": \"libreoffice-core-nogui\"}, {\"installedKiB\": 48558, \"package\": \"libreoffice-common\"}, {\"installedKiB\": 37371, \"package\": \"libicu76\"}, {\"installedKiB\": 30171, \"package\": \"libreoffice-writer-nogui\"}, {\"installedKiB\": 26925, \"package\": \"libreoffice-calc-nogui\"}, {\"installedKiB\": 22216, \"package\": \"libgs10\"}, {\"installedKiB\": 18457, \"package\": \"coreutils\"}, {\"installedKiB\": 15560, \"package\": \"fonts-urw-base35\"}, {\"installedKiB\": 13226, \"package\": \"libc6\"}, {\"installedKiB\": 13086, \"package\": \"poppler-data\"}, {\"installedKiB\": 11777, \"package\": \"libreoffice-style-colibre\"}, {\"installedKiB\": 10331, \"package\": \"tesseract-ocr-osd\"}, {\"installedKiB\": 9391, \"package\": \"libreoffice-draw-nogui\"}, {\"installedKiB\": 9008, \"package\": \"libmwaw-0.3-3\"}, {\"installedKiB\": 8898, \"package\": \"libpython3.13-stdlib\"}]"
+    },
+    "limits": {
+      "memoryBytes": 536870912,
+      "tmpfsBytes": 268435456,
+      "pids": 64
+    },
+    "results": [
+      {
+        "name": "compression-startup",
+        "operation": "compress",
+        "cpuCores": 0.1,
+        "inputBytes": 1297,
+        "outputBytes": 1297,
+        "pages": 1,
+        "runtimeMs": 5401,
+        "errorCode": null,
+        "healthStartupMs": 2356,
+        "cgroupCpuUseMs": 812.418,
+        "cgroupMemoryPeakBytes": 43290624,
+        "samples": 22,
+        "sampledPeaks": {
+          "memoryCurrentBytes": 43290624,
+          "processRssBytes": 122179584,
+          "processes": 4,
+          "cgroupTasks": 20,
+          "workspaceLogicalBytes": 58313,
+          "workspaceAllocatedBytes": 69632,
+          "tmpUsedBytes": 73728
+        },
+        "memoryEvents": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0",
+        "pidsEvents": "max 0"
+      },
+      {
+        "name": "compression-input-ceiling",
+        "operation": "compress",
+        "cpuCores": 0.1,
+        "inputBytes": 19447001,
+        "outputBytes": 4165572,
+        "pages": 8,
+        "runtimeMs": 21732,
+        "errorCode": null,
+        "healthStartupMs": 2523,
+        "cgroupCpuUseMs": 2419.733,
+        "cgroupMemoryPeakBytes": 78266368,
+        "samples": 83,
+        "sampledPeaks": {
+          "memoryCurrentBytes": 78008320,
+          "processRssBytes": 129417216,
+          "processes": 4,
+          "cgroupTasks": 19,
+          "workspaceLogicalBytes": 32146127,
+          "workspaceAllocatedBytes": 32161792,
+          "tmpUsedBytes": 32346112
+        },
+        "memoryEvents": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0",
+        "pidsEvents": "max 0"
+      },
+      {
+        "name": "compression-page-ceiling",
+        "operation": "compress",
+        "cpuCores": 0.1,
+        "inputBytes": 168775,
+        "outputBytes": 103651,
+        "pages": 300,
+        "runtimeMs": 15060,
+        "errorCode": null,
+        "healthStartupMs": 2271,
+        "cgroupCpuUseMs": 1744.862,
+        "cgroupMemoryPeakBytes": 62660608,
+        "samples": 58,
+        "sampledPeaks": {
+          "memoryCurrentBytes": 62660608,
+          "processRssBytes": 132689920,
+          "processes": 4,
+          "cgroupTasks": 20,
+          "workspaceLogicalBytes": 326562,
+          "workspaceAllocatedBytes": 339968,
+          "tmpUsedBytes": 344064
+        },
+        "memoryEvents": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0",
+        "pidsEvents": "max 0"
+      },
+      {
+        "name": "ocr-1-independent",
+        "operation": "ocr",
+        "cpuCores": 0.1,
+        "inputBytes": 65440,
+        "outputBytes": 69556,
+        "pages": 1,
+        "runtimeMs": 22501,
+        "errorCode": null,
+        "healthStartupMs": 2524,
+        "cgroupCpuUseMs": 2543.478,
+        "cgroupMemoryPeakBytes": 134995968,
+        "samples": 87,
+        "sampledPeaks": {
+          "memoryCurrentBytes": 134995968,
+          "processRssBytes": 234176512,
+          "processes": 5,
+          "cgroupTasks": 20,
+          "workspaceLogicalBytes": 362093,
+          "workspaceAllocatedBytes": 380928,
+          "tmpUsedBytes": 385024
+        },
+        "memoryEvents": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0",
+        "pidsEvents": "max 0"
+      },
+      {
+        "name": "ocr-10-independent",
+        "operation": "ocr",
+        "cpuCores": 0.1,
+        "inputBytes": 648924,
+        "outputBytes": 663818,
+        "pages": 10,
+        "runtimeMs": 104906,
+        "errorCode": null,
+        "healthStartupMs": 2522,
+        "cgroupCpuUseMs": 10702.098,
+        "cgroupMemoryPeakBytes": 137916416,
+        "samples": 385,
+        "sampledPeaks": {
+          "memoryCurrentBytes": 137916416,
+          "processRssBytes": 236220416,
+          "processes": 5,
+          "cgroupTasks": 19,
+          "workspaceLogicalBytes": 3588975,
+          "workspaceAllocatedBytes": 3768320,
+          "tmpUsedBytes": 3772416
+        },
+        "memoryEvents": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0",
+        "pidsEvents": "max 0"
+      },
+      {
+        "name": "ocr-20-independent-ceiling",
+        "operation": "ocr",
+        "cpuCores": 0.1,
+        "inputBytes": 1297207,
+        "outputBytes": 1324083,
+        "pages": 20,
+        "runtimeMs": 202607,
+        "errorCode": null,
+        "healthStartupMs": 2277,
+        "cgroupCpuUseMs": 20397.684,
+        "cgroupMemoryPeakBytes": 145195008,
+        "samples": 727,
+        "sampledPeaks": {
+          "memoryCurrentBytes": 145195008,
+          "processRssBytes": 247336960,
+          "processes": 5,
+          "cgroupTasks": 19,
+          "workspaceLogicalBytes": 7174292,
+          "workspaceAllocatedBytes": 7520256,
+          "tmpUsedBytes": 7524352
+        },
+        "memoryEvents": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0",
+        "pidsEvents": "max 0"
+      },
+      {
+        "name": "ocr-raster-ceiling",
+        "operation": "ocr",
+        "cpuCores": 0.1,
+        "inputBytes": 287624,
+        "outputBytes": 0,
+        "pages": 1,
+        "runtimeMs": 11996,
+        "errorCode": "ocr-failed",
+        "healthStartupMs": 2330,
+        "cgroupCpuUseMs": 1472.072,
+        "cgroupMemoryPeakBytes": 124137472,
+        "samples": 47,
+        "sampledPeaks": {
+          "memoryCurrentBytes": 123916288,
+          "processRssBytes": 181948416,
+          "processes": 5,
+          "cgroupTasks": 19,
+          "workspaceLogicalBytes": 575361,
+          "workspaceAllocatedBytes": 581632,
+          "tmpUsedBytes": 42532864
+        },
+        "memoryEvents": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0",
+        "pidsEvents": "max 0"
+      },
+      {
+        "name": "office-fresh-profile",
+        "operation": "convert-to-pdf",
+        "cpuCores": 0.1,
+        "inputBytes": 36467,
+        "outputBytes": 31774,
+        "pages": 1,
+        "runtimeMs": 18302,
+        "errorCode": null,
+        "healthStartupMs": 2526,
+        "cgroupCpuUseMs": 2091.032,
+        "cgroupMemoryPeakBytes": 188526592,
+        "samples": 64,
+        "sampledPeaks": {
+          "memoryCurrentBytes": 188219392,
+          "processRssBytes": 349978624,
+          "processes": 7,
+          "cgroupTasks": 20,
+          "workspaceLogicalBytes": 611349,
+          "workspaceAllocatedBytes": 720896,
+          "tmpUsedBytes": 724992
+        },
+        "memoryEvents": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0",
+        "pidsEvents": "max 0"
+      },
+      {
+        "nativeStages": true,
+        "operation": "compress",
+        "cpuCores": 0.1,
+        "stages": [
+          {
+            "tool": "qpdf",
+            "stage": "--is-encrypted",
+            "elapsedMs": 197,
+            "exitCode": 2
+          },
+          {
+            "tool": "qpdf",
+            "stage": "--check",
+            "elapsedMs": 100,
+            "exitCode": 0
+          },
+          {
+            "tool": "qpdf",
+            "stage": "--show-npages",
+            "elapsedMs": 99,
+            "exitCode": 0
+          },
+          {
+            "tool": "qpdf",
+            "stage": "--json",
+            "elapsedMs": 7,
+            "exitCode": 0
+          },
+          {
+            "tool": "python3",
+            "stage": "inspect_pdf.py",
+            "elapsedMs": 1199,
+            "exitCode": 0
+          },
+          {
+            "tool": "gs",
+            "stage": "-dSAFER",
+            "elapsedMs": 1495,
+            "exitCode": 0
+          },
+          {
+            "tool": "qpdf",
+            "stage": "--is-encrypted",
+            "elapsedMs": 6,
+            "exitCode": 2
+          },
+          {
+            "tool": "qpdf",
+            "stage": "--check",
+            "elapsedMs": 97,
+            "exitCode": 0
+          },
+          {
+            "tool": "qpdf",
+            "stage": "--show-npages",
+            "elapsedMs": 99,
+            "exitCode": 0
+          },
+          {
+            "tool": "python3",
+            "stage": "inspect_pdf.py",
+            "elapsedMs": 1198,
+            "exitCode": 0
+          }
+        ]
+      },
+      {
+        "nativeStages": true,
+        "operation": "convert-to-pdf",
+        "cpuCores": 0.1,
+        "stages": [
+          {
+            "tool": "python3",
+            "stage": "inspect_office.py",
+            "elapsedMs": 1706,
+            "exitCode": 0
+          },
+          {
+            "tool": "python3",
+            "stage": "office_sandbox.py",
+            "elapsedMs": 8500,
+            "exitCode": 0
+          },
+          {
+            "tool": "qpdf",
+            "stage": "--is-encrypted",
+            "elapsedMs": 7,
+            "exitCode": 2
+          },
+          {
+            "tool": "qpdf",
+            "stage": "--check",
+            "elapsedMs": 98,
+            "exitCode": 0
+          },
+          {
+            "tool": "qpdf",
+            "stage": "--show-npages",
+            "elapsedMs": 99,
+            "exitCode": 0
+          },
+          {
+            "tool": "python3",
+            "stage": "inspect_converted_pdf.py",
+            "elapsedMs": 1602,
+            "exitCode": 0
+          }
+        ]
+      },
+      {
+        "queue": true,
+        "activeResponseDelayAfterQueueMs": 17028,
+        "queuedRequestMs": 17896,
+        "overflowStatus": 503,
+        "queuedCancellation": true,
+        "oneSlotObserved": true
+      },
+      {
+        "lifecycle": true,
+        "cancellationCleanupMs": 231,
+        "shutdownMs": 174,
+        "noNativeAfterCancel": true,
+        "admissionRecovered": true,
+        "cleanShutdownExit": 0
+      }
+    ]
+  },
+  "office": {
+    "imageBytes": 852778009,
+    "baselineBytes": 852007195,
+    "imageIncreaseBytes": 770814,
+    "environments": {
+      "phase4b": {
+        "memoryBytes": 536870912,
+        "cpuCores": 0.5,
+        "tmpfsBytes": 268435456,
+        "cgroupCpu": "50000 100000",
+        "memoryPeakBytes": 196501504
+      },
+      "renderFree": {
+        "memoryBytes": 536870912,
+        "cpuCores": 0.1,
+        "tmpfsBytes": 268435456,
+        "cgroupCpu": "10000 100000",
+        "memoryPeakBytes": 195796992
+      }
+    },
+    "versions": {
+      "libreoffice": "LibreOffice 25.2.3.2 520(Build:2)",
+      "qpdf": "qpdf version 12.2.0",
+      "ghostscript": "10.05.1",
+      "ocrmypdf": "16.7.0+dfsg1",
+      "tesseract": "tesseract 5.5.0",
+      "liberationSans": "LiberationSans-Regular.ttf: \"Liberation Sans\" \"Regular\"",
+      "packages": "fonts-dejavu-core=2.37-8\nfonts-liberation=1:2.1.5-3\nlibreoffice-calc-nogui=4:25.2.3-2+deb13u8\nlibreoffice-impress-nogui=4:25.2.3-2+deb13u8\nlibreoffice-writer-nogui=4:25.2.3-2+deb13u8\nlibseccomp2=2.6.0-2"
+    },
+    "results": [
+      {
+        "fixture": "paragraphs.docx",
+        "format": "docx",
+        "inputBytes": 36467,
+        "outputBytes": 31774,
+        "runtimeMs": 4605,
+        "pages": 1,
+        "cpuCores": 0.5,
+        "sampledPeakWorkspaceBytes": 327796
+      },
+      {
+        "fixture": "image-page-break.docx",
+        "format": "docx",
+        "inputBytes": 95888,
+        "outputBytes": 65382,
+        "runtimeMs": 5330,
+        "pages": 2,
+        "cpuCores": 0.5,
+        "sampledPeakWorkspaceBytes": 670770
+      },
+      {
+        "fixture": "slides.pptx",
+        "format": "pptx",
+        "inputBytes": 88290,
+        "outputBytes": 57107,
+        "runtimeMs": 4929,
+        "pages": 3,
+        "cpuCores": 0.5,
+        "sampledPeakWorkspaceBytes": 383040
+      },
+      {
+        "fixture": "sheet.xlsx",
+        "format": "xlsx",
+        "inputBytes": 5296,
+        "outputBytes": 21841,
+        "runtimeMs": 3828,
+        "pages": 1,
+        "cpuCores": 0.5,
+        "sampledPeakWorkspaceBytes": 296625
+      },
+      {
+        "fixture": "sheets.xlsx",
+        "format": "xlsx",
+        "inputBytes": 5966,
+        "outputBytes": 23187,
+        "runtimeMs": 3799,
+        "pages": 2,
+        "cpuCores": 0.5,
+        "sampledPeakWorkspaceBytes": 265246
+      },
+      {
+        "fixture": "paragraphs.docx",
+        "format": "docx",
+        "inputBytes": 36467,
+        "outputBytes": 31774,
+        "runtimeMs": 38703,
+        "pages": 1,
+        "cpuCores": 0.1,
+        "sampledPeakWorkspaceBytes": 515796
+      },
+      {
+        "fixture": "slides.pptx",
+        "format": "pptx",
+        "inputBytes": 88290,
+        "outputBytes": 57107,
+        "runtimeMs": 42302,
+        "pages": 3,
+        "cpuCores": 0.1,
+        "sampledPeakWorkspaceBytes": 383040
+      },
+      {
+        "fixture": "sheet.xlsx",
+        "format": "xlsx",
+        "inputBytes": 5296,
+        "outputBytes": 21841,
+        "runtimeMs": 30703,
+        "pages": 1,
+        "cpuCores": 0.1,
+        "sampledPeakWorkspaceBytes": 296625
+      }
+    ],
+    "rejectedOfficeAttacks": 45
+  }
+}

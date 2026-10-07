@@ -86,18 +86,20 @@ functions fail closed. The inspection does not execute formulas, refresh data,
 fetch templates or load remote images. The private profile disables link updates. Independently, the
 LibreOffice process tree cannot create network sockets on Linux. The generated
 PDF parser rejects active actions, embedded files, forms and URI actions. These
-layers fail closed if package checks encounter unknown XML, ZIP or content types.
+layers reject unsafe or unsupported package structures. XML inspection is a bounded
+structural/active-content policy, not a complete OOXML schema allowlist; passive
+custom XML and some unrecognized tags/namespaces are accepted.
 
-| Conversion bound             |                                    Limit |
-| ---------------------------- | ---------------------------------------: |
-| Uploaded file                |                                   10 MiB |
-| ZIP entries                  |                                    2,048 |
-| Expanded bytes per entry     |                                    8 MiB |
-| Aggregate expanded ZIP bytes |                                   64 MiB |
-| Entry compression ratio      |                                    100:1 |
-| XML size and structure       | 16 MiB per part; 200,000 nodes; depth 64 |
-| Image dimensions             |          16 megapixels; PNG or JPEG only |
-| PPTX slides / XLSX sheets    |                                  50 / 20 |
+| Conversion bound             |                                             Limit |
+| ---------------------------- | ------------------------------------------------: |
+| Uploaded file                |                                            10 MiB |
+| ZIP entries                  |                                             2,048 |
+| Expanded bytes per entry     |                                             8 MiB |
+| Aggregate expanded ZIP bytes |                                            64 MiB |
+| Entry compression ratio      |                                             100:1 |
+| XML size and structure       | 8 MiB per entry; 200,000 nodes per part; depth 64 |
+| Image dimensions             |                   16 megapixels; PNG or JPEG only |
+| PPTX slides / XLSX sheets    |                                           50 / 20 |
 
 ## Shared lifecycle and operation limits
 

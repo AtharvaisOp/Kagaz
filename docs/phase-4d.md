@@ -1,5 +1,9 @@
 # Phase 4D — heavy-tool hardening and deployment-envelope audit
 
+Phase status: **PASS**. The complete implementation passed Linux CI run 50;
+subsequent audit-only commits extend the evidence without changing application
+behavior. The final branch must also pass CI before main is updated.
+
 ## Starting state and baseline
 
 The audit started on 6 October 2026 at
@@ -102,6 +106,17 @@ remain mandatory even for compression's unchanged fallback.
 - Locked proxy-addr 2.0.7 had a published advisory. Only its transitive lock entry
   was updated to 2.0.8; no dependency or framework was added.
 
+| Security boundary                                                  | Audit result                                                                                                                                                                     |
+| ------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| ZIP bombs, ratios, metadata, traversal and symlinks                | Bounded raw payload validation, consistent local/central records, safe package names, no extraction; new expansion/CRC/node regressions                                          |
+| Multipart, chunked input, filename and MIME tricks                 | Streamed byte counter independent of Content-Length; exact field counts/names; bounded headers/time; server inspects actual content; Office filename is only a consistency claim |
+| Office macros, embeddings, external relationships/formulas/data    | Existing active-part/relationship/formula restrictions retained; independent Linux network denial; structural inspection is not a complete OOXML schema allowlist                |
+| PDF JavaScript/actions, attachments, encryption, malformed objects | Strict qpdf checks plus bounded all-object safety policy; local destinations preserved; unknown/active actions, chained actions, external streams and PS rejected                |
+| Executable, shell, path and filter injection                       | Server-owned values, fixed generated destinations, `shell: false`, reduced native environment; no client process controls                                                        |
+| Temp leakage, disconnect, cancellation and shutdown                | Private directories, exclusive writes, work tracked through cleanup, canonical link validation, Linux residual-group retirement, bounded diagnostics and safe error codes        |
+| Output amplification, admission starvation and slot leaks          | Output/per-file/aggregate limits retained, compression budget added, FIFO/deadline/recovery regressions and production overflow/cancel/shutdown probes passed                    |
+| Native-code escape and host exhaustion                             | Process groups, prlimit and tested cgroup/tmpfs/PID envelope constrain ordinary failures; native RCE and host-level isolation limits remain explicit below                       |
+
 ## Resource policies
 
 | Policy                         | Compression        | OCR               | Office conversion              |
@@ -154,6 +169,20 @@ pnpm deploy, no-GUI LibreOffice, no-recommends packages and removed apt lists ar
 retained. Fonts support output fidelity; required OCR dependencies were not
 removed without evidence that the runtime can do without them.
 
+Executed production versions from run 50:
+
+| Runtime/package                      | Exact executed version     |
+| ------------------------------------ | -------------------------- |
+| Node / Python                        | v22.23.3 / 3.13.5          |
+| Ghostscript                          | 10.05.1~dfsg-1+deb13u2     |
+| qpdf                                 | 12.2.0-1                   |
+| OCRmyPDF                             | 16.7.0+dfsg1-3             |
+| Tesseract / English data             | 5.5.0-1+b1 / 1:4.1.0-2     |
+| pikepdf                              | 9.5.2+dfsg-1+b2            |
+| PDFMiner                             | 20221105+dfsg-1.1~deb13u1  |
+| LibreOffice core/Writer/Impress/Calc | 4:25.2.3-2+deb13u8         |
+| libseccomp / util-linux              | 2.6.0-2 / 2.41.5-0+deb13u1 |
+
 ## CI, measurements and verification method
 
 CI preserves frozen install, lint, typecheck, mandatory real-native integration
@@ -172,8 +201,9 @@ count and logical/allocated workspace/tmpfs use. RSS sums can double-count share
 pages; samples can miss brief peaks. Sampler/cleanup overhead is included in CPU
 and memory. OOM-kill and PID-saturation counters must stay zero.
 
-Small startup, approximately input-ceiling image compression, 300-page compression
-and 1/10/20 independently embedded OCR scans are measured. Scans repeat the same
+Small startup, approximately input-ceiling image compression, 300-page compression,
+1/10/20 independently embedded OCR scans and a 16 MP / 400 DPI raster are measured.
+Scans repeat the same
 synthetic English image and are not diverse photographs. A fresh-profile DOCX
 measures Office startup. Image sizes compare against the starting Phase 4C
 Dockerfile using the same current build context. Health readiness excludes image
@@ -181,9 +211,109 @@ pull, Docker launch and Render provider cold start. Queue timing based on preced
 client response completion is an observation, not exact server queue residence.
 
 Local post-change lint, typecheck, build, format and diff checks have passed.
+Linux CI run 50 (`37500390164`) passed the complete quality job on
+`ce5e15b0092307dfb14fe9ea84c62ba09de3d901`: 206 API and 477 web tests, with no
+skips; frozen install, lint, typecheck, build, format and diff checks also passed.
 Web verification executed 60 files / 477 tests. Focused real-Python PDF/Office
-tests executed 88 passed and one Linux-only skip on Windows. Linux container and
-browser results will be recorded from the branch CI before this phase is closed.
+tests executed 89 passed and one Linux-only skip on Windows. A full local rerun
+with Python executed API 181 passed, 17 failed and 8 skipped (206 total); remaining
+failures require unavailable Ghostscript/qpdf/OCRmyPDF. Linux container and
+browser paths also completed successfully in run 50. Its logs contain every
+`PHASE_4A_CONTAINER_PASSED`, `PHASE_4B_CONTAINER_PASSED`,
+`PHASE_4C_CONTAINER_PASSED`, `PHASE_4D_CONTAINER_PASSED` and Phase 4A/B/C browser
+success marker.
+
+## Executed resource/performance results
+
+[CI run 50](https://github.com/AtharvaisOp/Kagaz/actions/runs/37500390164)
+tested `ce5e15b0092307dfb14fe9ea84c62ba09de3d901`. Its `phase4d-verification`
+artifact contains numeric reports and browser screenshots. The numeric resource
+and Office reports are preserved in [phase-4d-measurements.json](phase-4d-measurements.json)
+so evidence survives GitHub artifact expiration. Each scaling row below is a
+single fresh-container observation at 512 MiB / 0.1 CPU, not a percentile or
+worst-case guarantee. Cgroup memory is charged memory, not a sum of unique physical
+resident pages across shared mappings.
+
+| Synthetic workload                | HTTP time (s) | CPU use (s) | Cgroup peak (MiB) | Sampled workspace logical / allocated (MiB) | Sampled RSS sum (MiB) | Processes / tasks | Result                      |
+| --------------------------------- | ------------: | ----------: | ----------------: | ------------------------------------------: | --------------------: | ----------------: | --------------------------- |
+| Small compression                 |         5.401 |       0.812 |             41.29 |                                 0.06 / 0.07 |                116.52 |            4 / 20 | Valid unchanged PDF         |
+| 19,447,001-byte image compression |        21.732 |       2.420 |             74.64 |                               30.66 / 30.67 |                123.42 |            4 / 19 | 4,165,572-byte PDF          |
+| 300-page compression              |        15.060 |       1.745 |             59.76 |                                 0.31 / 0.32 |                126.54 |            4 / 20 | Valid 300-page PDF          |
+| 1 independent OCR scan            |        22.501 |       2.543 |            128.74 |                                 0.35 / 0.36 |                223.33 |            5 / 20 | Valid searchable PDF        |
+| 10 independent OCR scans          |       104.906 |      10.702 |            131.53 |                                 3.42 / 3.59 |                225.28 |            5 / 19 | Valid searchable PDF        |
+| 20 independent OCR scans          |       202.607 |      20.398 |            138.47 |                                 6.84 / 7.17 |                235.88 |            5 / 19 | Valid searchable PDF        |
+| 16 MP / 400 DPI color OCR probe   |        11.996 |       1.472 |            118.39 |                                 0.55 / 0.55 |                173.52 |            5 / 19 | Typed `ocr-failed`, cleaned |
+| Fresh-profile paragraph DOCX      |        18.302 |       2.091 |            179.79 |                                 0.58 / 0.69 |                333.77 |            7 / 20 | Valid 1-page PDF            |
+
+Every row had zero OOM events/kills and zero PID saturation. Peak sampled tmpfs
+use was 40.56 MiB for the failed raster probe, versus only 0.55 MiB in named
+private files. This demonstrates why a pathname/logical-size watcher alone is
+not a complete temporary-space quota; open/unlinked allocations and native
+temporary behavior require an independently bounded filesystem. The exact
+internal cause of that raster failure was not established by run 50, and its
+118.39 MiB reading does not prove successful 16 MP OCR memory consumption.
+The admitted 16 MP ceiling is a safety bound, not a guarantee of processing
+success. It was retained along with the stricter existing per-file/native bounds.
+
+OCR page scaling is roughly linear in this workload. The 20-page job uses most
+of the native deadline margin; doubling active jobs on 0.1 CPU would compete for
+the same CPU and threaten the 300-second request envelope. These measurements
+support retaining one active job and fixed FIFO/deadline rejection. Memory
+headroom on small fixtures does not justify increased concurrency. Compression's
+largest sampled workspace was 30.66 MiB, below 128 MiB, with maximum source/output
+headroom preserved. OCR/Office workspace limits remain 192/128 MiB; neither
+representative set approached those limits, and more complex files may fail.
+
+The Office family suite completed all five fixtures at 0.5 CPU (3.799–5.330 s)
+and DOCX/PPTX/XLSX representatives at 0.1 CPU (38.703 / 42.302 / 30.703 s).
+Its container memory high-water marks were 187.40 MiB at 0.5 CPU and 186.73 MiB
+at 0.1 CPU. Variation from the separate fresh-profile DOCX probe illustrates
+why these single observations should not be treated as latency guarantees.
+
+The small compression stage profile spent 1,495 ms in Ghostscript, 2,397 ms in
+two Python safety inspections and 705 ms in seven qpdf invocations. The small
+Office stage profile spent 8,500 ms in the sandbox/LibreOffice conversion stage,
+1,706 ms in OOXML inspection, 1,602 ms in output inspection and 204 ms in qpdf.
+These measure whole stages, including startup and processing, not isolated
+executable launch latency. Native/import/profile overhead is material for small
+files. Persistent profiles or long-lived native workers were not introduced;
+their isolation/lifecycle costs would require separate evidence.
+
+Health readiness after Docker launch was 2.271–2.526 s. The production image was
+852,778,009 bytes (813.27 MiB), versus 852,007,195 bytes for the starting Dockerfile
+with current context: +770,814 bytes (0.74 MiB). The largest installed payloads
+are LibreOffice core (107,346 KiB), common files (48,558 KiB) and ICU (37,371 KiB),
+followed by required Writer/Calc engines. No safe major image reduction was
+demonstrated; the security refresh has negligible image-size impact.
+
+At 0.5 CPU, queue overflow returned 503/Retry-After 5, a queued request was
+canceled, and the first waiter completed after the OCR response. Its total
+queued-request observation was 17,896 ms; the preceding active response completed
+17,028 ms after queue submission. These are client observations, not exact server
+queue residence. Active cancellation cleaned native work/files in 231 ms and a
+subsequent compression succeeded. SIGTERM with active and queued work exited 0
+in 174 ms; the supervisor observed zero private workspaces and zero known native
+processes before container exit. Typed shutdown errors/disconnection were accepted
+as designed. Linux parent-success/orphan and missing-executable regressions also
+executed in the 206-test native suite.
+
+## Browser and design verification
+
+The existing browser scripts executed against the real production image:
+six compression outputs, eight OCR outputs and all five Office fixtures plus
+empty-state/editor/retry flows. They checked explicit upload boundaries, metadata,
+download bytes, page order/rotation, annotations, flattened forms, visual signatures,
+OCR expected words and digital-text retention, pixel comparisons, Office text/
+rendered marks/images, cancellation, safe errors and response validation.
+All three browser JSON reports recorded empty error arrays.
+
+Dialog screenshots cover 360, 390, 768 and 1440 px. The audit manually inspected
+the 1440 px compression/Office and 390 px OCR screenshots: restrained dark surfaces,
+Inter/monospace hierarchy, cyan focus/privacy accents and orange primary actions
+match design.md. The live frontend's conversion dialog and Escape/focus restoration
+were also inspected. gpt-taste was read and used for error/loading-state copy review;
+no TSX, CSS, motion framework, layout or consent flow changed. Existing reduced-motion,
+keyboard and focus behavior is preserved.
 
 ## Deployment envelope and limitations
 
@@ -209,14 +339,22 @@ Compression/OCR have no equivalent network seccomp rule. Kernel uninterruptible
 I/O can delay Linux group retirement; admission remains held while a live member
 could write. Windows successful-parent orphan cleanup is not claimed.
 
-Vercel project discovery succeeded, but deployment listing returned permission
-denied. Live deployment/version claims therefore require separate verified evidence.
+Vercel connector deployment listing returned permission denied and direct project
+retrieval returned 404. Its CLI fallback succeeded: production deployment
+`dpl_9KgPz59D25sKHpcYEEg96ZNiMVQE` was READY on the starting SHA/main, and project
+inspection confirmed the root/build/install/output settings and Node 24.x.
+A browser visit to the public frontend verified the current Office conversion
+dialog's explicit consent, disabled submit without a selected file, Escape dismissal
+and focus restoration. The live API health
+endpoint returned 200 in 22.84 seconds on the first observation; this includes network
+and possible idle startup and is not a reproducible provider cold-start benchmark.
+Render's CPU/memory metrics query returned empty series, not zero usage.
 No hosting plan or paid resource is changed by this phase.
 
 ## Acceptance and next-phase handoff
 
-Completion requires the following evidence. The remaining Linux/container gates
-must pass before merging to main or changing the phase status to PASS.
+The implementation acceptance below is supported by run 50's executed evidence.
+The final audit commit's CI is checked before main is updated.
 
 - [x] Starting repository state, history and architecture reviewed.
 - [x] Baseline commands recorded without suppressing failures.
@@ -225,14 +363,17 @@ must pass before merging to main or changing the phase status to PASS.
 - [x] No dependency sprawl, automatic upload, persistence or privacy regression.
 - [x] Fail-closed input/output validation preserved and strengthened.
 - [x] Design read; gpt-taste used for transport error copy, with no layout changes.
-- [ ] Resource limits justified by completed constrained measurements.
-- [ ] Production container tested, including all native tool versions.
-- [ ] Browser/API integration and response validation executed.
-- [ ] Cleanup, cancellation, admission recovery and shutdown verified in Linux.
-- [ ] Final documentation, exact test counts and deployment evidence synchronized.
-- [ ] Full quality gates passing on the completed commit.
+- [x] Resource limits justified by completed constrained measurements and safe failures.
+- [x] Production container tested, including exact native tool versions.
+- [x] Browser/API integration and response validation executed.
+- [x] Cleanup, cancellation, admission recovery and shutdown verified in Linux.
+- [x] Documentation, exact test counts and deployment envelope synchronized.
+- [x] Full quality gates passed on the recorded implementation commit.
 
 The next agent must retain explicit consent and the shared one-active-operation
 policy. Reassess native security advisories and actual deployment controls before
 raising limits. Keep Phase 4A/B/C records as historical evidence; current policies
 and measurements belong here. Later product features remain outside this phase.
+The 16 MP color raster's typed failure and temporary-space discrepancy merit
+focused investigation before expanding OCR compatibility. Do not treat a sampled
+low peak during a failed job as proof that its complete processing fits 512 MiB.
