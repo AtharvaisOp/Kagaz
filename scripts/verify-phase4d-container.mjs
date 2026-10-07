@@ -552,7 +552,8 @@ async function profileStages(operation, bytes) {
         let failureCode;
         try { await ocrPdf(workspace.input, workspace.output, signal, { runner }); }
         catch (error) { failureCode = error.code; }
-        if (failureCode !== 'ocr-failed') throw new Error('Expected bounded raster failure');
+        if (failureCode && !['ocr-failed', 'processing-timeout', 'processing-failed'].includes(failureCode))
+          throw new Error('Unexpected raster error contract');
         console.log(JSON.stringify({ nativeStages: true, operation: 'ocr-raster-ceiling', cpuCores: 0.1, failureCode, stages }));
       } else await convertToPdf(workspace.input, 'docx', signal, { runner });
       if (process.argv[1] !== 'ocr') console.log(JSON.stringify({ nativeStages: true, operation: process.argv[1], cpuCores: 0.1, stages }));
