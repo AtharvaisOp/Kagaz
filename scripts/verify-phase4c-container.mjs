@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { createRequire } from 'node:module';
-import { mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { setTimeout as delay } from 'node:timers/promises';
 import {
   officeAttack,
@@ -18,6 +18,11 @@ const results = [];
 const artifacts = process.env.KAGAZ_ARTIFACT_DIR;
 assert(artifacts, 'Set KAGAZ_ARTIFACT_DIR outside the repository.');
 await mkdir(artifacts, { recursive: true });
+const workspaceSamplerSource = await readFile(
+  new URL('./workspace-sample.mjs', import.meta.url),
+  'utf8',
+);
+const sampleCode = `${workspaceSamplerSource}\nprocess.stdout.write(String(sampleWorkspaceBytes('/tmp')));`;
 
 function docker(args, input) {
   const result = spawnSync('docker', args, {
@@ -137,14 +142,16 @@ async function verifyConversion(name, format, expectedPages) {
   const input = await officeFixture(name);
   let peakWorkspaceBytes = 0;
   let sampling = true;
-  const sampleCode = [
-    "const fs=require('node:fs'),p=require('node:path');let n=0;",
-    'function walk(x){let s;try{s=fs.lstatSync(x)}catch{return}if(s.isSymbolicLink()){n+=s.size;return}if(s.isDirectory()){for(const e of fs.readdirSync(x))walk(p.join(x,e))}else n+=s.size}',
-    "for(const e of fs.readdirSync('/tmp'))if(e.startsWith('kagaz-'))walk(p.join('/tmp',e));process.stdout.write(String(n))",
-  ].join('');
   const sampler = (async () => {
     while (sampling) {
-      const sample = docker(['exec', container, 'node', '-e', sampleCode]);
+      const sample = docker([
+        'exec',
+        container,
+        'node',
+        '--input-type=module',
+        '-e',
+        sampleCode,
+      ]);
       peakWorkspaceBytes = Math.max(peakWorkspaceBytes, Number(sample) || 0);
       await delay(150);
     }

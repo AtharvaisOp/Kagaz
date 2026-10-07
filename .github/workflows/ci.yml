@@ -46,6 +46,7 @@ jobs:
             libreoffice-writer-nogui libreoffice-impress-nogui libreoffice-calc-nogui \
             fonts-liberation fonts-dejavu-core libseccomp2
           pnpm test
+          node --test scripts/workspace-sample.test.mjs
 
       - name: Build
         run: pnpm build

@@ -100,6 +100,12 @@ remain mandatory even for compression's unchanged fallback.
   ENOENT was treated as a removed entry. Still-existing unresolved links now abort.
 - Compression lacked an aggregate workspace watcher. It now has an explicit
   128 MiB budget; OCR/Office budgets are explicitly sourced from their policies.
+- The post-promotion CI run 55 exposed a race in Phase 4C's verification sampler:
+  cleanup could remove a directory between lstat and readdir. Sampling now skips
+  only ENOENT/ENOTDIR disappearance races, continues to avoid following symlinks
+  and reports unexpected filesystem errors without private paths. Three
+  deterministic Node tests cover the cleanup race, symlink boundary and redacted
+  error contract. Application processing policies are unchanged.
 - Browser error parsing previously buffered unbounded JSON responses. It is now
   limited to 8 KiB, cancels rejected bodies, requires exact PDF media type and a
   complete PDF header, and rejects fractional/tiny byte metadata. Compression
@@ -416,6 +422,12 @@ queries are historical observations, not claims of zero usage.
 The CLI-created automation bypass was revoked without regeneration. Follow-up
 project inspection confirmed zero bypass entries. No paid resources or hosting
 plan changed. Later documentation-only deploys use identical application sources.
+
+Run 55's sampler failure was a verification defect after the successful request
+and attack probes; it was not suppressed or relabeled as a pass. The corrected
+sampler and its three additional tests are verified on a separate branch before
+promotion. Core API/web test counts remain 206 + 477; the three sampler tests run
+as a separate mandatory command in CI. Superseded run 56 was canceled.
 
 ## Acceptance and next-phase handoff
 
