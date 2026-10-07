@@ -345,10 +345,12 @@ The intended frontend configuration uses the repository root:
 - Build Command: `pnpm --filter @kagaz/web build`
 - Output Directory: `apps/web/dist`
 
-The configured production-origin candidate is
-`https://kagaz-personal.vercel.app`. For all three server tools, set the frontend build
-variable `VITE_API_URL=https://kagaz-api.onrender.com` before the next normal
-deployment. Source editing and ordinary export work without this variable.
+The production frontend is `https://kagaz-personal.vercel.app`. All three server
+tools require the frontend build variable
+`VITE_API_URL=https://kagaz-api.onrender.com`, configured in Vercel's Production
+environment during Phase 4D. An empty value uses same-origin `/tools` routes,
+which Vite proxies locally but Vercel does not. Environment changes require a new
+frontend build. Source editing and ordinary export work without this variable.
 
 Verify the production deployment's commit and API build variable in Vercel after
 promotion; repository configuration alone does not prove the live version.
@@ -413,7 +415,6 @@ evidence, resource measurements and remaining isolation limits.
 - Phase 4A/4B — server-backed compression and OCR (complete)
 - Phase 4C — Office to PDF conversion (complete)
 - Phase 4D — [heavy-tool hardening and measured resource audit](docs/phase-4d.md) (complete)
-- Phase 4D â€” further heavy-tool hardening (not started)
 
 The browser-local architecture remains the default for operations that can be
 performed safely on the device.

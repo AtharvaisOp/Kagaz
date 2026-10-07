@@ -351,6 +351,20 @@ and possible idle startup and is not a reproducible provider cold-start benchmar
 Render's CPU/memory metrics query returned empty series, not zero usage.
 No hosting plan or paid resource is changed by this phase.
 
+Inspection of the starting production frontend's compiled clients found an empty
+API origin and no Render URL. Same-origin `/tools/compress` returned 404: the
+deployed server-tool integration was misconfigured despite local/CI proxy tests.
+The existing Vercel project's public `VITE_API_URL` was set to
+`https://kagaz-api.onrender.com` for Production, using the authenticated CLI after
+the connector's project lookup failed. This requires the next frontend build;
+production deployment metadata and explicit synthetic tool submissions are
+checked after main is updated. No API URL is hardcoded in application source.
+
+Vercel CLI inspection also unexpectedly created an automation bypass token.
+The audit-created token is specifically revoked without regeneration; no existing
+protection settings or tokens are intentionally changed. Credential values are
+excluded from this record.
+
 ## Acceptance and next-phase handoff
 
 The implementation acceptance below is supported by run 50's executed evidence.
