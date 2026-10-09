@@ -23,6 +23,7 @@ import type {
   PdfAnnotation,
 } from '../../pdf-annotations/model/types';
 import type { AnnotationAssetRegistry } from '../../pdf-annotations/runtime/annotationAssetRegistry';
+import type { RedactionRegion } from '../../pdf-redactions/model/types';
 import type { SourceDocumentRegistry } from '../runtime/sourceDocumentRegistry';
 import type {
   PdfWorkspaceState,
@@ -88,6 +89,25 @@ export function friendlyExportError(error: unknown): string {
 export interface AnnotationExportSnapshot {
   readonly annotationsByPage: ReadonlyMap<string, readonly PdfAnnotation[]>;
   readonly imageAssetIds: readonly string[];
+}
+
+/** Deep snapshot before Blob reads; extraction includes only selected workspace identities. */
+export function snapshotRedactionsForPages(
+  pages: readonly WorkspacePage[],
+  regions: readonly RedactionRegion[],
+): ReadonlyMap<string, readonly RedactionRegion[]> {
+  return new Map(
+    pages.map((page) => [
+      page.id,
+      Object.freeze(
+        regions
+          .filter((region) => region.pageId === page.id)
+          .map((region) =>
+            Object.freeze({ ...region, box: Object.freeze({ ...region.box }) }),
+          ),
+      ),
+    ]),
+  );
 }
 
 /** Copies only committed annotations attached to the selected page snapshot. */
@@ -162,6 +182,7 @@ export function usePdfExport(
   annotationAssets: Pick<AnnotationAssetRegistry, 'get'>,
   getExportBlockReason: ExportBlockReason,
   snapshotForms: (pages: readonly WorkspacePage[]) => FormExportSnapshot,
+  redactions: readonly RedactionRegion[] = [],
 ): PdfExportController {
   const [state, setState] = useState<PdfExportState>(IDLE_EXPORT_STATE);
   const generationRef = useRef(0);
@@ -185,6 +206,10 @@ export function usePdfExport(
       const pageSnapshot = snapshotWorkspacePages(pages);
       const sources = sourceMapForPages(pageSnapshot, registry);
       const forms = snapshotForms(pageSnapshot);
+      const redactionsByPage = snapshotRedactionsForPages(
+        pageSnapshot,
+        redactions,
+      );
       const annotations = snapshotAnnotationsForPages(
         pageSnapshot,
         annotationState,
@@ -206,6 +231,7 @@ export function usePdfExport(
               forms,
               annotationsByPage: annotations.annotationsByPage,
               imageAssets: assets,
+              redactionsByPage,
             },
             { signal, onProgress },
           ),
@@ -218,6 +244,7 @@ export function usePdfExport(
       snapshotForms,
       annotationState,
       annotationAssets,
+      redactions,
     ],
   );
 

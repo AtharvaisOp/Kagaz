@@ -17,6 +17,7 @@ import {
 interface AnnotationSummaryProps {
   readonly controller: PdfAnnotationController;
   readonly pageId: WorkspacePageId | null;
+  readonly onActivate?: () => void;
 }
 
 const moveDirections: readonly (readonly [AnnotationMoveDirection, string])[] =
@@ -43,6 +44,7 @@ type PendingFocus =
 export function AnnotationSummary({
   controller,
   pageId,
+  onActivate,
 }: AnnotationSummaryProps) {
   const headingRef = useRef<HTMLHeadingElement>(null);
   const selectButtonRefs = useRef(new Map<AnnotationId, HTMLButtonElement>());
@@ -133,10 +135,11 @@ export function AnnotationSummary({
                     className="annotation-summary-select"
                     aria-pressed={selected}
                     aria-label={`${label}, annotation ${index + 1}`}
-                    onClick={() =>
-                      pageId &&
-                      controller.selectAnnotation(pageId, annotation.id)
-                    }
+                    onClick={() => {
+                      onActivate?.();
+                      if (pageId)
+                        controller.selectAnnotation(pageId, annotation.id);
+                    }}
                   >
                     <span
                       className="annotation-summary-index"

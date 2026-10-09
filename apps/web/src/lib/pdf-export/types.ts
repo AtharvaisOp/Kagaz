@@ -5,6 +5,7 @@ import type {
 import type { PdfAnnotation } from '../../features/pdf-annotations/model/types';
 import type { AnnotationImageExportSource } from './annotations/exportContracts';
 import type { FormExportSnapshot } from './forms/types';
+import type { RedactionRegion } from '../../features/pdf-redactions/model/types';
 
 export interface ExportSource {
   readonly id: SourceDocumentId;
@@ -21,6 +22,8 @@ export interface ExportWorkspaceRequest {
   readonly imageAssets: ReadonlyMap<string, AnnotationImageExportSource>;
   /** Immutable, serializable form metadata and committed values. */
   readonly forms: FormExportSnapshot;
+  /** Pending proposals are finalized destructively, outside annotation flattening. */
+  readonly redactionsByPage?: ReadonlyMap<string, readonly RedactionRegion[]>;
 }
 
 export type ExportProgress =
@@ -53,6 +56,10 @@ export type PdfExportErrorCode =
   | 'source-read-failed'
   | 'source-pdf-invalid'
   | 'page-copy-failed'
+  | 'redaction-invalid'
+  | 'redaction-too-large'
+  | 'redaction-render-failed'
+  | 'redaction-unsafe-retention'
   | 'save-failed';
 
 export class PdfExportError extends Error {

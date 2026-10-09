@@ -26,6 +26,9 @@ import type {
   FormWidgetDefinition,
 } from '../pdf-forms/model/types';
 import type { PdfFormsController } from '../pdf-forms/hooks/usePdfForms';
+import { RedactionOverlay } from '../pdf-redactions/rendering/RedactionOverlay';
+import type { PdfRedactionController } from '../pdf-redactions/hooks/usePdfRedactions';
+import type { RedactionRegion } from '../pdf-redactions/model/types';
 
 import type {
   WorkspacePage,
@@ -40,6 +43,13 @@ import type {
 
 interface PdfPageProps {
   readonly page: WorkspacePage;
+  readonly redactionActive: boolean;
+  readonly redactionRegions: readonly RedactionRegion[];
+  readonly selectedRedactionId: string | null;
+  readonly onAddRedaction: PdfRedactionController['add'];
+  readonly onReplaceRedaction: PdfRedactionController['replace'];
+  readonly onSelectRedaction: PdfRedactionController['select'];
+  readonly onRegisterRedactionBounds: PdfRedactionController['registerPageBounds'];
   readonly document: PDFDocumentProxy;
   readonly workspacePosition: number;
   readonly zoom: number;
@@ -91,6 +101,13 @@ const PDFJS_ENABLE_FORMS_ANNOTATION_MODE = 2;
 
 export function PdfPage({
   page,
+  redactionActive,
+  redactionRegions,
+  selectedRedactionId,
+  onAddRedaction,
+  onReplaceRedaction,
+  onSelectRedaction,
+  onRegisterRedactionBounds,
   document,
   workspacePosition,
   zoom,
@@ -383,6 +400,20 @@ export function PdfPage({
             onCancelText={onCancelText}
             onPlaceImage={onPlaceImage}
             onPlaceSignature={onPlaceSignature}
+          />
+        ) : null}
+        {hasRenderedViewport && renderedViewport ? (
+          <RedactionOverlay
+            key={`redaction:${renderedViewport.signature}:${redactionActive}`}
+            pageId={page.id}
+            viewport={renderedViewport.viewport}
+            active={redactionActive}
+            regions={redactionRegions}
+            selectedId={selectedRedactionId}
+            onAdd={onAddRedaction}
+            onReplace={onReplaceRedaction}
+            onSelect={onSelectRedaction}
+            onRegisterBounds={onRegisterRedactionBounds}
           />
         ) : null}
       </div>

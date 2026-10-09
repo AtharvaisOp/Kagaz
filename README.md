@@ -95,6 +95,33 @@ lifecycle protection.
 See [Phase 3G audit and verification](docs/phase-3g.md) for defects repaired,
 repeatable browser scripts, performance observations, and remaining limitations.
 
+## Browser-local redaction
+
+Use **Redact** to propose rectangular regions, then move, resize or remove them
+before Download or Extract. The current-page semantic list also supports keyboard
+creation and precise geometry edits. Proposals participate in the shared Undo/Redo
+history and stay associated with their pages through reordering and rotation.
+
+Export permanently overwrites the marked pixels and rebuilds each affected page
+from a sanitized, opaque PNG at 144 DPI. Original page text, images, form values,
+annotations and visual signatures are never placed underneath that bitmap in the
+final page. Unaffected pages use the existing page-copy path where safe. PDF bytes
+remain in the browser; ordinary redaction and export do not upload or persist them.
+The open source and editable proposals remain available after export.
+
+Affected pages lose selectable/searchable text, original vectors and source
+accessibility semantics; files may grow. There is no automatic OCR. Rasterization
+is bounded to 16 megapixels and 8,192 pixels per side, with additional input-image
+budgets. Unsupported geometry, failed rendering or unsafe retained source objects
+stop export. A mixed export can also be blocked when preserved pages contain
+source annotations, alternate representations or shared original resources,
+including coincident source-controlled resource identifiers. Extract affected
+pages separately or redact all sharing pages. Information visibly
+repeated outside the marked regions must be addressed separately.
+
+See [Phase 5A architecture and removal evidence](docs/phase-5a.md) for the security
+boundary, limits, independent PDF/image checks and measured verification.
+
 ## Privacy-first architecture
 
 PDF source files stay in the browser for editing and ordinary export. Compression and OCR
@@ -415,6 +442,7 @@ evidence, resource measurements and remaining isolation limits.
 - Phase 4A/4B — server-backed compression and OCR (complete)
 - Phase 4C — Office to PDF conversion (complete)
 - Phase 4D — [heavy-tool hardening and measured resource audit](docs/phase-4d.md) (complete)
+- Phase 5A — [true browser-local redaction](docs/phase-5a.md)
 
 The browser-local architecture remains the default for operations that can be
 performed safely on the device.

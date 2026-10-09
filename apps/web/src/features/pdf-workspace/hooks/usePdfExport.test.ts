@@ -5,6 +5,7 @@ import { addAnnotation } from '../../pdf-annotations/model/operations';
 import {
   friendlyExportError,
   snapshotAnnotationsForPages,
+  snapshotRedactionsForPages,
 } from './usePdfExport';
 import { AnnotationExportError } from '../../../lib/pdf-export/annotations/flattenAnnotations';
 import { FormExportError } from '../../../lib/pdf-export/forms/types';
@@ -16,6 +17,26 @@ const pageA = {
   rotationDelta: 0,
 } as const;
 const pageB = { ...pageA, id: 'page-b', sourcePageIndex: 1 } as const;
+
+describe('snapshotRedactionsForPages', () => {
+  it('deeply snapshots selected page proposals before asynchronous asset work', () => {
+    const region = {
+      id: 'redaction',
+      pageId: pageA.id,
+      box: { x: 1, y: 2, width: 30, height: 40 },
+    };
+    const snapshot = snapshotRedactionsForPages(
+      [pageA],
+      [region, { ...region, id: 'unselected', pageId: pageB.id }],
+    );
+    region.box.x = 99;
+    expect(snapshot.get(pageA.id)).toEqual([
+      { ...region, box: { x: 1, y: 2, width: 30, height: 40 } },
+    ]);
+    expect(snapshot.has(pageB.id)).toBe(false);
+    expect(Object.isFrozen(snapshot.get(pageA.id)?.[0]?.box)).toBe(true);
+  });
+});
 
 describe('snapshotAnnotationsForPages', () => {
   it('captures only selected page IDs, preserves z-order, and collects image IDs', () => {

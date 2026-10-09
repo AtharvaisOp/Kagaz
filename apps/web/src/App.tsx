@@ -9,6 +9,7 @@ import { usePdfWorkspace } from './features/pdf-workspace/hooks/usePdfWorkspace'
 import { usePdfExport } from './features/pdf-workspace/hooks/usePdfExport';
 import { usePdfForms } from './features/pdf-forms/hooks/usePdfForms';
 import { useEditorHistory } from './features/editor-history/useEditorHistory';
+import { usePdfRedactions } from './features/pdf-redactions/hooks/usePdfRedactions';
 import { ConvertDialog } from './features/office-conversion/ConvertDialog';
 
 import type { FileLoadIssue } from './features/pdf-workspace/loading/types';
@@ -44,9 +45,14 @@ export function App() {
     editorHistory.annotation,
   );
   const formController = usePdfForms(workspace, registry, editorHistory.form);
+  const redactionController = usePdfRedactions(
+    workspace.pages,
+    editorHistory.redaction,
+  );
   editorHistory.bind({
     annotation: annotationController.historyParticipant,
     form: formController.historyParticipant,
+    redaction: redactionController.historyParticipant,
   });
   const getExportBlockReason = useCallback(
     (pages: Parameters<typeof formController.getExportBlockReason>[0]) =>
@@ -61,6 +67,7 @@ export function App() {
     annotationController.assetRegistry,
     getExportBlockReason,
     formController.snapshotForExport,
+    redactionController.state.present,
   );
 
   const handleInitialSelection = (
@@ -81,11 +88,14 @@ export function App() {
   const handleStartOver = () => {
     if (
       startOver(
-        annotationController.hasUnsavedWork || formController.hasUnsavedWork,
+        annotationController.hasUnsavedWork ||
+          formController.hasUnsavedWork ||
+          redactionController.hasUnsavedWork,
         () => {
           pdfExport.cancel();
           annotationController.resetAnnotations();
           formController.resetForms();
+          redactionController.reset();
           editorHistory.reset();
         },
       )
@@ -153,6 +163,7 @@ export function App() {
           exportBlockReason={getExportBlockReason(workspace.pages)}
           annotationController={annotationController}
           formController={formController}
+          redactionController={redactionController}
           prepareWorkspace={pdfExport.prepareWorkspace}
         />
       ) : null}

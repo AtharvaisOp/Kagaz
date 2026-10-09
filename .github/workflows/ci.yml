@@ -93,7 +93,10 @@ jobs:
           KAGAZ_ARTIFACT_DIR: ${{ runner.temp }}/phase4c-artifacts
         run: node scripts/verify-phase4d-container.mjs
       - name: Install browser
-        run: pnpm exec playwright install --with-deps chromium
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends qpdf
+          pnpm exec playwright install --with-deps chromium
       - name: Verify editor and real container together
         env:
           KAGAZ_ARTIFACT_DIR: ${{ runner.temp }}/phase4c-artifacts
@@ -106,6 +109,11 @@ jobs:
           node scripts/verify-phase4a.mjs
           node scripts/verify-phase4b.mjs
           node scripts/verify-phase4c.mjs
+      - name: Verify browser-local redaction and independent content removal
+        env:
+          KAGAZ_ARTIFACT_DIR: ${{ runner.temp }}/phase4c-artifacts
+          KAGAZ_REQUIRE_QPDF: '1'
+        run: node scripts/verify-phase5a.mjs
       - name: Save verification artifacts
         if: always()
         uses: actions/upload-artifact@v4

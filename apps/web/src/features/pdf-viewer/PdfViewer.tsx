@@ -1,4 +1,10 @@
-import { useCallback, useLayoutEffect, useRef, useState } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from 'react';
 
 import { FileIssueList } from '../../components/FileIssueList';
 import type { PdfAnnotationController } from '../pdf-annotations/hooks/usePdfAnnotations';
@@ -11,6 +17,8 @@ import { ThumbnailRail } from '../pdf-workspace/components/ThumbnailRail';
 import { useWorkspaceNavigation } from '../pdf-workspace/hooks/useWorkspaceNavigation';
 import { FormStatusNotice } from '../pdf-forms/components/FormStatusNotice';
 import type { PdfFormsController } from '../pdf-forms/hooks/usePdfForms';
+import type { PdfRedactionController } from '../pdf-redactions/hooks/usePdfRedactions';
+import { RedactionSummary } from '../pdf-redactions/components/RedactionSummary';
 
 import type { FileLoadIssue } from '../pdf-workspace/loading/types';
 import type { WorkspaceLoadingState } from '../pdf-workspace/hooks/usePdfWorkspace';
@@ -57,6 +65,7 @@ interface PdfViewerProps {
   readonly exportBlockReason: string | null;
   readonly annotationController: PdfAnnotationController;
   readonly formController: PdfFormsController;
+  readonly redactionController: PdfRedactionController;
   readonly prepareWorkspace: PdfExportController['prepareWorkspace'];
 }
 
@@ -105,8 +114,25 @@ export function PdfViewer({
   exportBlockReason,
   annotationController,
   formController,
+  redactionController,
   prepareWorkspace,
 }: PdfViewerProps) {
+  const {
+    active: redactionActive,
+    setActive: setRedactionActive,
+    select: selectRedaction,
+  } = redactionController;
+  useEffect(() => {
+    if (annotationController.activeTool !== 'select' && redactionActive) {
+      setRedactionActive(false);
+      selectRedaction(null);
+    }
+  }, [
+    annotationController.activeTool,
+    redactionActive,
+    selectRedaction,
+    setRedactionActive,
+  ]);
   const [mobilePageManagerOpen, setMobilePageManagerOpen] = useState(false);
   const [extractOpen, setExtractOpen] = useState(false);
   const [compressOpen, setCompressOpen] = useState(false);
@@ -132,8 +158,11 @@ export function PdfViewer({
 
   const closePageManager = useCallback(() => {
     setMobilePageManagerOpen(false);
-    window.requestAnimationFrame(() => pagesTriggerRef.current?.focus());
-  }, []);
+    if (mobilePageManagerOpen)
+      window.requestAnimationFrame(() =>
+        pagesTriggerRef.current?.focus({ preventScroll: true }),
+      );
+  }, [mobilePageManagerOpen]);
 
   useLayoutEffect(() => {
     if (!mobilePageManagerOpen) return;
@@ -214,10 +243,32 @@ export function PdfViewer({
           onClose={closeCompress}
         />
       ) : null}
-      <AnnotationToolbar controller={annotationController} />
+      <AnnotationToolbar
+        controller={annotationController}
+        redactionController={redactionController}
+      />
       <AnnotationSummary
         controller={annotationController}
         pageId={selectedPageId}
+        onActivate={() => {
+          redactionController.setActive(false);
+          redactionController.select(null);
+        }}
+      />
+      <RedactionSummary
+        controller={redactionController}
+        pageId={selectedPageId}
+        pages={pages}
+        onChoosePage={navigation.scrollToPage}
+        onActivate={() => {
+          if (annotationController.textEditSession)
+            annotationController.cancelTextEdit(
+              annotationController.textEditSession.sessionId,
+            );
+          annotationController.setActiveTool('select');
+          annotationController.clearSelection();
+          redactionController.setActive(true);
+        }}
       />
       <ExtractPagesDialog
         key={extractSession}
@@ -302,6 +353,17 @@ export function PdfViewer({
                 <MemoizedPdfPage
                   key={page.id}
                   page={page}
+                  redactionActive={redactionController.active}
+                  redactionRegions={redactionController.getRegionsForPage(
+                    page.id,
+                  )}
+                  selectedRedactionId={redactionController.selectionId}
+                  onAddRedaction={redactionController.add}
+                  onReplaceRedaction={redactionController.replace}
+                  onSelectRedaction={redactionController.select}
+                  onRegisterRedactionBounds={
+                    redactionController.registerPageBounds
+                  }
                   document={document}
                   workspacePosition={workspacePosition}
                   zoom={zoom}

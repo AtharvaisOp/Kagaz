@@ -50,6 +50,19 @@ export async function exportWorkspace(
   } = {},
 ): Promise<Uint8Array> {
   const pages = request.pages.map((page) => ({ ...page }));
+  const redactionsByPage = new Map(
+    pages.map((page) => [
+      page.id,
+      (request.redactionsByPage?.get(page.id) ?? []).map((region) => ({
+        ...region,
+        box: { ...region.box },
+      })),
+    ]),
+  );
+  const hasRedactions = [...redactionsByPage.values()].some(
+    (regions) => regions.length > 0,
+  );
+  const originalRedactedContent = new Set<string>();
   const uniqueSourceIds = [
     ...new Set(pages.map((page) => page.sourceDocumentId)),
   ];
@@ -82,6 +95,12 @@ export async function exportWorkspace(
       import('../pdf-signatures/signatureSafety'),
     ]);
   const { PDFDocument, degrees } = pdfLib;
+  const redactionFinalization = hasRedactions
+    ? await import('./redactions/finalizeRedactions')
+    : null;
+  const retentionSafety = hasRedactions
+    ? await import('./redactions/retentionSafety')
+    : null;
 
   try {
     for (const [index, sourceId] of uniqueSourceIds.entries()) {
@@ -188,7 +207,67 @@ export async function exportWorkspace(
         );
       }
       throwIfAborted(options.signal);
+      if (retentionSafety) {
+        const sourcePages = pages.filter(
+          (page) => page.sourceDocumentId === sourceId,
+        );
+        const preservedPageIndices = sourcePages
+          .filter((page) => (redactionsByPage.get(page.id)?.length ?? 0) === 0)
+          .map((page) => page.sourcePageIndex);
+        retentionSafety.assertSafePreservedPages(
+          sourceDocument,
+          preservedPageIndices,
+        );
+        retentionSafety.assertNoSharedRedactedResources(
+          sourceDocument,
+          sourcePages
+            .filter((page) => (redactionsByPage.get(page.id)?.length ?? 0) > 0)
+            .map((page) => page.sourcePageIndex),
+          preservedPageIndices,
+        );
+      }
       sourceDocuments.set(sourceId, sourceDocument);
+    }
+
+    if (retentionSafety) {
+      // Separate File instances can contain the same original source objects.
+      // Compare resolved resource payloads across all source IDs before copy.
+      for (const [sourceId, sourceDocument] of sourceDocuments) {
+        const affectedPageIndices = pages
+          .filter(
+            (page) =>
+              page.sourceDocumentId === sourceId &&
+              (redactionsByPage.get(page.id)?.length ?? 0) > 0,
+          )
+          .map((page) => page.sourcePageIndex);
+        for (const resource of await retentionSafety.resourceContentFingerprints(
+          sourceDocument,
+          affectedPageIndices,
+          () => throwIfAborted(options.signal),
+        ))
+          originalRedactedContent.add(resource);
+      }
+      for (const [sourceId, sourceDocument] of sourceDocuments) {
+        const preservedPageIndices = pages
+          .filter(
+            (page) =>
+              page.sourceDocumentId === sourceId &&
+              (redactionsByPage.get(page.id)?.length ?? 0) === 0,
+          )
+          .map((page) => page.sourcePageIndex);
+        for (const resource of await retentionSafety.resourceContentFingerprints(
+          sourceDocument,
+          preservedPageIndices,
+          () => throwIfAborted(options.signal),
+        )) {
+          if (originalRedactedContent.has(resource)) {
+            throw new PdfExportError(
+              'redaction-unsafe-retention',
+              'This PDF retains original redacted resources on another page. Kagaz cannot safely export these redactions. Extract the redacted pages separately.',
+            );
+          }
+        }
+      }
     }
 
     const output = await PDFDocument.create();
@@ -215,6 +294,21 @@ export async function exportWorkspace(
       });
 
       try {
+        const regions = redactionsByPage.get(workspacePage.id) ?? [];
+        if (regions.length > 0 && redactionFinalization) {
+          const fingerprints = await redactionFinalization.finalizeRedactions(
+            output,
+            sourceDocument,
+            workspacePage,
+            regions,
+            request.annotationsByPage.get(workspacePage.id) ?? [],
+            flattening.createAnnotationImageResolver(request.imageAssets),
+            options.signal,
+          );
+          for (const fingerprint of fingerprints)
+            originalRedactedContent.add(fingerprint);
+          continue;
+        }
         const [copiedPage] = await output.copyPages(sourceDocument, [
           workspacePage.sourcePageIndex,
         ]);
@@ -251,6 +345,19 @@ export async function exportWorkspace(
     }
 
     throwIfAborted(options.signal);
+    if (retentionSafety) {
+      await retentionSafety.assertNoOriginalRedactedContent(
+        output,
+        originalRedactedContent,
+        () => throwIfAborted(options.signal),
+        new Set(
+          pages.flatMap((page, index) =>
+            (redactionsByPage.get(page.id)?.length ?? 0) > 0 ? [index] : [],
+          ),
+        ),
+      );
+      throwIfAborted(options.signal);
+    }
     options.onProgress?.({
       phase: 'saving',
       current: 1,
@@ -258,8 +365,11 @@ export async function exportWorkspace(
     });
 
     try {
-      return await output.save();
+      const bytes = await output.save();
+      throwIfAborted(options.signal);
+      return bytes;
     } catch {
+      throwIfAborted(options.signal);
       throw new PdfExportError(
         'save-failed',
         'Kagaz could not finish writing the exported PDF.',

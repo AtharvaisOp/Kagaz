@@ -11,6 +11,7 @@ import type {
 export interface EditorHistoryController {
   readonly annotation: EditorHistoryBridge;
   readonly form: EditorHistoryBridge;
+  readonly redaction: EditorHistoryBridge;
   readonly bind: (
     participants: Partial<
       Record<EditorHistoryDomain, EditorHistoryParticipant>
@@ -94,6 +95,7 @@ export function useEditorHistory(): EditorHistoryController {
     () => ({
       annotation: createBridge('annotation'),
       form: createBridge('form'),
+      redaction: createBridge('redaction'),
       bind,
       pruneDomain,
       reset,

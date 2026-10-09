@@ -1,4 +1,5 @@
-import { useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
+import type { PdfRedactionController } from '../../pdf-redactions/hooks/usePdfRedactions';
 
 import type { PdfAnnotationController } from '../hooks/usePdfAnnotations';
 import type { AnnotationTool } from '../model/editorTypes';
@@ -17,6 +18,7 @@ import {
 
 interface AnnotationToolbarProps {
   readonly controller: PdfAnnotationController;
+  readonly redactionController?: PdfRedactionController;
 }
 
 const tools: readonly {
@@ -73,10 +75,13 @@ function annotationOpacity(annotation: PdfAnnotation | null): number | null {
   }
 }
 
-export function AnnotationToolbar({ controller }: AnnotationToolbarProps) {
+export function AnnotationToolbar({
+  controller,
+  redactionController,
+}: AnnotationToolbarProps) {
   const {
     activeTool,
-    setActiveTool,
+    setActiveTool: setAnnotationTool,
     styleDefaults,
     updateStyleDefaults,
     updateSelectedStyle,
@@ -84,7 +89,7 @@ export function AnnotationToolbar({ controller }: AnnotationToolbarProps) {
     canRedo,
     undo,
     redo,
-    deleteSelected,
+    deleteSelected: deleteSelectedAnnotation,
     clearSelection,
     selection,
     pendingImage,
@@ -101,6 +106,18 @@ export function AnnotationToolbar({ controller }: AnnotationToolbarProps) {
     updateTextEditSession,
     editSelectedText,
   } = controller;
+  const setActiveTool = useCallback(
+    (tool: AnnotationTool) => {
+      redactionController?.setActive(false);
+      redactionController?.select(null);
+      setAnnotationTool(tool);
+    },
+    [redactionController, setAnnotationTool],
+  );
+  const deleteSelected = useCallback(() => {
+    if (redactionController?.selectionId) redactionController.removeSelected();
+    else deleteSelectedAnnotation();
+  }, [deleteSelectedAnnotation, redactionController]);
   const imageInputRef = useRef<HTMLInputElement>(null);
   const opacityInteractionRef = useRef<OpacityInteractionState>(
     IDLE_OPACITY_INTERACTION,
@@ -141,6 +158,7 @@ export function AnnotationToolbar({ controller }: AnnotationToolbarProps) {
       }
       if (key === 's') {
         event.preventDefault();
+        redactionController?.setActive(false);
         openSignatureCreator();
         return;
       }
@@ -183,6 +201,7 @@ export function AnnotationToolbar({ controller }: AnnotationToolbarProps) {
     redo,
     setActiveTool,
     undo,
+    redactionController,
   ]);
 
   useEffect(() => {
@@ -274,7 +293,7 @@ export function AnnotationToolbar({ controller }: AnnotationToolbarProps) {
             type="button"
             className="annotation-tool-button"
             aria-label={`${label} (${shortcut})`}
-            aria-pressed={activeTool === tool}
+            aria-pressed={!redactionController?.active && activeTool === tool}
             title={`${label} · ${shortcut}`}
             onClick={() => setActiveTool(tool)}
           >
@@ -298,10 +317,34 @@ export function AnnotationToolbar({ controller }: AnnotationToolbarProps) {
           aria-keyshortcuts="S"
           aria-pressed={activeTool === 'signature' || pendingSignature !== null}
           title="Create visual signature"
-          onClick={openSignatureCreator}
+          onClick={() => {
+            redactionController?.setActive(false);
+            redactionController?.select(null);
+            openSignatureCreator();
+          }}
         >
           Sign
         </button>
+        {redactionController ? (
+          <button
+            type="button"
+            className="annotation-tool-button"
+            aria-label="Redact"
+            aria-pressed={redactionController.active}
+            title="Propose permanent redactions for export"
+            onClick={() => {
+              const nextActive = !redactionController.active;
+              if (textEditSession)
+                controller.cancelTextEdit(textEditSession.sessionId);
+              setAnnotationTool('select');
+              clearSelection();
+              redactionController.setActive(nextActive);
+              if (!nextActive) redactionController.select(null);
+            }}
+          >
+            Redact
+          </button>
+        ) : null}
         <input
           ref={imageInputRef}
           className="annotation-file-input"
@@ -311,7 +354,11 @@ export function AnnotationToolbar({ controller }: AnnotationToolbarProps) {
           onChange={(event) => {
             const file = event.target.files?.[0];
             event.target.value = '';
-            if (file) void chooseImage(file);
+            if (file) {
+              redactionController?.setActive(false);
+              redactionController?.select(null);
+              void chooseImage(file);
+            }
           }}
         />
       </div>
@@ -340,9 +387,13 @@ export function AnnotationToolbar({ controller }: AnnotationToolbarProps) {
         <button
           type="button"
           className="annotation-tool-button annotation-delete-button"
-          disabled={!selection}
+          disabled={!selection && !redactionController?.selectionId}
           onClick={deleteSelected}
-          title="Delete selected annotation"
+          title={
+            redactionController?.selectionId
+              ? 'Remove selected pending redaction'
+              : 'Delete selected annotation'
+          }
         >
           Delete
         </button>
@@ -362,7 +413,11 @@ export function AnnotationToolbar({ controller }: AnnotationToolbarProps) {
           </span>
         ) : null}
       </div>
-      <div className="annotation-style-controls" aria-label="Annotation style">
+      <div
+        className="annotation-style-controls"
+        aria-label="Annotation style"
+        hidden={redactionController?.active}
+      >
         {!imageContext ? (
           <div className="annotation-color-row" aria-label="Annotation color">
             {colors.map(([hex, color]) => (
