@@ -1,8 +1,9 @@
 # Phase 5A — true browser-local PDF redaction
 
-Phase status: **PARTIAL — implementation and local removal verification completed;
-final CI, merge and production verification pending**. This record deliberately
-does not declare the phase complete before those release checks have results.
+Phase status: **PASS — implementation release verified at
+`d4b0d2bdddde9a5885025b4a7eca0deb789c20cc`**. The dedicated branch was merged,
+the complete Linux CI passed, and downloaded redacted PDFs from the anonymous
+public production frontend passed independent removal checks at that exact SHA.
 
 ## Starting state and baseline
 
@@ -410,8 +411,8 @@ The later 68-row interrupted report is likewise not counted as a pass; the compl
 70-row rerun above supplies the final evidence. No production viewer
 workaround was introduced for the harness behavior.
 
-The redaction harness records every non-GET request. The accepted ordinary
-redaction/export run recorded none. It makes no API calls and adds no endpoint,
+The redaction harness records every non-GET request. The accepted local, CI and
+anonymous production redaction/export runs recorded none. It makes no API calls and adds no endpoint,
 upload, storage, account or persistence. Existing explicitly submitted server
 compression/OCR/Office conversion flows are unchanged.
 
@@ -443,32 +444,36 @@ sequential scheduling are therefore reported separately from observed latency.
 
 ## Validation record and exact counts
 
-Application sources are frozen for final validation. The current web suite has
+The verified implementation's web suite has
 **564 tests in 65 files**, an increase of 87 over the 477-test baseline. API remains
 **206**, and the workspace sampler remains **3**. The final local web and sampler
 runs passed all 564 + 3 tests. The export-focused checkpoint passed 171 tests
-across 10 files, including 45 finalizer tests. The expected complete Linux count is **773**; it is an expected
-count until final CI executes it.
+across 10 files, including 45 finalizer tests. Linux CI run **59** executed and
+passed the complete **773-test** suite: **206 API tests in 11 files**, **564 web
+tests in 65 files**, and **3 workspace sampler tests**, with no failures or skips.
 No skipped local native test is included in a claimed complete pass.
 
-| Check                                                     | Current result                                                                                                                     |
-| --------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
-| Recovered pinned `pnpm install --frozen-lockfile`         | Passed                                                                                                                             |
-| Final repository `pnpm lint`                              | Passed                                                                                                                             |
-| Final repository `pnpm typecheck`                         | Passed                                                                                                                             |
-| Final `pnpm --filter @kagaz/web test`                     | Passed: 564 tests across 65 files                                                                                                  |
-| Final `pnpm test` / 206 API tests                         | Failed locally: 187 passed, 11 failed, 8 skipped; OCRmyPDF unavailable and Linux-only cases skipped; complete Linux result pending |
-| `node --test scripts/workspace-sample.test.mjs`           | Passed: 3 tests                                                                                                                    |
-| Final repository `pnpm build`                             | Passed; existing approximately 700 kB frontend chunk warning                                                                       |
-| Final repository `pnpm format:check`                      | Passed after final local record synchronization                                                                                    |
-| Final `git diff --check`                                  | Passed after final local record synchronization                                                                                    |
-| Focused redaction/history/annotation UI suite             | Passed: 56 tests across 8 files at its recorded checkpoint                                                                         |
-| Web lint/typecheck after UI stabilization                 | Passed at the recorded checkpoint                                                                                                  |
-| Finalizer/retention/export focused regressions            | Passed: 171 tests across 10 files, including 45 finalizer tests                                                                    |
-| Earlier stable/focus Phase 5A browser checkpoints         | Passed at recorded 51/55-row checkpoints; superseded by the complete final run                                                     |
-| Final resource-guard/mobile-render Phase 5A browser rerun | Passed: 70 rows, 42 independent PDF inspections, 25 typed expected rejections, 3 source/pointer proofs; qpdf required and executed |
-| Existing Phase 3F/3G/lifecycle browser scripts            | Passed locally                                                                                                                     |
-| Phase 4A/4B/4C/4D API/container/browser CI                | Preserved in configuration; final Linux run pending                                                                                |
+| Check                                                     | Current result                                                                                                                                                    |
+| --------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Recovered pinned `pnpm install --frozen-lockfile`         | Passed                                                                                                                                                            |
+| Final repository `pnpm lint`                              | Passed                                                                                                                                                            |
+| Final repository `pnpm typecheck`                         | Passed                                                                                                                                                            |
+| Final `pnpm --filter @kagaz/web test`                     | Passed: 564 tests across 65 files                                                                                                                                 |
+| Local `pnpm test` / 206 API tests                         | Failed locally: 187 passed, 11 failed, 8 skipped; OCRmyPDF unavailable and Linux-only cases skipped                                                               |
+| Linux CI run 59 `pnpm test` and sampler                   | Passed: 206 API + 564 web + 3 sampler = 773 tests, no failures or skips                                                                                           |
+| `node --test scripts/workspace-sample.test.mjs`           | Passed: 3 tests                                                                                                                                                   |
+| Final repository `pnpm build`                             | Passed; existing approximately 700 kB frontend chunk warning                                                                                                      |
+| Final repository `pnpm format:check`                      | Passed after final local record synchronization                                                                                                                   |
+| Final `git diff --check`                                  | Passed after final local record synchronization                                                                                                                   |
+| Focused redaction/history/annotation UI suite             | Passed: 56 tests across 8 files at its recorded checkpoint                                                                                                        |
+| Web lint/typecheck after UI stabilization                 | Passed at the recorded checkpoint                                                                                                                                 |
+| Finalizer/retention/export focused regressions            | Passed: 171 tests across 10 files, including 45 finalizer tests                                                                                                   |
+| Earlier stable/focus Phase 5A browser checkpoints         | Passed at recorded 51/55-row checkpoints; superseded by the complete final run                                                                                    |
+| Final resource-guard/mobile-render Phase 5A browser rerun | Passed: 70 rows, 42 independent PDF inspections, 25 typed expected rejections, 3 source/pointer proofs; qpdf required and executed                                |
+| Existing Phase 3F/3G/lifecycle browser scripts            | Passed locally                                                                                                                                                    |
+| Phase 4A/4B/4C/4D API/container regressions               | Passed in Linux CI run 59; existing Phase 4A/4B/4C browser suites passed too                                                                                      |
+| Phase 5A Linux CI browser/removal verification            | Passed: 70 rows, including 42 final-PDF inspections; required qpdf 11.9 checks passed for all 42; errors/non-GET requests zero                                    |
+| Anonymous public production redaction/removal smoke       | Passed at implementation SHA: 18 rows, 14 final-PDF inspections, 1 expected rejection, 3 source/pointer proofs; qpdf 12.4.2; errors/non-GET requests/storage zero |
 
 CI adds one focused browser-local redaction step to the existing production
 verification job, reusing Playwright/Vite and synthetic fixtures. qpdf is required
@@ -524,26 +529,39 @@ manifest or lockfile needs a redaction change. The existing ordinary annotation
 flattening module is reused only to compose appearance before destructive raster
 reconstruction; it does not finalize proposals.
 
-## Release and deployment record
+## Verified implementation release and deployment
 
-| Item                                | Current recorded state                                                |
-| ----------------------------------- | --------------------------------------------------------------------- |
-| Branch                              | `codex/phase-5a-redaction`                                            |
-| Starting SHA                        | `9dc23b2f00ff37c2f94a2e9c3abf4e3efed8a4bc`                            |
-| Phase implementation commit/message | Pending verified commit                                               |
-| Final SHA / push / merge            | Pending final gates and release                                       |
-| Final CI run/result                 | Pending; successful starting-state run 58 is not final-phase evidence |
-| Vercel deployment/final SHA         | Pending exact final-SHA deployment                                    |
-| Production redaction removal smoke  | Pending downloaded-output verification                                |
-| Production no-upload assertion      | Pending; accepted local redaction run has no non-GET requests         |
-| Render/API change                   | None required or introduced                                           |
+| Item                               | Verified implementation release                                                                                                                                 |
+| ---------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Implementation branch              | `codex/phase-5a-redaction`, pushed to origin                                                                                                                    |
+| Starting SHA                       | `9dc23b2f00ff37c2f94a2e9c3abf4e3efed8a4bc`                                                                                                                      |
+| Implementation commit              | `d4b0d2bdddde9a5885025b4a7eca0deb789c20cc`                                                                                                                      |
+| Commit message                     | `feat: add secure browser-local PDF redaction`                                                                                                                  |
+| Push / merge                       | Fast-forwarded and pushed `main`; [PR 3](https://github.com/AtharvaisOp/Kagaz/pull/3) is MERGED at the same SHA, 2026-10-09 07:36:23 UTC                        |
+| CI run/result                      | [Run 59 / 37897794354](https://github.com/AtharvaisOp/Kagaz/actions/runs/37897794354), SUCCESS; complete 773 tests and retained native/container/browser suites |
+| Vercel production deployment       | `dpl_AKY79jjyboEYPdia1iV1NZEZbGjK`, READY, built from exact implementation SHA                                                                                  |
+| Generated deployment hostname      | `kagaz-55gh1rfka-atharvas-projects-bd7823b8.vercel.app`                                                                                                         |
+| Public production alias            | [kagaz-personal.vercel.app](https://kagaz-personal.vercel.app), confirmed through `/v4/aliases` to point to that exact deployment                               |
+| Anonymous production removal smoke | PASS: 18 results, including 14 independently inspected downloaded PDFs, one expected unsafe-retention rejection and three proofs                                |
+| Production no-upload assertion     | Zero non-GET requests, browser errors and persistence; required qpdf 12.4.2 checks passed                                                                       |
+| Render/API change                  | None required or introduced                                                                                                                                     |
 
-After the verified branch is merged, wait for final CI, confirm Vercel's READY
-deployment is built from the exact final SHA, and execute the production redaction
-smoke using synthetic files. Inspect downloaded output with the same independent
-checks and confirm ordinary redaction/export generates no API upload. A Vercel
-build succeeding without a matching SHA and production test is insufficient.
-No Render deployment/configuration action belongs to this browser-local phase.
+The anonymous production run used plain browser navigation without protection
+bypass headers or request routing. Its report is
+`C:/Users/athar/AppData/Local/Kagaz/phase5a-production-code-proof/phase5a/phase5a-browser.json`.
+The source fixture first proved that secret text and colored image samples were
+present. Downloaded redacted pages then had zero extractable text/text operators,
+no retained annotations, and sanitized pixels in the actual embedded image.
+Unredacted pages remained selectable, while Extract, forms/signatures, multiple
+sources, duplicate sources, page reorder and lifecycle cases passed. Ordinary
+redaction/export caused no API upload. No Render deployment or configuration
+action was necessary.
+
+This phase record is a documentation-only follow-up to the verified implementation
+release; application source is unchanged. The accompanying completion report
+identifies the subsequent documentation commit and repeats exact-SHA CI/deployment
+verification for that revision. This file records the tested implementation SHA
+without inventing a self-referential commit identifier.
 
 ## Deviations and limitations
 
@@ -559,8 +577,9 @@ No Render deployment/configuration action belongs to this browser-local phase.
   Oversized pages/images fail; unsupported PDFs can fail closed even when other
   viewers render them.
 - Local Windows cannot execute the complete Linux native/container envelope.
-  Those results and the exact production deployment remain release requirements,
-  explicitly incomplete until synchronized here.
+  The recorded local native failures remain failures; the complete envelope passed
+  in Linux CI run 59, and the exact implementation production deployment passed
+  anonymous removal verification.
 
 ## Full acceptance checklist
 
@@ -582,11 +601,11 @@ No Render deployment/configuration action belongs to this browser-local phase.
 - [x] Accessibility path exists.
 - [x] Mobile/responsive behavior is verified at 768, 390 and 360 px; final focus/gesture/browser run passed.
 - [x] Performance is bounded by explicit raster/image/graph limits.
-- [x] Relevant web and lifecycle regression tests pass; final Linux native checks are recorded separately.
-- [ ] Existing API/container suites pass in final Linux CI.
-- [x] Documentation accurately separates executed evidence and pending checks.
-- [ ] Final CI is green.
-- [ ] Production frontend is verified at the final SHA, including no API upload.
+- [x] Relevant regression tests pass, including web, lifecycle and server-backed tools.
+- [x] Existing API/container suites pass in Linux CI run 59 at the implementation SHA.
+- [x] Documentation records architecture, actual verification and meaningful limitations.
+- [x] Implementation release CI is green: run 59.
+- [x] Production frontend is verified at the exact implementation SHA, including no API upload.
 
 ## Notes for Phase 5B
 
@@ -608,5 +627,5 @@ proof that removed information cannot be rebuilt. Do not raise raster/image limi
 without real browser memory measurements. Watermarks or other future appearance
 operations must compose before redaction sanitization when they belong beneath
 it; their source assets must not create alternate recoverable representations.
-Complete and retain the exact CI/deployment record before treating this phase as
-the starting PASS baseline for further work.
+Retain the exact CI/deployment record and the accompanying completion report when
+using this verified implementation as the starting PASS baseline for further work.
