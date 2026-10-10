@@ -472,6 +472,7 @@ evidence, resource measurements and remaining isolation limits.
 - Phase 4C — Office to PDF conversion (complete)
 - Phase 4D — [heavy-tool hardening and measured resource audit](docs/phase-4d.md) (complete)
 - Phase 5A — [true browser-local redaction](docs/phase-5a.md) (complete)
+- Phase 5B — [browser-local text and image watermarking](docs/phase-5b.md) (complete)
 
 The browser-local architecture remains the default for operations that can be
 performed safely on the device.

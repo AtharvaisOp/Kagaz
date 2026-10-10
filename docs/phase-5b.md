@@ -1,5 +1,11 @@
 # Phase 5B — browser-local text and image watermarking
 
+Phase status: **PASS — implementation release verified at
+`c07ee82e7bc74d811ed5a5f3bc9287ca123d8086`**. The dedicated branch was merged,
+complete Linux CI passed, and downloaded text/image-watermarked PDFs from the
+anonymous production frontend passed independent appearance and redaction-removal
+checks at that exact SHA.
+
 ## Starting state and baseline
 
 The phase began on clean `main` at
@@ -9,7 +15,7 @@ confirmed the same `origin/main`. [CI run 61](https://github.com/AtharvaisOp/Kag
 was SUCCESS at that exact SHA. Vercel production deployment
 `dpl_HJdi3sTQbzfj6TRqBoxKaDpU5fkG` was READY at the same baseline SHA.
 
-Work uses `codex/phase-5b-watermarking`. No unrelated user changes were present,
+Work used `codex/phase-5b-watermarking`. No unrelated user changes were present,
 and no destructive reset or force push was used.
 
 The investigation read AGENTS.md, design.md, README and the complete Phase
@@ -239,8 +245,9 @@ The final local quality gates used pinned pnpm 12.3.4:
 There are **933 configured tests: 206 API + 724 web + 3 sampler**, an increase
 of 160 web tests. The eleven local failures remain the unavailable OCRmyPDF
 integration cases; eight Linux-specific cases are skipped on Windows. No tests
-were removed or relabelled as passes. Complete native/container results must be
-established by Linux CI before release.
+were removed or relabelled as passes. PR run 63 and merged-main run 64 established
+the complete native/container results on Linux, with all 933 tests passing and
+no failures or skips.
 
 The existing Phase 3F, Phase 3G, Phase 3G lifecycle and unchanged Phase 5A browser
 verifiers passed against the implementation. Phase 3G's two reopen helpers now
@@ -278,8 +285,9 @@ RGB raster. Raw marker searches supplement these checks; compressed bytes are
 not treated as an absence proof. Across the retained Phase 5A and new Phase 5B
 fixtures, deterministic original markers include
 SECRET-TEXT-ALPHA/BETA, ACCOUNT-123456, SECRET-FORM-ALPHA and annotation/image
-markers. They remain absent from affected pages/output while ordinary source
-text and form/annotation content remain present where intended.
+markers. Covered content is absent from extractable text and retained source
+objects; protected pixels are checked independently. Ordinary pages and visible
+content outside proposed regions retain their intended appearance.
 
 Covered combinations include text and transparent PNG/JPEG appearance, all named
 corners/custom placement, arbitrary rotation/opacity/size, long AV/accented text,
@@ -371,9 +379,59 @@ workspace eagerly.
 
 ## Release status
 
-Local implementation and independent verification are complete. Full exact-SHA
-Linux CI, merge and production verification are required before the phase is
-declared PASS; their executed release record is added after completion.
+Implementation, independent verification, full exact-SHA Linux CI, merge and
+production verification are complete at the implementation commit below.
+
+The implementation was squash-merged through [PR #4](https://github.com/AtharvaisOp/Kagaz/pull/4)
+as `c07ee82e7bc74d811ed5a5f3bc9287ca123d8086`. [PR CI run 63](https://github.com/AtharvaisOp/Kagaz/actions/runs/38039413290)
+passed at `2c24d6a34024747b6c157d4addff30db60f873cc`: all 933 tests with no
+failures/skips, retained Phase 4A/4B/4C/4D native/container/browser checks,
+unchanged Phase 5A and strengthened Phase 5B verification. Linux used qpdf 11.9.0;
+its 148-row Phase 5B report independently checked the same 102 accepted PDFs,
+377 pages and 35 sanitized rasters, plus the two rejected counterexamples.
+[Merged-main CI run 64](https://github.com/AtharvaisOp/Kagaz/actions/runs/38040922868)
+passed at `c07ee82e7bc74d811ed5a5f3bc9287ca123d8086`. Both the quality and
+production-container jobs completed successfully, including all retained native,
+browser, Phase 5A and strengthened Phase 5B checks.
+
+The feature branch was pushed with `2351f6938820f2aac0c09a7db7eca743aeb3811c`
+(`feat: add browser-local PDF watermarking`) and
+`2c24d6a34024747b6c157d4addff30db60f873cc`
+(`test: strengthen sanitized raster watermark verification`). The second commit
+changed the verifier and verification record only. Superseded PR run 62 was
+cancelled after run 63 started; it is not counted as a complete pass. The local
+checkout advanced to merged `main` by fetch and fast-forward only.
+
+Vercel deployment `dpl_B4KFcwwWDyCo4k8BccjVETd6juLa` is READY from exact
+implementation SHA `c07ee82e7bc74d811ed5a5f3bc9287ca123d8086`. Its hostname is
+`kagaz-e6lfguvey-atharvas-projects-bd7823b8.vercel.app`. The `/v4/aliases` response
+confirmed [kagaz-personal.vercel.app](https://kagaz-personal.vercel.app) points to
+that deployment ID. No production environment, API or Render action was required.
+
+The anonymous production verifier passed **49 report rows, 27 actual downloads,
+74 pages and six decoded sanitized rasters**. All downloads passed qpdf 12.4.2;
+268,200 protected samples were inspected: 265,638 exact black and 2,562 intended
+green foreground samples. Text/image marks, mixed and duplicate sources, Extract,
+history, snapshot races, cancellation and malformed image rejection passed.
+All five preview/export comparisons, keyboard/focus checks, reduced motion and
+768/390/360 px layouts passed. Browser errors, non-GET requests and local/session
+storage entries were all zero. Opening Compress/OCR preserved explicit consent
+and sent no request; production submissions were intentionally omitted.
+
+The report is outside the checkout at
+`%LOCALAPPDATA%/Kagaz/phase5b-production-c07ee82/phase5b/phase5b-browser.json`.
+The root agent also inspected the actual production 360 px preview/footer image.
+Production export-and-download observations were text 452 ms, PNG 137 ms, JPEG
+76 ms, text/redaction 806 ms, image/redaction 621 ms and duplicate affected pages
+988 ms. Large-image preview supersession/cancel took 2,432.9 ms, with 68 heartbeat
+pulses and a 621.6 ms maximum gap; all six image URLs were released. These remain
+host-specific observations, not total-memory or uninterrupted-response guarantees.
+
+This release record is published as a documentation-only follow-up; application
+source and the frozen verifier are unchanged. The accompanying completion report
+identifies that publication commit and repeats exact-SHA CI, Vercel alias and
+anonymous downloaded-PDF verification. This file records the tested implementation
+SHA without inventing a self-referential commit identifier.
 
 ## Files and responsibilities
 
@@ -413,6 +471,14 @@ unchanged.
   and original 16-bit precision are not preserved. Animated PNG, ambiguous JPEG
   frames/EXIF and unsupported orientation are rejected. Canvas color conversion
   is part of the chosen appearance policy.
+- These new bounded image checks apply to watermark assets. Imported ordinary
+  image annotations retain their earlier native-image acceptance and direct
+  pdf-lib PNG embedding path. The malformed PNG fixture can pass native image
+  acceptance and stall that inherited embedding path; this availability issue
+  exists at the starting SHA with or without a watermark. No completed unsafe
+  PDF or redacted-source retention bypass was demonstrated. Extend bounded
+  validation/canonicalization to that path in a focused follow-up, including
+  imported visual signatures where applicable.
 - Redacted pages remain 144-DPI image-only pages with finite raster fidelity and
   lost selectable text/accessibility structure. Their foreground watermarks are
   rasterized too; ordinary targeted pages preserve their text/vector content.
@@ -430,3 +496,28 @@ all-object inspection. Safe font work must not rebuild a donor/OCR text layer on
 redacted pages. Extend independent extraction/embedded-raster tests to distinguish
 deliberate new font content from removed source content. Keep heavy-tool upload
 consent explicit and retain all existing native/container verification.
+Keep the inherited ordinary-annotation image boundary separate from the proven
+watermark boundary until a focused shared-image hardening change is verified.
+
+## Full acceptance checklist
+
+- [x] Text watermarking works.
+- [x] Image watermarking works.
+- [x] Placement, rotation, opacity and scaling work.
+- [x] Page targeting works.
+- [x] Live preview matches exported output within documented tolerances.
+- [x] Export and Extract work.
+- [x] All workspace identity operations work.
+- [x] Undo/Redo works correctly.
+- [x] Stale states and assets are cleaned.
+- [x] All supported rotations work.
+- [x] Redacted pages can be watermarked safely.
+- [x] Removed source content remains unrecoverable under the Phase 5A security model.
+- [x] Unsupported glyphs fail visibly without corruption.
+- [x] No automatic uploads are introduced.
+- [x] All relevant regressions pass at the verified merged implementation SHA.
+- [x] Independent PDF inspections pass, including meaningful unsafe counterexamples.
+- [x] Accessibility and responsive layouts are verified.
+- [x] Full CI passes at the final implementation SHA; merged-main run 64 succeeded.
+- [x] Production deployment is verified at the exact implementation SHA.
+- [x] Documentation accurately describes all limitations.
