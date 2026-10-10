@@ -1,4 +1,4 @@
-import { memo, useEffect, useRef, useState } from 'react';
+import { memo, useEffect, useMemo, useRef, useState } from 'react';
 
 import { useNearViewport } from '../../hooks/useNearViewport';
 import { AnnotationOverlay } from '../pdf-annotations/rendering/AnnotationOverlay';
@@ -29,6 +29,11 @@ import type { PdfFormsController } from '../pdf-forms/hooks/usePdfForms';
 import { RedactionOverlay } from '../pdf-redactions/rendering/RedactionOverlay';
 import type { PdfRedactionController } from '../pdf-redactions/hooks/usePdfRedactions';
 import type { RedactionRegion } from '../pdf-redactions/model/types';
+import type {
+  WatermarkConfig,
+  WatermarkPreviewGeometry,
+} from '../pdf-watermarks/model/types';
+import { WatermarkPreview } from '../pdf-watermarks/rendering/WatermarkPreview';
 
 import type {
   WorkspacePage,
@@ -53,6 +58,8 @@ interface PdfPageProps {
   readonly document: PDFDocumentProxy;
   readonly workspacePosition: number;
   readonly zoom: number;
+  readonly watermark: WatermarkConfig | null;
+  readonly watermarkAssetRegistry: AnnotationAssetRegistry;
   readonly annotations: readonly PdfAnnotation[];
   readonly selectedAnnotationId: AnnotationId | null;
   readonly onSelectAnnotation: (
@@ -111,6 +118,8 @@ export function PdfPage({
   document,
   workspacePosition,
   zoom,
+  watermark,
+  watermarkAssetRegistry,
   annotations,
   selectedAnnotationId,
   onSelectAnnotation,
@@ -295,6 +304,17 @@ export function PdfPage({
   const signaturePlacementEnabled =
     signatureSource?.status === 'acroform' &&
     !signatureSource.hasDigitalSignature;
+  const watermarkGeometry = useMemo<WatermarkPreviewGeometry | null>(
+    () =>
+      renderedViewport
+        ? {
+            viewBox: [...renderedViewport.viewport.viewBox],
+            userUnit: renderedViewport.viewport.userUnit,
+            rotation: renderedViewport.viewport.rotation,
+          }
+        : null,
+    [renderedViewport],
+  );
 
   return (
     <article
@@ -414,6 +434,15 @@ export function PdfPage({
             onReplace={onReplaceRedaction}
             onSelect={onSelectRedaction}
             onRegisterBounds={onRegisterRedactionBounds}
+          />
+        ) : null}
+        {hasRenderedViewport && watermark && watermarkGeometry ? (
+          <WatermarkPreview
+            config={watermark}
+            geometry={watermarkGeometry}
+            assetRegistry={watermarkAssetRegistry}
+            width={surfaceWidth}
+            height={surfaceHeight}
           />
         ) : null}
       </div>

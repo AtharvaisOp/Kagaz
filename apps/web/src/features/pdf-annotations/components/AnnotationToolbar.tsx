@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef, type RefObject } from 'react';
 import type { PdfRedactionController } from '../../pdf-redactions/hooks/usePdfRedactions';
 
 import type { PdfAnnotationController } from '../hooks/usePdfAnnotations';
@@ -19,6 +19,9 @@ import {
 interface AnnotationToolbarProps {
   readonly controller: PdfAnnotationController;
   readonly redactionController?: PdfRedactionController;
+  readonly onOpenWatermark?: () => void;
+  readonly watermarkTriggerRef?: RefObject<HTMLButtonElement | null>;
+  readonly watermarkPresent?: boolean;
 }
 
 const tools: readonly {
@@ -78,6 +81,9 @@ function annotationOpacity(annotation: PdfAnnotation | null): number | null {
 export function AnnotationToolbar({
   controller,
   redactionController,
+  onOpenWatermark,
+  watermarkTriggerRef,
+  watermarkPresent,
 }: AnnotationToolbarProps) {
   const {
     activeTool,
@@ -343,6 +349,23 @@ export function AnnotationToolbar({
             }}
           >
             Redact
+          </button>
+        ) : null}
+        {onOpenWatermark ? (
+          <button
+            ref={watermarkTriggerRef}
+            type="button"
+            className="annotation-tool-button"
+            aria-label="Watermark"
+            aria-haspopup="dialog"
+            title={
+              watermarkPresent
+                ? 'Edit watermark'
+                : 'Add text or image watermark'
+            }
+            onClick={onOpenWatermark}
+          >
+            Watermark{watermarkPresent ? ' ·' : ''}
           </button>
         ) : null}
         <input

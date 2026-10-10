@@ -114,6 +114,11 @@ jobs:
           KAGAZ_ARTIFACT_DIR: ${{ runner.temp }}/phase4c-artifacts
           KAGAZ_REQUIRE_QPDF: '1'
         run: node scripts/verify-phase5a.mjs
+      - name: Verify browser-local watermarking and redaction compatibility
+        env:
+          KAGAZ_ARTIFACT_DIR: ${{ runner.temp }}/phase4c-artifacts
+          KAGAZ_REQUIRE_QPDF: '1'
+        run: node scripts/verify-phase5b.mjs
       - name: Save verification artifacts
         if: always()
         uses: actions/upload-artifact@v4

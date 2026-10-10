@@ -11,6 +11,12 @@ import type { WorkspacePage } from '../../../features/pdf-workspace/model/types'
 import { normalizeRotation } from '../../../features/pdf-workspace/model/operations';
 import { flattenAnnotationsOntoCopiedPage } from '../annotations/flattenAnnotations';
 import type { AnnotationImageResolver } from '../annotations/exportContracts';
+import type { AnnotationImageExportSource } from '../annotations/exportContracts';
+import type { WatermarkConfig } from '../../../features/pdf-watermarks/model/types';
+import {
+  createWatermarkExportContext,
+  drawWatermarkOnPage,
+} from '../watermarks/renderWatermark';
 import { PdfExportError } from '../types';
 import { rasterizeAppearance } from './rasterizeAppearance';
 import { appearanceContentFingerprints } from './retentionSafety';
@@ -100,6 +106,10 @@ export async function finalizeRedactions(
   annotations: readonly PdfAnnotation[],
   imageResolver: AnnotationImageResolver,
   signal?: AbortSignal,
+  watermark?: {
+    readonly config: WatermarkConfig;
+    readonly imageAssets: ReadonlyMap<string, AnnotationImageExportSource>;
+  },
 ): Promise<ReadonlySet<string>> {
   checkAbort(signal);
   const sourcePage = source.getPage(workspacePage.sourcePageIndex);
@@ -136,16 +146,69 @@ export async function finalizeRedactions(
     false,
   );
   checkAbort(signal);
-  const sanitized = await rasterizeAppearance(
+  let sanitized = await rasterizeAppearance(
     appearanceBytes,
     workspacePage.id,
     regions,
     signal,
   );
   checkAbort(signal);
+  const media = sourcePage.getMediaBox();
+  if (watermark) {
+    // Foreground composition begins only after donor content has been removed.
+    // This second isolated PDF can reach only sanitized pixels + new watermark
+    // resources. Neither that PDF nor its raw watermark assets enter output.
+    const composition = await PDFDocument.create();
+    const composedPage = composition.addPage([media.width, media.height]);
+    composedPage.setMediaBox(media.x, media.y, media.width, media.height);
+    const [left, bottom, right, top] = sanitized.viewBox;
+    composedPage.setCropBox(left, bottom, right - left, top - bottom);
+    if (userUnit !== 1)
+      composedPage.node.set(PDFName.of('UserUnit'), PDFNumber.of(userUnit));
+    composedPage.setRotation(sourcePage.getRotation());
+    const base = await composition.embedPng(sanitized.png);
+    checkAbort(signal);
+    composedPage.drawImage(base, {
+      x: left,
+      y: bottom,
+      width: right - left,
+      height: top - bottom,
+    });
+    const watermarkContext = await createWatermarkExportContext(
+      composition,
+      watermark.config,
+      watermark.imageAssets,
+      undefined,
+      signal,
+    );
+    checkAbort(signal);
+    drawWatermarkOnPage(
+      composedPage,
+      workspacePage.rotationDelta,
+      watermarkContext,
+    );
+    const composedBytes = await composition.save();
+    checkAbort(signal);
+    const composedInspection = await PDFDocument.load(composedBytes, {
+      throwOnInvalidObject: true,
+    });
+    // Keep the Phase 5A reachable image/aggregate budgets for the trusted pass.
+    // These new resources are not fingerprints of the removed donor appearance.
+    await appearanceContentFingerprints(
+      composedInspection,
+      () => checkAbort(signal),
+      false,
+    );
+    sanitized = await rasterizeAppearance(
+      composedBytes,
+      workspacePage.id,
+      [],
+      signal,
+    );
+    checkAbort(signal);
+  }
   const image = await output.embedPng(sanitized.png);
   checkAbort(signal);
-  const media = sourcePage.getMediaBox();
   const replacement = output.addPage([media.width, media.height]);
   replacement.setMediaBox(media.x, media.y, media.width, media.height);
   const [left, bottom, right, top] = sanitized.viewBox;

@@ -8,6 +8,13 @@ import {
 import { AnnotationExportError } from './annotations/exportContracts';
 import type { PDFDocument } from 'pdf-lib';
 import { FormExportError, type FormExportCapability } from './forms/types';
+import {
+  snapshotWatermark,
+  validateWatermarkModel,
+  watermarkAppliesToPage,
+} from '../../features/pdf-watermarks/model/watermark';
+import { assertWatermarkImageBytes } from './watermarks/imageSafety';
+import { prepareWatermarkImageSource } from './watermarks/nativeImage';
 
 function throwIfAborted(signal?: AbortSignal): void {
   if (signal?.aborted) {
@@ -50,6 +57,33 @@ export async function exportWorkspace(
   } = {},
 ): Promise<Uint8Array> {
   const pages = request.pages.map((page) => ({ ...page }));
+  if (request.watermark) {
+    const invalid = validateWatermarkModel(
+      request.watermark,
+      new Set(pages.map((page) => page.id)),
+    );
+    if (invalid) throw new PdfExportError('watermark-invalid', invalid);
+  }
+  const watermark = request.watermark
+    ? snapshotWatermark(request.watermark)
+    : null;
+  const imageAssets = new Map(request.imageAssets);
+  const hasWatermark = pages.some((page) =>
+    watermarkAppliesToPage(watermark, page.id),
+  );
+  // Direct callers receive the same click-time protection as the export hook.
+  // In particular Uint8Array and ArrayBuffer image bytes are mutable even when
+  // their enclosing configuration/source records are readonly.
+  if (watermark?.kind === 'image' && hasWatermark) {
+    const source = imageAssets.get(watermark.assetId);
+    if (source) {
+      assertWatermarkImageBytes(source.bytes, source.mimeType);
+      imageAssets.set(watermark.assetId, {
+        ...source,
+        bytes: source.bytes.slice(0),
+      });
+    }
+  }
   const redactionsByPage = new Map(
     pages.map((page) => [
       page.id,
@@ -101,8 +135,23 @@ export async function exportWorkspace(
   const retentionSafety = hasRedactions
     ? await import('./redactions/retentionSafety')
     : null;
+  const watermarkRendering = hasWatermark
+    ? await import('./watermarks/renderWatermark')
+    : null;
 
   try {
+    if (watermark?.kind === 'image' && hasWatermark) {
+      const source = imageAssets.get(watermark.assetId);
+      if (source) {
+        // Prepare once in this private snapshot before annotations can reuse the
+        // same asset. Every later ordinary/redacted context sees trusted bytes.
+        imageAssets.set(
+          watermark.assetId,
+          await prepareWatermarkImageSource(source, options.signal),
+        );
+        throwIfAborted(options.signal);
+      }
+    }
     for (const [index, sourceId] of uniqueSourceIds.entries()) {
       throwIfAborted(options.signal);
       const source = request.sources.get(sourceId);
@@ -273,8 +322,25 @@ export async function exportWorkspace(
     const output = await PDFDocument.create();
     const annotationContext = await flattening.createAnnotationExportContext(
       output,
-      flattening.createAnnotationImageResolver(request.imageAssets),
+      flattening.createAnnotationImageResolver(imageAssets),
     );
+    // Assets for watermarked reconstructed pages must stay in their throwaway
+    // composition; embedding them here would serialize unused original bytes.
+    const hasOrdinaryWatermark = pages.some(
+      (page) =>
+        watermarkAppliesToPage(watermark, page.id) &&
+        (redactionsByPage.get(page.id)?.length ?? 0) === 0,
+    );
+    const watermarkContext =
+      watermark && watermarkRendering && hasOrdinaryWatermark
+        ? await watermarkRendering.createWatermarkExportContext(
+            output,
+            watermark,
+            imageAssets,
+            annotationContext,
+            options.signal,
+          )
+        : null;
     for (const [index, workspacePage] of pages.entries()) {
       throwIfAborted(options.signal);
       const sourceDocument = sourceDocuments.get(
@@ -302,8 +368,11 @@ export async function exportWorkspace(
             workspacePage,
             regions,
             request.annotationsByPage.get(workspacePage.id) ?? [],
-            flattening.createAnnotationImageResolver(request.imageAssets),
+            flattening.createAnnotationImageResolver(imageAssets),
             options.signal,
+            watermark && watermarkAppliesToPage(watermark, workspacePage.id)
+              ? { config: watermark, imageAssets }
+              : undefined,
           );
           for (const fingerprint of fingerprints)
             originalRedactedContent.add(fingerprint);
@@ -323,6 +392,18 @@ export async function exportWorkspace(
           annotationContext,
         );
         throwIfAborted(options.signal);
+
+        if (
+          watermarkContext &&
+          watermarkRendering &&
+          watermarkAppliesToPage(watermark, workspacePage.id)
+        ) {
+          watermarkRendering.drawWatermarkOnPage(
+            copiedPage,
+            workspacePage.rotationDelta,
+            watermarkContext,
+          );
+        }
 
         const intrinsicRotation = copiedPage.getRotation().angle;
         const totalRotation = normalizeRotation(

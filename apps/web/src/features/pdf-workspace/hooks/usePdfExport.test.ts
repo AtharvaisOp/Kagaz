@@ -6,9 +6,13 @@ import {
   friendlyExportError,
   snapshotAnnotationsForPages,
   snapshotRedactionsForPages,
+  snapshotWatermarkForPages,
 } from './usePdfExport';
 import { AnnotationExportError } from '../../../lib/pdf-export/annotations/flattenAnnotations';
 import { FormExportError } from '../../../lib/pdf-export/forms/types';
+import { createDefaultWatermark } from '../../pdf-watermarks/model/watermark';
+import { snapshotAnnotationImageAssets } from '../../../lib/pdf-export/annotations/imageAssets';
+import type { AnnotationImageAsset } from '../../pdf-annotations/runtime/annotationAssetRegistry';
 
 const pageA = {
   id: 'page-a',
@@ -17,6 +21,66 @@ const pageA = {
   rotationDelta: 0,
 } as const;
 const pageB = { ...pageA, id: 'page-b', sourcePageIndex: 1 } as const;
+
+describe('watermark export snapshots', () => {
+  it('includes only applicable Extract page identities and deeply snapshots configuration', () => {
+    const config = {
+      ...createDefaultWatermark('mark'),
+      kind: 'text' as const,
+      text: 'BEFORE',
+      fontSize: 24,
+      color: { r: 0, g: 0, b: 0 },
+      customPosition: { x: 0.2, y: 0.5 },
+      target: { kind: 'pages' as const, pageIds: [pageA.id, pageB.id] },
+    };
+    const captured = snapshotWatermarkForPages([pageA], config);
+    config.text = 'AFTER';
+    config.color.r = 1;
+    config.customPosition.x = 1;
+    config.target.pageIds.pop();
+    expect(captured?.target).toEqual({ kind: 'pages', pageIds: [pageA.id] });
+    expect(captured?.kind === 'text' && captured.text).toBe('BEFORE');
+    expect(captured?.kind === 'text' && captured.color.r).toBe(0);
+    expect(captured?.customPosition.x).toBe(0.2);
+    expect(snapshotWatermarkForPages([pageB], config)).toBeNull();
+  });
+  it('captures image Blob before a paused read, independently of later registry removal', async () => {
+    let finish!: (bytes: ArrayBuffer) => void;
+    const blob = new Blob(['captured'], { type: 'image/png' });
+    blob.arrayBuffer = () =>
+      new Promise((resolve) => {
+        finish = resolve;
+      });
+    const asset: AnnotationImageAsset = {
+      assetId: 'mark-asset',
+      blob,
+      fileName: null,
+      mimeType: 'image/png',
+      objectUrl: 'blob:fixture',
+      width: 10,
+      height: 10,
+      image: {} as CanvasImageSource,
+    };
+    const registry = new Map([[asset.assetId, asset]]);
+    const config = {
+      ...createDefaultWatermark('mark'),
+      kind: 'image' as const,
+      assetId: asset.assetId,
+    };
+    const captured = snapshotWatermarkForPages([pageA], config);
+    const pending = snapshotAnnotationImageAssets(
+      { get: (id) => registry.get(id) ?? null },
+      captured?.kind === 'image' ? [captured.assetId] : [],
+    );
+    registry.clear();
+    config.assetId = 'replacement';
+    finish(new Uint8Array([1, 2, 3]).buffer);
+    expect(new Uint8Array((await pending).get('mark-asset')!.bytes)).toEqual(
+      new Uint8Array([1, 2, 3]),
+    );
+    expect(captured?.kind === 'image' && captured.assetId).toBe('mark-asset');
+  });
+});
 
 describe('snapshotRedactionsForPages', () => {
   it('deeply snapshots selected page proposals before asynchronous asset work', () => {

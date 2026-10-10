@@ -6,6 +6,7 @@ import type { PdfAnnotation } from '../../features/pdf-annotations/model/types';
 import type { AnnotationImageExportSource } from './annotations/exportContracts';
 import type { FormExportSnapshot } from './forms/types';
 import type { RedactionRegion } from '../../features/pdf-redactions/model/types';
+import type { WatermarkConfig } from '../../features/pdf-watermarks/model/types';
 
 export interface ExportSource {
   readonly id: SourceDocumentId;
@@ -24,6 +25,8 @@ export interface ExportWorkspaceRequest {
   readonly forms: FormExportSnapshot;
   /** Pending proposals are finalized destructively, outside annotation flattening. */
   readonly redactionsByPage?: ReadonlyMap<string, readonly RedactionRegion[]>;
+  /** Committed watermark, independently snapshotted before asynchronous work. */
+  readonly watermark?: WatermarkConfig | null;
 }
 
 export type ExportProgress =
@@ -60,6 +63,11 @@ export type PdfExportErrorCode =
   | 'redaction-too-large'
   | 'redaction-render-failed'
   | 'redaction-unsafe-retention'
+  | 'watermark-invalid'
+  | 'watermark-unsupported-text'
+  | 'watermark-image-invalid'
+  | 'watermark-missing-image'
+  | 'watermark-render-failed'
   | 'save-failed';
 
 export class PdfExportError extends Error {

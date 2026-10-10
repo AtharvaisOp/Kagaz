@@ -9,6 +9,74 @@ import type { ImageAnnotation, PdfAnnotation } from '../model/types';
 import { collectReachableAnnotationAssetIds } from './assetReachability';
 import { createAnnotationAssetRegistry } from './annotationAssetRegistry';
 
+it('cancels one pending decode immediately while preserving other reachable assets', async () => {
+  let finish!: (value: {
+    width: number;
+    height: number;
+    image: CanvasImageSource;
+  }) => void;
+  const revoke = vi.fn(),
+    close = vi.fn();
+  let next = 0;
+  const registry = createAnnotationAssetRegistry({
+    createId: () => `asset-${++next}`,
+    createObjectUrl: () => `blob:${next}`,
+    revokeObjectUrl: revoke,
+    decode: () =>
+      next === 1
+        ? Promise.resolve({
+            width: 10,
+            height: 10,
+            image: {} as CanvasImageSource,
+          })
+        : new Promise((resolve) => {
+            finish = resolve;
+          }),
+  });
+  const retained = await registry.register(
+    new Blob(['first'], { type: 'image/png' }),
+  );
+  const abort = new AbortController();
+  const pending = registry.register(
+    new Blob(['pending'], { type: 'image/png' }),
+    abort.signal,
+  );
+  const rejected = expect(pending).rejects.toMatchObject({
+    name: 'AbortError',
+  });
+  abort.abort();
+  expect(revoke).toHaveBeenCalledExactlyOnceWith('blob:2');
+  expect(registry.get(retained.assetId)).not.toBeNull();
+  finish({
+    width: 10,
+    height: 10,
+    image: { close } as unknown as CanvasImageSource,
+  });
+  await rejected;
+  expect(close).toHaveBeenCalledOnce();
+  expect(revoke).toHaveBeenCalledOnce();
+  registry.destroyAll();
+  expect(revoke).toHaveBeenCalledTimes(2);
+});
+
+it('rejects an already-aborted decode without creating an object URL', async () => {
+  const createObjectUrl = vi.fn(),
+    decode = vi.fn();
+  const registry = createAnnotationAssetRegistry({
+    createId: () => 'id',
+    createObjectUrl,
+    revokeObjectUrl: vi.fn(),
+    decode,
+  });
+  const abort = new AbortController();
+  abort.abort();
+  await expect(
+    registry.register(new Blob(['png'], { type: 'image/png' }), abort.signal),
+  ).rejects.toMatchObject({ name: 'AbortError' });
+  expect(createObjectUrl).not.toHaveBeenCalled();
+  expect(decode).not.toHaveBeenCalled();
+});
+
 function registryFixture(decodeFails = false) {
   let id = 0;
   const revoked: string[] = [];
