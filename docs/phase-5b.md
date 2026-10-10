@@ -258,13 +258,16 @@ export failures. The malformed IDAT rejected in 269 ms in UI and 96.4 ms at
 direct export on this Windows Chromium host.
 
 The accepted full Phase 5B browser run completed successfully on Windows,
-Node 22.17.1, Chrome 155.0.8059.39 and qpdf 12.4.2: **145 report rows,
+Node 22.17.1, Chrome 155.0.8059.39 and qpdf 12.4.2: **148 report rows,
 102 actual PDF inspections across 377 pages, and 35 independently decoded
 embedded sanitized raster pages**. It includes 20 typed direct export rejections,
 six specific visible UI image errors and five preview/export comparisons.
-There were no browser errors. All 102 PDFs passed qpdf. Artifacts are outside
-the checkout at `%LOCALAPPDATA%/Kagaz/phase5b-final/phase5b`; the repeatable
-script is `scripts/verify-phase5b.mjs`.
+There were no browser errors. All 102 accepted PDFs and both separately generated
+unsafe counterexamples passed qpdf structure checks. The counterexamples failed
+the removal oracle as required. Final strengthened artifacts are outside the
+checkout at `%LOCALAPPDATA%/Kagaz/phase5b-pixel-proof-final3/phase5b`; foreground
+performance artifacts remain at `%LOCALAPPDATA%/Kagaz/phase5b-final/phase5b`.
+The repeatable script is `scripts/verify-phase5b.mjs`.
 
 ## Independent PDF and browser evidence
 
@@ -272,7 +275,8 @@ The verifier reloads actual exported/downloaded bytes with pdf-lib, extracts tex
 and independently renders with installed PDF.js, checks decoded page operators
 and object/resources, runs qpdf/QDF inspection and decodes the actual embedded
 RGB raster. Raw marker searches supplement these checks; compressed bytes are
-not treated as an absence proof. The deterministic original markers include
+not treated as an absence proof. Across the retained Phase 5A and new Phase 5B
+fixtures, deterministic original markers include
 SECRET-TEXT-ALPHA/BETA, ACCOUNT-123456, SECRET-FORM-ALPHA and annotation/image
 markers. They remain absent from affected pages/output while ordinary source
 text and form/annotation content remain present where intended.
@@ -286,6 +290,16 @@ and resources; corresponding redacted exports have **zero text operators,
 fonts, native annotations or interactive fields and exactly one opaque raster**.
 Decoded sanitized areas contain black or deliberately added watermark pixels;
 original red/blue fixture pixels and source resources do not survive there.
+The final embedded-pixel oracle requires independent protected geometry and
+positive inspected/black pixel counts on every affected page. Nonblack protected
+samples must be strictly green; neutral white/gray samples cannot pass. Two
+separately labelled counterexample PDFs restore independently rendered secret
+glyph shapes, normalized to grayscale, into the actual exported raster on white
+and gray backgrounds. Both reload with the altered RGB bytes, pass qpdf and have
+empty PDF.js text extraction, but the removal oracle rejects both. These generated
+unsafe controls are separate from accepted application exports. Initial harness
+API and subpixel-antialiasing assumptions were corrected without changing the
+application or relaxing the protected-pixel predicate.
 Full-black-page cases independently prove foreground watermarks exist after
 sanitization. All sixteen intrinsic/workspace cardinal combinations, crop offsets,
 UserUnit two and conservative unsafe-retention rejection are exercised.
@@ -319,7 +333,8 @@ These are synthetic observations on this Windows Chromium host, not universal
 speed or memory guarantees. The final verifier brings its export tab to the
 foreground before measuring; foreground UI download observations are separate.
 An earlier background-tab run took 3.2–4.2 seconds for representative reconstructed
-pages because Chrome throttled timers. Both full runs passed the same 145 checks.
+pages because Chrome throttled timers. Both earlier full runs passed 145 checks;
+the final strengthened verifier passed 148 without application changes.
 
 | Case                                       | Input → output bytes              | Measured export time |
 | ------------------------------------------ | --------------------------------- | -------------------- |

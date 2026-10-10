@@ -4,6 +4,7 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
+import { deflateSync } from 'node:zlib';
 
 // Synthetic fixtures and all downloaded/decoded evidence stay outside the repo.
 // The production app has no test hooks: a local installed PDF.js parser independently
@@ -457,6 +458,231 @@ function decodedObjectStrings(doc) {
   return strings;
 }
 
+function isTrustedProtectedPixel(r, g, b) {
+  // Lossless embedded pixels must be exact black or the deliberately green
+  // foreground fixture. Neutral white/gray source text backgrounds fail.
+  return (r === 0 && g === 0 && b === 0) || (g > r && g > b);
+}
+
+async function verifyProtectedPixelOracle(source, sanitizedOutput) {
+  const controls = [
+    { name: 'black', rgb: [0, 0, 0], accepted: true },
+    { name: 'faint-green-antialiasing', rgb: [0, 1, 0], accepted: true },
+    { name: 'green-antialiasing', rgb: [1, 7, 2], accepted: true },
+    { name: 'opaque-green', rgb: [26, 179, 51], accepted: true },
+    { name: 'white', rgb: [255, 255, 255], accepted: false },
+    { name: 'gray', rgb: [96, 96, 96], accepted: false },
+    { name: 'faint-gray', rgb: [1, 1, 1], accepted: false },
+  ];
+  for (const control of controls)
+    assert.equal(
+      isTrustedProtectedPixel(...control.rgb),
+      control.accepted,
+      `protected pixel oracle: ${control.name}`,
+    );
+  results.push({ name: 'protected-pixel-oracle-controls', controls });
+
+  const sourceRaster = await verifier.evaluate(
+    async ({ bytes, box }) => {
+      const pdfjs = await import('/node_modules/pdfjs-dist/build/pdf.mjs');
+      pdfjs.GlobalWorkerOptions.workerSrc =
+        '/node_modules/pdfjs-dist/build/pdf.worker.mjs';
+      const task = pdfjs.getDocument({
+        data: new Uint8Array(bytes),
+        useSystemFonts: true,
+      });
+      const pdf = await task.promise;
+      const current = await pdf.getPage(1);
+      const viewport = current.getViewport({ scale: 2, rotation: 0 });
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.ceil(viewport.width);
+      canvas.height = Math.ceil(viewport.height);
+      const ctx = canvas.getContext('2d', { alpha: false });
+      try {
+        await current.render({ canvas, canvasContext: ctx, viewport }).promise;
+        const rect = [
+          ...viewport.convertToViewportPoint(box.x, box.y),
+          ...viewport.convertToViewportPoint(
+            box.x + box.width,
+            box.y + box.height,
+          ),
+        ];
+        const x = Math.ceil(Math.min(rect[0], rect[2]));
+        const y = Math.ceil(Math.min(rect[1], rect[3]));
+        const width = Math.floor(Math.max(rect[0], rect[2])) - x;
+        const height = Math.floor(Math.max(rect[1], rect[3])) - y;
+        const rgba = ctx.getImageData(x, y, width, height).data;
+        const pixels = [];
+        for (let offset = 0; offset < rgba.length; offset += 4)
+          pixels.push(...rgba.subarray(offset, offset + 3));
+        const text = (await current.getTextContent()).items
+          .map((item) => item.str || '')
+          .join(' ');
+        return {
+          pixels,
+          x,
+          y,
+          width,
+          height,
+          pageWidth: canvas.width,
+          pageHeight: canvas.height,
+          text,
+        };
+      } finally {
+        canvas.width = 0;
+        canvas.height = 0;
+        current.cleanup();
+        await task.destroy();
+      }
+    },
+    { bytes: source.bytes, box: coverText },
+  );
+  assert(sourceRaster.text.includes('SECRET-TEXT-ALPHA'));
+  let originalBlackPixels = 0,
+    originalGrayPixels = 0,
+    originalWhitePixels = 0,
+    neutralizedAntialiasingPixels = 0;
+  for (let offset = 0; offset < sourceRaster.pixels.length; offset += 3) {
+    const [r, g, b] = sourceRaster.pixels.slice(offset, offset + 3);
+    // Native font rendering may have colored subpixel fringes. Preserve the
+    // recovered source glyph shapes while neutralizing those fringe samples,
+    // so both counterexamples specifically exercise the white/gray loophole.
+    const gray = Math.round((r + g + b) / 3);
+    if (r !== g || g !== b) neutralizedAntialiasingPixels++;
+    sourceRaster.pixels.fill(gray, offset, offset + 3);
+    if (gray === 0) originalBlackPixels++;
+    else if (gray === 255) originalWhitePixels++;
+    else originalGrayPixels++;
+  }
+  assert(
+    originalBlackPixels > 100,
+    'Counterexample contains no secret glyphs.',
+  );
+  assert(
+    originalGrayPixels > 100,
+    'Counterexample contains no antialiased glyphs.',
+  );
+  assert(
+    originalWhitePixels > 100,
+    'Counterexample contains no source background.',
+  );
+
+  // Restore the independently rendered source secret inside the actual exported
+  // image. The altered PDFs still contain one opaque raster and no text layer,
+  // source resources, annotations, or deterministic secret string. A removal
+  // verifier must reject these structurally valid but visibly unsafe outputs.
+  for (const background of ['white', 'gray']) {
+    const name = `protected-pixel-counterexample-${background}`;
+    const doc = await lib.PDFDocument.load(sanitizedOutput.bytes);
+    const image = embeddedImages(doc, 0)[0];
+    assert(image);
+    assert.equal(
+      image.dict.get(lib.PDFName.of('Width')).asNumber(),
+      sourceRaster.pageWidth,
+    );
+    assert.equal(
+      image.dict.get(lib.PDFName.of('Height')).asNumber(),
+      sourceRaster.pageHeight,
+    );
+    assert.equal(
+      image.dict.get(lib.PDFName.of('Filter')).toString(),
+      '/FlateDecode',
+    );
+    assert(!image.dict.has(lib.PDFName.of('DecodeParms')));
+    const pixels = new Uint8Array(lib.decodePDFRawStream(image).decode());
+    const restored = new Uint8Array(sourceRaster.pixels);
+    if (background === 'gray')
+      for (let offset = 0; offset < restored.length; offset++)
+        restored[offset] = Math.round((restored[offset] * 96) / 255);
+    for (let y = 0; y < sourceRaster.height; y++)
+      pixels.set(
+        restored.subarray(
+          y * sourceRaster.width * 3,
+          (y + 1) * sourceRaster.width * 3,
+        ),
+        ((sourceRaster.y + y) * sourceRaster.pageWidth + sourceRaster.x) * 3,
+      );
+    const [imageRef] = doc.context
+      .enumerateIndirectObjects()
+      .find(([, object]) => object === image);
+    doc.context.assign(
+      imageRef,
+      lib.PDFRawStream.of(image.dict, new Uint8Array(deflateSync(pixels))),
+    );
+    const bytes = await doc.save({ useObjectStreams: false });
+    const file = join(artifactRoot, `${name}.pdf`);
+    await writeFile(file, bytes);
+    const reloaded = await lib.PDFDocument.load(bytes);
+    assert.equal(embeddedImages(reloaded, 0).length, 1);
+    assert.deepEqual(
+      lib.decodePDFRawStream(embeddedImages(reloaded, 0)[0]).decode(),
+      pixels,
+    );
+    const extracted = await verifier.evaluate(async (bytes) => {
+      const pdfjs = await import('/node_modules/pdfjs-dist/build/pdf.mjs');
+      const task = pdfjs.getDocument({ data: new Uint8Array(bytes) });
+      const pdf = await task.promise;
+      try {
+        const current = await pdf.getPage(1);
+        return (await current.getTextContent()).items
+          .map((item) => item.str || '')
+          .join(' ');
+      } finally {
+        await task.destroy();
+      }
+    }, Array.from(bytes));
+    assert.equal(
+      extracted,
+      '',
+      `${name}: counterexample must contain no text layer`,
+    );
+    if (qpdfAvailable) {
+      const checked = spawnSync(qpdf, ['--check', file], { encoding: 'utf8' });
+      assert.equal(
+        checked.status,
+        0,
+        `${name}: malformed counterexample ${checked.stderr}`,
+      );
+    }
+    // The previous non-strict channel comparison admitted every neutral sample.
+    for (let offset = 0; offset < restored.length; offset += 3) {
+      const [r, g, b] = restored.subarray(offset, offset + 3);
+      assert(g >= r && g >= b);
+    }
+    await assert.rejects(
+      inspect(
+        name,
+        { bytes, file },
+        {
+          affected: [0],
+          forbidden: secrets,
+          regionBoxes: new Map([[0, [coverText]]]),
+        },
+      ),
+      /original color underneath watermark/,
+      `${name}: restored source raster was accepted`,
+    );
+    const row = {
+      name,
+      oracleCounterexample: true,
+      rejected: 'protected-original-pixels',
+      background,
+      originalSecretRasterRestored: true,
+      originalBlackPixels,
+      originalGrayPixels,
+      originalWhitePixels,
+      neutralizedAntialiasingPixels,
+      protectedPixels: restored.length / 3,
+      legacyPredicateWouldAcceptProtectedRegion: true,
+      pdfjsText: extracted,
+      qpdf: qpdfAvailable ? 'PASS' : 'unavailable',
+      file,
+    };
+    results.push(row);
+    console.log(JSON.stringify(row));
+  }
+}
+
 async function inspect(
   name,
   output,
@@ -542,7 +768,9 @@ async function inspect(
     assert.equal(pixels.length, width * height * 3);
     const crop = current.getCropBox();
     let greenPixels = 0,
-      changedCoveredPixels = 0;
+      changedCoveredPixels = 0,
+      protectedPixels = 0,
+      blackProtectedPixels = 0;
     for (let offset = 0; offset < pixels.length; offset += 3) {
       if (
         pixels[offset + 1] > pixels[offset] + 12 &&
@@ -550,7 +778,12 @@ async function inspect(
       )
         greenPixels++;
     }
-    for (const box of regionBoxes.get(index) || []) {
+    const protectedBoxes = regionBoxes.get(index);
+    assert(
+      protectedBoxes?.length,
+      `${name}: missing independent protected pixel geometry`,
+    );
+    for (const box of protectedBoxes) {
       const x0 = Math.max(
         0,
         Math.ceil(((box.x - crop.x) * width) / crop.width),
@@ -573,18 +806,23 @@ async function inspect(
         for (let x = x0; x < x1; x++) {
           const offset = (y * width + x) * 3;
           const [r, g, b] = pixels.subarray(offset, offset + 3);
+          protectedPixels++;
           // Foreground watermarks may paint above the sanitized black appearance.
           // Any nonblack sample there must be the deliberately added green mark,
           // never the original blue/red image or source glyph. Allow antialiasing.
-          if (r > 4 || g > 4 || b > 4) {
+          if (r || g || b) {
             assert(
-              g >= r && g >= b,
+              isTrustedProtectedPixel(r, g, b),
               `${name}: original color underneath watermark at ${x},${y}`,
             );
             changedCoveredPixels++;
-          }
+          } else blackProtectedPixels++;
         }
     }
+    assert(
+      protectedPixels > 0 && blackProtectedPixels > 0,
+      `${name}: no protected black pixels inspected`,
+    );
     if (greenExpected && watermark && watermark.opacity > 0)
       assert(
         greenPixels > 20,
@@ -597,6 +835,8 @@ async function inspect(
       decodedBytes: pixels.length,
       greenPixels,
       changedCoveredPixels,
+      protectedPixels,
+      blackProtectedPixels,
       rasterHash: digest(pixels),
     });
   }
@@ -1695,6 +1935,8 @@ try {
         regionBoxes: new Map([[0, boxes]]),
         snapshot: true,
       });
+      if (name === 'text-redaction')
+        await verifyProtectedPixelOracle(plain, output);
     }
     const mixed = await directExport(ten, 'mixed-ten', {
       redactions: [{ pageIndex: 0, boxes: [coverText] }],
@@ -1717,7 +1959,12 @@ try {
         redactions: [{ pageIndex: 0, boxes: [coverText] }],
         order: [0],
       }),
-      { affected: [0], forbidden: secrets, pageCount: 1 },
+      {
+        affected: [0],
+        forbidden: secrets,
+        pageCount: 1,
+        regionBoxes: new Map([[0, [coverText]]]),
+      },
     );
     const annotation = {
       id: 'annotation-secret',
@@ -2258,7 +2505,12 @@ try {
     await inspect(
       'watermarked-redaction-extract-ui',
       await download('watermarked-redaction-extract-ui', button('Create PDF')),
-      { affected: [0], forbidden: secrets, pageCount: 1 },
+      {
+        affected: [0],
+        forbidden: secrets,
+        pageCount: 1,
+        regionBoxes: new Map([[0, [coverText]]]),
+      },
     );
     await fresh(plain);
     await addRedaction(coverImage);
@@ -2301,7 +2553,15 @@ try {
     await inspect(
       'duplicates-redacted-ui',
       await download('duplicates-redacted-ui'),
-      { affected: [0, 1], forbidden: secrets, pageCount: 2 },
+      {
+        affected: [0, 1],
+        forbidden: secrets,
+        pageCount: 2,
+        regionBoxes: new Map([
+          [0, [coverText]],
+          [1, [coverText]],
+        ]),
+      },
     );
 
     await fresh(publicSource);
@@ -2470,6 +2730,7 @@ try {
         await inspect(`${operation}-prepared-upload`, uploaded, {
           affected: [0],
           forbidden: secrets,
+          regionBoxes: new Map([[0, [coverText]]]),
         });
         await page.keyboard.press('Escape');
         await page.unroute(routePattern);
