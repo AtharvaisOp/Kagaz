@@ -74,8 +74,15 @@ export function createAnnotationAssetRegistry(
   };
 
   return {
-    async register(blob: Blob): Promise<AnnotationImageAsset> {
+    async register(
+      blob: Blob,
+      signal?: AbortSignal,
+    ): Promise<AnnotationImageAsset> {
       const requestGeneration = generation;
+      const cancelled = () =>
+        signal?.aborted || requestGeneration !== generation;
+      if (cancelled())
+        throw new DOMException('Image loading was cancelled.', 'AbortError');
       if (!supportedMimeTypes.has(blob.type)) {
         throw new Error('Choose a PNG or JPEG image.');
       }
@@ -83,14 +90,16 @@ export function createAnnotationAssetRegistry(
       if (mimeType === 'image/jpeg') {
         await rejectUnsupportedJpegOrientation(blob);
       }
-      if (requestGeneration !== generation)
+      if (cancelled())
         throw new DOMException('Image loading was cancelled.', 'AbortError');
       const assetId = dependencies.createId();
       const objectUrl = dependencies.createObjectUrl(blob);
       pendingUrls.add(objectUrl);
+      const abort = () => revokePending(objectUrl);
+      signal?.addEventListener('abort', abort, { once: true });
       try {
         const decoded = await dependencies.decode(blob, objectUrl);
-        if (requestGeneration !== generation) {
+        if (cancelled()) {
           const close = (decoded.image as { close?: () => void }).close;
           close?.call(decoded.image);
           throw new DOMException('Image loading was cancelled.', 'AbortError');
@@ -124,9 +133,13 @@ export function createAnnotationAssetRegistry(
         return asset;
       } catch (error) {
         revokePending(objectUrl);
+        if (cancelled())
+          throw new DOMException('Image loading was cancelled.', 'AbortError');
         throw error instanceof Error
           ? error
           : new Error('The selected image could not be decoded.');
+      } finally {
+        signal?.removeEventListener('abort', abort);
       }
     },
     get(assetId: AnnotationAssetId): AnnotationImageAsset | null {

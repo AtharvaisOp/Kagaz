@@ -19,6 +19,12 @@ import { FormStatusNotice } from '../pdf-forms/components/FormStatusNotice';
 import type { PdfFormsController } from '../pdf-forms/hooks/usePdfForms';
 import type { PdfRedactionController } from '../pdf-redactions/hooks/usePdfRedactions';
 import { RedactionSummary } from '../pdf-redactions/components/RedactionSummary';
+import type { PdfWatermarkController } from '../pdf-watermarks/hooks/usePdfWatermarks';
+import { WatermarkDialog } from '../pdf-watermarks/components/WatermarkDialog';
+import {
+  watermarkAppliesToPage,
+  targetWatermarkPageIds,
+} from '../pdf-watermarks/model/watermark';
 
 import type { FileLoadIssue } from '../pdf-workspace/loading/types';
 import type { WorkspaceLoadingState } from '../pdf-workspace/hooks/usePdfWorkspace';
@@ -66,6 +72,7 @@ interface PdfViewerProps {
   readonly annotationController: PdfAnnotationController;
   readonly formController: PdfFormsController;
   readonly redactionController: PdfRedactionController;
+  readonly watermarkController: PdfWatermarkController;
   readonly prepareWorkspace: PdfExportController['prepareWorkspace'];
 }
 
@@ -115,6 +122,7 @@ export function PdfViewer({
   annotationController,
   formController,
   redactionController,
+  watermarkController,
   prepareWorkspace,
 }: PdfViewerProps) {
   const {
@@ -134,6 +142,35 @@ export function PdfViewer({
     setRedactionActive,
   ]);
   const [mobilePageManagerOpen, setMobilePageManagerOpen] = useState(false);
+  const watermarkTriggerRef = useRef<HTMLButtonElement>(null);
+  const watermarkOpenerRef = useRef<HTMLElement | null>(null);
+  const { cancel: cancelWatermark } = watermarkController;
+  const [watermarkCurrentPageId, setWatermarkCurrentPageId] = useState<
+    string | null
+  >(null);
+  const openWatermark = () => {
+    watermarkOpenerRef.current =
+      document.activeElement instanceof HTMLElement
+        ? document.activeElement
+        : null;
+    setWatermarkCurrentPageId(selectedPageId);
+    watermarkController.open();
+  };
+  const closeWatermark = useCallback(() => {
+    cancelWatermark();
+    window.requestAnimationFrame(() => {
+      const opener = watermarkOpenerRef.current;
+      (opener?.isConnected ? opener : watermarkTriggerRef.current)?.focus({
+        preventScroll: true,
+      });
+    });
+  }, [cancelWatermark]);
+  const removeWatermark = () => {
+    watermarkController.remove();
+    window.requestAnimationFrame(() =>
+      watermarkTriggerRef.current?.focus({ preventScroll: true }),
+    );
+  };
   const [extractOpen, setExtractOpen] = useState(false);
   const [compressOpen, setCompressOpen] = useState(false);
   const [ocrOpen, setOcrOpen] = useState(false);
@@ -246,7 +283,56 @@ export function PdfViewer({
       <AnnotationToolbar
         controller={annotationController}
         redactionController={redactionController}
+        watermarkTriggerRef={watermarkTriggerRef}
+        watermarkPresent={Boolean(watermarkController.state.present)}
+        onOpenWatermark={openWatermark}
       />
+      {watermarkController.draft ? (
+        <WatermarkDialog
+          controller={watermarkController}
+          pages={pages}
+          currentPageId={watermarkCurrentPageId}
+          registry={registry}
+          onClose={closeWatermark}
+        />
+      ) : null}
+      {watermarkController.state.present ? (
+        <div className="watermark-summary">
+          <span>
+            {watermarkController.state.present.kind === 'text'
+              ? 'Text'
+              : 'Image'}{' '}
+            watermark ·{' '}
+            {
+              targetWatermarkPageIds(
+                watermarkController.state.present.target,
+                pages,
+              ).length
+            }{' '}
+            pages
+            {watermarkController.state.present.target.kind === 'all'
+              ? ' · added pages included'
+              : ''}
+          </span>
+          <button
+            className="annotation-summary-action"
+            type="button"
+            onClick={openWatermark}
+          >
+            Edit watermark
+          </button>
+          <button
+            className="annotation-summary-action annotation-summary-delete"
+            type="button"
+            onClick={removeWatermark}
+          >
+            Remove watermark
+          </button>
+        </div>
+      ) : null}
+      <span className="sr-only" role="status">
+        {watermarkController.announcement}
+      </span>
       <AnnotationSummary
         controller={annotationController}
         pageId={selectedPageId}
@@ -367,6 +453,12 @@ export function PdfViewer({
                   document={document}
                   workspacePosition={workspacePosition}
                   zoom={zoom}
+                  watermark={
+                    watermarkAppliesToPage(watermarkController.preview, page.id)
+                      ? watermarkController.preview
+                      : null
+                  }
+                  watermarkAssetRegistry={watermarkController.assetRegistry}
                   annotations={annotationController.getAnnotationsForPage(
                     page.id,
                   )}

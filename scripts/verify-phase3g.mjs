@@ -308,6 +308,9 @@ async function freshBaseline(file) {
   await page.waitForFunction(
     () => !document.body.innerText.includes('Checking this PDF'),
   );
+  // Discovery commits definitions before the form baseline effect. Observe the
+  // same settled editor frame used by state(), then assert the actual value.
+  await settle();
   assert.equal(await input().inputValue(), 'Original');
   assert(await button('Undo').isDisabled());
   assert(await button('Redo').isDisabled());

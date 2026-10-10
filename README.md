@@ -95,6 +95,34 @@ lifecycle protection.
 See [Phase 3G audit and verification](docs/phase-3g.md) for defects repaired,
 repeatable browser scripts, performance observations, and remaining limitations.
 
+## Browser-local watermarking
+
+Use **Watermark** to configure one foreground text or PNG/JPEG image watermark.
+Preview text/color, font size, opacity, rotation, bounded size and center/corner
+or custom placement before Apply. Apply, edit and remove are single shared
+Undo/Redo transactions; slider previews and Cancel do not change the document.
+
+Target all pages, the current page, selected pages or explicit ranges. **All
+pages** includes PDFs added later. Other scopes resolve to stable workspace page
+identities when applied, so reordering retains the intended pages; deleted pages
+are removed from the target. Download, Extract and explicitly submitted
+compression/OCR preparation use the committed configuration.
+
+Watermarking stays entirely in the browser and introduces no upload or document
+storage. Ordinary pages preserve their text/vector content. On redacted pages,
+the foreground watermark is composed using only the already-sanitized raster,
+then flattened into a fresh image-only page; original page content is never
+restored. Watermarks are visual marks, not a confidentiality mechanism.
+
+Text uses Standard Helvetica and rejects unsupported characters visibly. Text
+is limited to one line of 200 characters; oversized marks are fitted within page
+margins. Image aspect ratio and PNG transparency are preserved; non-default JPEG
+camera orientation and excessive image sizes are rejected. Reconstructed
+redacted pages retain Phase 5A's 144 DPI fidelity and accessibility limitations.
+
+See [Phase 5B architecture and verification](docs/phase-5b.md) for placement,
+asset lifecycle, independent PDF evidence and limitations.
+
 ## Browser-local redaction
 
 Use **Redact** to propose rectangular regions, then move, resize or remove them
@@ -126,7 +154,8 @@ boundary, limits, independent PDF/image checks and measured verification.
 
 PDF source files stay in the browser for editing and ordinary export. Compression and OCR
 temporarily send one generated, flattened PDF containing the current page order,
-rotations, annotations, images, filled forms and visual signatures. It never sends
+rotations, annotations, images, filled forms, visual signatures, finalized
+redactions and committed watermarks. It never sends
 individual source files. Existing form/signature export blockers apply before any
 upload. Each server tool creates a derivative download and leaves the workspace intact.
 

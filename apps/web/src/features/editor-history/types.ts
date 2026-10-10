@@ -1,4 +1,5 @@
-export type EditorHistoryDomain = 'annotation' | 'form' | 'redaction';
+export type EditorHistoryDomain =
+  'annotation' | 'form' | 'redaction' | 'watermark';
 
 export type EditorHistoryEntityId = string;
 

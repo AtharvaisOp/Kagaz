@@ -24,6 +24,11 @@ import type {
 } from '../../pdf-annotations/model/types';
 import type { AnnotationAssetRegistry } from '../../pdf-annotations/runtime/annotationAssetRegistry';
 import type { RedactionRegion } from '../../pdf-redactions/model/types';
+import type { WatermarkConfig } from '../../pdf-watermarks/model/types';
+import {
+  snapshotWatermark,
+  watermarkAppliesToPage,
+} from '../../pdf-watermarks/model/watermark';
 import type { SourceDocumentRegistry } from '../runtime/sourceDocumentRegistry';
 import type {
   PdfWorkspaceState,
@@ -89,6 +94,32 @@ export function friendlyExportError(error: unknown): string {
 export interface AnnotationExportSnapshot {
   readonly annotationsByPage: ReadonlyMap<string, readonly PdfAnnotation[]>;
   readonly imageAssetIds: readonly string[];
+}
+
+/** Committed configuration and target IDs are copied before any asynchronous asset read. */
+export function snapshotWatermarkForPages(
+  pages: readonly WorkspacePage[],
+  config: WatermarkConfig | null,
+): WatermarkConfig | null {
+  if (!config || !pages.some((page) => watermarkAppliesToPage(config, page.id)))
+    return null;
+  return snapshotWatermark(
+    config.target.kind === 'all'
+      ? config
+      : {
+          ...config,
+          target: {
+            kind: 'pages',
+            pageIds: pages
+              .filter(
+                (page) =>
+                  config.target.kind === 'pages' &&
+                  config.target.pageIds.includes(page.id),
+              )
+              .map((page) => page.id),
+          },
+        },
+  );
 }
 
 /** Deep snapshot before Blob reads; extraction includes only selected workspace identities. */
@@ -183,6 +214,8 @@ export function usePdfExport(
   getExportBlockReason: ExportBlockReason,
   snapshotForms: (pages: readonly WorkspacePage[]) => FormExportSnapshot,
   redactions: readonly RedactionRegion[] = [],
+  watermark: WatermarkConfig | null = null,
+  watermarkAssets: Pick<AnnotationAssetRegistry, 'get'> = annotationAssets,
 ): PdfExportController {
   const [state, setState] = useState<PdfExportState>(IDLE_EXPORT_STATE);
   const generationRef = useRef(0);
@@ -210,6 +243,10 @@ export function usePdfExport(
         pageSnapshot,
         redactions,
       );
+      const watermarkSnapshot = snapshotWatermarkForPages(
+        pageSnapshot,
+        watermark,
+      );
       const annotations = snapshotAnnotationsForPages(
         pageSnapshot,
         annotationState,
@@ -219,22 +256,28 @@ export function usePdfExport(
         annotationAssets,
         annotations.imageAssetIds,
       );
+      const watermarkImageAssets = snapshotAnnotationImageAssets(
+        watermarkAssets,
+        watermarkSnapshot?.kind === 'image' ? [watermarkSnapshot.assetId] : [],
+      );
       return {
         fileName: getWorkspaceExportFileName(
           sourceNamesInPageOrder(pageSnapshot, sources),
         ),
-        bytes: imageAssets.then((assets) =>
-          exportWorkspace(
-            {
-              pages: pageSnapshot,
-              sources,
-              forms,
-              annotationsByPage: annotations.annotationsByPage,
-              imageAssets: assets,
-              redactionsByPage,
-            },
-            { signal, onProgress },
-          ),
+        bytes: Promise.all([imageAssets, watermarkImageAssets]).then(
+          ([assets, watermarkImages]) =>
+            exportWorkspace(
+              {
+                pages: pageSnapshot,
+                sources,
+                forms,
+                annotationsByPage: annotations.annotationsByPage,
+                imageAssets: new Map([...assets, ...watermarkImages]),
+                redactionsByPage,
+                watermark: watermarkSnapshot,
+              },
+              { signal, onProgress },
+            ),
         ),
       };
     },
@@ -245,6 +288,8 @@ export function usePdfExport(
       annotationState,
       annotationAssets,
       redactions,
+      watermark,
+      watermarkAssets,
     ],
   );
 
