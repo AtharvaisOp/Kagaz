@@ -13,6 +13,7 @@ import { FormExportError } from '../../../lib/pdf-export/forms/types';
 import { createDefaultWatermark } from '../../pdf-watermarks/model/watermark';
 import { snapshotAnnotationImageAssets } from '../../../lib/pdf-export/annotations/imageAssets';
 import type { AnnotationImageAsset } from '../../pdf-annotations/runtime/annotationAssetRegistry';
+import type { TextAnnotation } from '../../pdf-annotations/model/types';
 
 const pageA = {
   id: 'page-a',
@@ -103,6 +104,38 @@ describe('snapshotRedactionsForPages', () => {
 });
 
 describe('snapshotAnnotationsForPages', () => {
+  it('keeps text, font, color and geometry stable during later workspace mutation', () => {
+    const annotation: TextAnnotation = {
+      id: 'unicode',
+      workspacePageId: pageA.id,
+      kind: 'text',
+      text: 'Αθήνα',
+      fontFamily: 'noto-sans',
+      fontSizeUserUnits: 18,
+      lineHeight: 1.2,
+      align: 'left',
+      color: { r: 0, g: 1, b: 0 },
+      opacity: 0.8,
+      box: { origin: { x: 10, y: 20 }, width: 200, height: 60, rotation: 0 },
+    };
+    const state = {
+      ...createAnnotationHistoryState(),
+      present: addAnnotation(
+        createAnnotationHistoryState().present,
+        annotation,
+      ),
+    };
+    const snapshot = snapshotAnnotationsForPages([pageA], state);
+    Object.assign(annotation, { text: 'replacement', fontFamily: 'helvetica' });
+    Object.assign(annotation.color, { g: 0 });
+    Object.assign(annotation.box.origin, { x: 999 });
+    expect(snapshot.annotationsByPage.get(pageA.id)?.[0]).toMatchObject({
+      text: 'Αθήνα',
+      fontFamily: 'noto-sans',
+      color: { g: 1 },
+      box: { origin: { x: 10 } },
+    });
+  });
   it('captures only selected page IDs, preserves z-order, and collects image IDs', () => {
     const rectangle = {
       id: 'rectangle',

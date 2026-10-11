@@ -1,3 +1,4 @@
+/// <reference types="node" />
 import { describe, expect, it, vi } from 'vitest';
 import {
   PDFDocument,
@@ -25,6 +26,35 @@ import {
   validateWatermarkText,
 } from './renderWatermark';
 import { createAnnotationExportContext } from '../annotations/flattenAnnotations';
+import { readFile } from 'node:fs/promises';
+import type { DocumentFontId } from '../../fonts/fontCatalog';
+import type * as FontAssetsModule from '../../fonts/fontAssets';
+import { snapshotFontAssets } from '../../fonts/fontAssets';
+
+// Browser fetch is covered independently; Node export tests use the identical
+// checked-in bytes and run the production integrity/embedding-permission check.
+vi.mock('../../fonts/fontAssets', async (importOriginal) => {
+  const original = await importOriginal<typeof FontAssetsModule>();
+  return {
+    ...original,
+    snapshotFontAssets: async (ids: Iterable<DocumentFontId>) => {
+      const assets = new Map<DocumentFontId, Uint8Array>();
+      if (new Set(ids).has('noto-sans')) {
+        const bytes = Uint8Array.from(
+          await readFile(
+            new URL(
+              '../../../assets/fonts/NotoSans-Regular.ttf',
+              import.meta.url,
+            ),
+          ),
+        );
+        await original.validateBundledFontBytes(bytes);
+        assets.set('noto-sans', bytes);
+      }
+      return assets;
+    },
+  };
+});
 
 // Node has no image decoder/canvas. Native decode and trust/cleanup are exercised
 // in nativeImage.test and the real-browser verifier; these fixtures are known PNGs.
@@ -119,6 +149,116 @@ function pageOperators(document: PDFDocument, index = 0): string {
 }
 
 describe('watermark rendering and workspace export', () => {
+  it.each(['Žlutý kůň café', 'Αθήνα Ελληνικά', 'Привет мир'])(
+    'embeds and extracts the selected Noto Sans Unicode watermark %s',
+    async (text) => {
+      const bytes = await exportWorkspace({
+        ...(await requestFor(3)),
+        watermark: {
+          ...textConfig,
+          text,
+          fontFamily: 'noto-sans',
+          rotation: 0,
+        },
+      });
+      expect(await inspectText(bytes)).toEqual([
+        `PUBLIC-PAGE-0${text}`,
+        `PUBLIC-PAGE-1${text}`,
+        `PUBLIC-PAGE-2${text}`,
+      ]);
+      const loaded = await PDFDocument.load(bytes, {
+        throwOnInvalidObject: true,
+      });
+      const refs = loaded.getPages().map((page) => {
+        const fonts = page.node
+          .Resources()!
+          .lookup(PDFName.of('Font'), PDFDict);
+        const ref = fonts
+          .values()
+          .find(
+            (value) =>
+              loaded.context
+                .lookup(value, PDFDict)
+                .lookupMaybe(PDFName.of('Subtype'), PDFName)
+                ?.toString() === '/Type0',
+          );
+        expect(ref).toBeDefined();
+        const font = loaded.context.lookup(ref, PDFDict);
+        expect(font.has(PDFName.of('ToUnicode'))).toBe(true);
+        const descendant = font
+          .lookup(PDFName.of('DescendantFonts'), PDFArray)
+          .lookup(0, PDFDict);
+        const descriptor = descendant.lookup(
+          PDFName.of('FontDescriptor'),
+          PDFDict,
+        );
+        expect(descriptor.lookup(PDFName.of('FontFile2'))).toBeInstanceOf(
+          PDFRawStream,
+        );
+        return ref!.toString();
+      });
+      expect(new Set(refs).size).toBe(1);
+    },
+  );
+  it('normalizes composed accent sequences and measures exactly the emitted Unicode advances', async () => {
+    const config = {
+      ...textConfig,
+      text: 'Cafe\u0301 AVAV Ж',
+      fontFamily: 'noto-sans' as const,
+      fontSize: 48,
+      rotation: 0,
+      scale: 1,
+    };
+    const geometry = { viewBox: [10, 20, 510, 420], userUnit: 2, rotation: 90 };
+    const document = await PDFDocument.create();
+    const context = await createWatermarkExportContext(
+      document,
+      config,
+      new Map(),
+    );
+    const placement = validateWatermarkPageGeometry(geometry, context);
+    const bytes = await createWatermarkPreviewPdf(config, geometry, new Map());
+    expect(await inspectText(bytes)).toEqual(['Café AVAV Ж']);
+    const task = pdfjs.getDocument({ data: bytes.slice() });
+    try {
+      const parsed = await task.promise;
+      const items = (await (await parsed.getPage(1)).getTextContent()).items;
+      const item = items.find(
+        (candidate) => 'str' in candidate && candidate.str === 'Café AVAV Ж',
+      );
+      if (!item || !('width' in item))
+        throw new Error('Expected independently extracted Unicode watermark.');
+      const expected =
+        context.fontContext!.measure(
+          'Café AVAV Ж',
+          config.fontSize / geometry.userUnit,
+        ).width * placement.sizingRatio;
+      expect(item.width).toBeCloseTo(expected, 4);
+    } finally {
+      await task.destroy();
+    }
+  });
+  it.each([
+    'नमस्ते',
+    'मराठी भाषा',
+    'कागदपत्र',
+    'विद्यार्थी',
+    'प्रकल्प',
+    'क्षेत्र',
+    'कृपया',
+    'हिन्दी',
+    'العربية',
+    'עברית',
+    'a\u0307\u0323',
+    '😀',
+  ])(
+    'fails closed for unsupported Noto Sans script or positioning %s',
+    async (text) => {
+      await expect(
+        validateWatermarkText(text, 'noto-sans'),
+      ).rejects.toMatchObject({ code: 'watermark-unsupported-text' });
+    },
+  );
   it('preserves ordinary source text and emits watermark as foreground text after annotations', async () => {
     const request = await requestFor();
     const output = await exportWorkspace({
@@ -410,6 +550,41 @@ describe('watermark rendering and workspace export', () => {
     expect(pageOperators(await PDFDocument.load(bytes))).not.toContain(
       '-1 0 0 -1',
     );
+  });
+  it('captures Unicode font selection and bytes before font replacement or later mutation during export', async () => {
+    const request = await requestFor();
+    const file = request.sources.get('source')!.file;
+    const bytes = await file.arrayBuffer();
+    let release!: (value: ArrayBuffer) => void;
+    vi.spyOn(file, 'arrayBuffer').mockReturnValue(
+      new Promise<ArrayBuffer>((resolve) => {
+        release = resolve;
+      }),
+    );
+    const config = {
+      ...textConfig,
+      text: 'Αθήνα Москва',
+      fontFamily: 'noto-sans' as DocumentFontId,
+      rotation: 0,
+    };
+    const assets = await snapshotFontAssets(['noto-sans']);
+    const exporting = exportWorkspace({
+      ...request,
+      watermark: config,
+      fontAssets: assets,
+    });
+    config.fontFamily = 'helvetica';
+    config.text = 'LATER-EDIT';
+    assets.get('noto-sans')!.fill(0);
+    release(bytes);
+    expect(await inspectText(await exporting)).toEqual([
+      'PUBLIC-PAGE-0Αθήνα Москва',
+    ]);
+    expect(
+      await inspectText(
+        await exportWorkspace({ ...request, watermark: config }),
+      ),
+    ).toEqual(['PUBLIC-PAGE-0LATER-EDIT']);
   });
   it.each(['', '   ', 'line\nline', 'A'.repeat(201)])(
     'rejects invalid text %j before committing appearance',

@@ -2049,6 +2049,13 @@ input:focus-visible + * {
   font-size: 11px;
 }
 
+.annotation-font-status {
+  align-self: center;
+  color: #67e8f9;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 10px;
+}
+
 .annotation-tool-group,
 .annotation-style-controls,
 .annotation-color-row {

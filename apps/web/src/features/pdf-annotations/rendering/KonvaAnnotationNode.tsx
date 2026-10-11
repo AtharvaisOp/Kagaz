@@ -12,6 +12,7 @@ import {
 import { projectPdfBoxToOrientedFrame } from '../geometry/orientedFrame';
 import { useAnnotationAsset } from '../runtime/useAnnotationAsset';
 import { projectTextBoxInset, projectTextFontSize } from './textProjection';
+import { AnnotationTextNode } from './AnnotationTextNode';
 
 import type { AnnotationAssetRegistry } from '../runtime/annotationAssetRegistry';
 import type {
@@ -184,6 +185,17 @@ export function KonvaAnnotationNode({
         <AnnotationImageNode
           annotation={annotation}
           registry={assetRegistry}
+          common={orientedCommon}
+          nodeRef={nodeRef}
+        />
+      );
+    }
+    if (annotation.fontFamily !== 'helvetica') {
+      return (
+        <AnnotationTextNode
+          annotation={annotation}
+          width={frame.width}
+          height={frame.height}
           common={orientedCommon}
           nodeRef={nodeRef}
         />

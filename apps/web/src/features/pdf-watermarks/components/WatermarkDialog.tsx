@@ -16,6 +16,7 @@ import {
   watermarkTargetFromRange,
 } from '../model/watermark';
 import { WatermarkPreview } from '../rendering/WatermarkPreview';
+import { isDocumentFontId } from '../../../lib/fonts/fontCatalog';
 
 function common(config: WatermarkConfig): WatermarkBase {
   return {
@@ -243,6 +244,7 @@ export function WatermarkDialog({
                   kind: 'text',
                   text: 'DRAFT',
                   fontSize: 48,
+                  fontFamily: 'helvetica',
                   color: { r: 0.5, g: 0.5, b: 0.5 },
                 })
               }
@@ -267,6 +269,25 @@ export function WatermarkDialog({
         </fieldset>
         {draft.kind === 'text' ? (
           <>
+            <label className="watermark-field">
+              Font
+              <select
+                aria-label="Watermark font"
+                value={draft.fontFamily ?? 'helvetica'}
+                onChange={(event) => {
+                  if (isDocumentFontId(event.target.value))
+                    controller.updateDraft({
+                      ...draft,
+                      fontFamily: event.target.value,
+                    });
+                }}
+              >
+                <option value="helvetica">Helvetica</option>
+                <option value="noto-sans">
+                  Noto Sans · Latin, Greek, Cyrillic
+                </option>
+              </select>
+            </label>
             <label className="watermark-field">
               Watermark text
               <input
@@ -316,8 +337,9 @@ export function WatermarkDialog({
               </label>
             </div>
             <p className="watermark-hint">
-              Standard Helvetica · unsupported characters show an error. Long
-              text is fitted to the page.
+              Fonts stay in this browser. Noto Sans supports Latin, Greek and
+              Cyrillic; unsupported scripts show an error. Long text is fitted
+              to the page.
             </p>
           </>
         ) : (

@@ -101,6 +101,32 @@ async function imagePaintCounts(bytes: Uint8Array): Promise<readonly number[]> {
 }
 
 describe('exportWorkspace', () => {
+  it('captures source records before the first asynchronous dependency load', async () => {
+    const capturedFile = await makePdf('before.pdf', [
+      { width: 300, height: 200 },
+    ]);
+    const replacement = await makePdf('after.pdf', [
+      { width: 900, height: 700 },
+    ]);
+    const mutableSource = {
+      id: 'source',
+      file: capturedFile,
+      fileName: capturedFile.name,
+    };
+    const sources = new Map([['source', mutableSource]]);
+    const pending = exportWorkspace({
+      pages: [page('p', 'source', 0)],
+      sources,
+      forms: plainForms('source'),
+      annotationsByPage: new Map(),
+      imageAssets: new Map(),
+    });
+    mutableSource.file = replacement;
+    mutableSource.fileName = replacement.name;
+    sources.clear();
+    const exported = await pdfLib.PDFDocument.load(await pending);
+    expect(exported.getPage(0).getSize()).toEqual({ width: 300, height: 200 });
+  });
   it('fails safely when a captured signature asset is missing', async () => {
     const file = await makePdf('missing.pdf', [{ width: 300, height: 200 }]);
     await expect(

@@ -6,8 +6,18 @@ import {
   type PDFDocument,
   type PDFFont,
   rgb,
-  StandardFonts,
+  pushGraphicsState,
+  popGraphicsState,
+  moveTo,
+  lineTo,
+  closePath,
+  clip,
+  endPath,
 } from 'pdf-lib';
+import { preparePdfFont, type PdfFontContext } from '../../fonts/pdfFont';
+import type { DocumentFontId } from '../../fonts/fontCatalog';
+import type { FontAssetSnapshot } from '../../fonts/fontAssets';
+import { FontTextError } from '../../fonts/fontErrors';
 
 import {
   pdfOrientedBoxCenter,
@@ -43,6 +53,8 @@ export { AnnotationExportError } from './exportContracts';
 
 export interface AnnotationExportContext {
   readonly font: PDFFont;
+  readonly fontContexts: Map<DocumentFontId, PdfFontContext>;
+  readonly fontAssets?: FontAssetSnapshot;
   readonly document: PDFDocument;
   readonly imageCache: Map<string, PDFImage>;
   readonly imageResolver: AnnotationImageResolver | null;
@@ -51,10 +63,14 @@ export interface AnnotationExportContext {
 export async function createAnnotationExportContext(
   document: PDFDocument,
   imageResolver: AnnotationImageResolver | null = null,
+  fontAssets?: FontAssetSnapshot,
 ): Promise<AnnotationExportContext> {
+  const helvetica = await preparePdfFont(document, 'helvetica');
   return {
     document,
-    font: await document.embedFont(StandardFonts.Helvetica),
+    font: helvetica.font,
+    fontContexts: new Map([['helvetica', helvetica]]),
+    fontAssets,
     imageCache: new Map(),
     imageResolver,
   };
@@ -157,15 +173,57 @@ function drawText(
   annotation: TextAnnotation,
   context: AnnotationExportContext,
 ): void {
-  const lines = layoutText({
-    text: annotation.text,
-    font: context.font,
-    fontSize: annotation.fontSizeUserUnits,
-    lineHeight: annotation.lineHeight,
-    maxWidth: annotation.box.width,
-    maxHeight: annotation.box.height,
-    align: annotation.align,
-  });
+  const fontContext = context.fontContexts.get(annotation.fontFamily);
+  if (!fontContext)
+    throw new AnnotationExportError(
+      'unsupported-text-font',
+      'The selected text font was not prepared for export.',
+      annotation.id,
+    );
+  let lines: ReturnType<typeof layoutText>;
+  try {
+    lines = layoutText({
+      text: annotation.text,
+      font: fontContext.font,
+      fontContext,
+      fontSize: annotation.fontSizeUserUnits,
+      lineHeight: annotation.lineHeight,
+      maxWidth: annotation.box.width,
+      maxHeight: annotation.box.height,
+      align: annotation.align,
+    });
+  } catch (error: unknown) {
+    if (error instanceof FontTextError)
+      throw new AnnotationExportError(
+        error.code === 'text-overflow'
+          ? 'text-overflow'
+          : 'unsupported-text-font',
+        error.message,
+        annotation.id,
+      );
+    throw error;
+  }
+  if (annotation.fontFamily === 'noto-sans') {
+    const corners = [
+      [0, 0],
+      [annotation.box.width, 0],
+      [annotation.box.width, annotation.box.height],
+      [0, annotation.box.height],
+    ] as const;
+    const points = corners.map(([x, y]) =>
+      localPointToPdf(annotation.box, x, y),
+    );
+    const first = points[0];
+    if (!first) return;
+    page.pushOperators(
+      pushGraphicsState(),
+      moveTo(first.x, first.y),
+      ...points.slice(1).map((point) => lineTo(point.x, point.y)),
+      closePath(),
+      clip(),
+      endPath(),
+    );
+  }
   for (const line of lines) {
     const baseline = localPointToPdf(
       annotation.box,
@@ -176,11 +234,42 @@ function drawText(
       x: baseline.x,
       y: baseline.y,
       size: annotation.fontSizeUserUnits,
-      font: context.font,
+      font: fontContext.font,
       color: pdfColor(annotation.color),
       opacity: annotation.opacity,
       rotate: degrees(annotation.box.rotation),
     });
+  }
+  if (annotation.fontFamily === 'noto-sans')
+    page.pushOperators(popGraphicsState());
+}
+
+export async function prepareAnnotationFonts(
+  annotations: readonly PdfAnnotation[],
+  context: AnnotationExportContext,
+): Promise<void> {
+  for (const annotation of annotations) {
+    if (
+      annotation.kind !== 'text' ||
+      context.fontContexts.has(annotation.fontFamily)
+    )
+      continue;
+    try {
+      const prepared = await preparePdfFont(
+        context.document,
+        annotation.fontFamily,
+        context.fontAssets,
+      );
+      context.fontContexts.set(annotation.fontFamily, prepared);
+    } catch (error: unknown) {
+      throw new AnnotationExportError(
+        'unsupported-text-font',
+        error instanceof FontTextError
+          ? error.message
+          : 'The selected document font could not be loaded.',
+        annotation.id,
+      );
+    }
   }
 }
 
@@ -288,13 +377,19 @@ function validateAnnotations(
   for (const annotation of annotations) {
     if (annotation.kind !== 'text') continue;
     try {
-      for (const line of annotation.text.split(/\r\n?|\n/)) {
-        context.font.encodeText(line);
-      }
-    } catch {
+      const prepared = context.fontContexts.get(annotation.fontFamily);
+      if (!prepared)
+        throw new FontTextError(
+          'font-load-failed',
+          'The selected document font was not prepared for export.',
+        );
+      prepared.validate(annotation.text);
+    } catch (error: unknown) {
       throw new AnnotationExportError(
         'unsupported-text-font',
-        'Text contains characters unsupported by PDF export font Helvetica.',
+        error instanceof FontTextError
+          ? error.message
+          : 'Text contains characters unsupported by the selected document font.',
         annotation.id,
       );
     }
@@ -370,6 +465,7 @@ export async function flattenAnnotationsOntoCopiedPage(
   const exportContext =
     context ?? (await createAnnotationExportContext(document, imageResolver));
   await prepareImageResources(annotations, exportContext, imageResolver);
+  await prepareAnnotationFonts(annotations, exportContext);
   drawAnnotationsOnPage(page, annotations, exportContext);
   return exportContext;
 }

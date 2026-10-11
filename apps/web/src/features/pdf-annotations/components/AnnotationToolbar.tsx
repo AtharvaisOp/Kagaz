@@ -7,6 +7,11 @@ import type { PdfAnnotation, RgbColor } from '../model/types';
 import { shouldHandleAnnotationShortcut } from './annotationShortcuts';
 import { SignatureCreator } from './SignatureCreator';
 import {
+  isDocumentFontId,
+  type DocumentFontId,
+} from '../../../lib/fonts/fontCatalog';
+import { useDocumentTextSupport } from '../../../lib/fonts/useDocumentTextSupport';
+import {
   beginOpacityInteraction,
   completeOpacityInteraction,
   IDLE_OPACITY_INTERACTION,
@@ -133,6 +138,18 @@ export function AnnotationToolbar({
     textEditSession !== null ||
     selectedAnnotation?.kind === 'text' ||
     activeTool === 'text';
+  const displayedFont =
+    textEditSession?.fontFamily ??
+    (selectedAnnotation?.kind === 'text'
+      ? selectedAnnotation.fontFamily
+      : styleDefaults.fontFamily) ??
+    'helvetica';
+  const textSupport = useDocumentTextSupport(
+    displayedFont,
+    textEditSession?.text ??
+      (selectedAnnotation?.kind === 'text' ? selectedAnnotation.text : ''),
+    textContext,
+  );
   const imageContext =
     selectedAnnotation?.kind === 'image' ||
     activeTool === 'image' ||
@@ -226,6 +243,8 @@ export function AnnotationToolbar({
       fontSizeUserUnits: number;
       align: 'left' | 'center' | 'right';
       opacity: number;
+      fontFamily: DocumentFontId;
+      lineHeight: number;
     }>,
   ) => {
     if (!textEditSession) return false;
@@ -247,6 +266,16 @@ export function AnnotationToolbar({
     if (!updateTextWorkingStyle({ fontSizeUserUnits: value })) {
       updateSelectedStyle({ fontSize: value });
     }
+  };
+  const updateFontFamily = (fontFamily: DocumentFontId) => {
+    updateStyleDefaults({ fontFamily });
+    if (!updateTextWorkingStyle({ fontFamily }))
+      updateSelectedStyle({ fontFamily });
+  };
+  const updateLineHeight = (lineHeight: number) => {
+    updateStyleDefaults({ lineHeight });
+    if (!updateTextWorkingStyle({ lineHeight }))
+      updateSelectedStyle({ lineHeight });
   };
   const updateTextAlign = (value: 'left' | 'center' | 'right') => {
     updateStyleDefaults({ textAlign: value });
@@ -474,6 +503,22 @@ export function AnnotationToolbar({
         {textContext ? (
           <>
             <label className="annotation-select-label">
+              <span>Font</span>
+              <select
+                aria-label="Text font"
+                value={displayedFont}
+                onChange={(event) => {
+                  if (isDocumentFontId(event.target.value))
+                    updateFontFamily(event.target.value);
+                }}
+              >
+                <option value="helvetica">Helvetica</option>
+                <option value="noto-sans">
+                  Noto Sans · Latin, Greek, Cyrillic
+                </option>
+              </select>
+            </label>
+            <label className="annotation-select-label">
               <span>Size</span>
               <select
                 aria-label="Text font size"
@@ -488,6 +533,28 @@ export function AnnotationToolbar({
                 {[10, 12, 14, 16, 20, 24, 32].map((size) => (
                   <option key={size} value={size}>
                     {size}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="annotation-select-label">
+              <span>Lines</span>
+              <select
+                aria-label="Text line height"
+                value={
+                  textEditSession?.lineHeight ??
+                  (selectedAnnotation?.kind === 'text'
+                    ? selectedAnnotation.lineHeight
+                    : styleDefaults.lineHeight) ??
+                  1.2
+                }
+                onChange={(event) =>
+                  updateLineHeight(Number(event.target.value))
+                }
+              >
+                {[1, 1.2, 1.5, 2].map((value) => (
+                  <option key={value} value={value}>
+                    {value}
                   </option>
                 ))}
               </select>
@@ -542,6 +609,16 @@ export function AnnotationToolbar({
         <div className="annotation-error" role="alert">
           {imageError}
         </div>
+      ) : null}
+      {textContext && textSupport.status !== 'ready' ? (
+        <p
+          className={
+            textSupport.error ? 'annotation-error' : 'annotation-font-status'
+          }
+          role={textSupport.error ? 'alert' : 'status'}
+        >
+          {textSupport.error ?? 'Preparing font…'}
+        </p>
       ) : null}
       {signatureCreatorOpen ? (
         <SignatureCreator

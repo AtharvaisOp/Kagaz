@@ -1,4 +1,5 @@
 import type { PageRotation } from '../../pdf-workspace/model/types';
+import { isDocumentFontId } from '../../../lib/fonts/fontCatalog';
 
 import type {
   AnnotationDocument,
@@ -111,7 +112,7 @@ function isTextAnnotation(value: unknown): value is TextAnnotation {
     value.kind === 'text' &&
     isPdfOrientedBox(value.box) &&
     typeof value.text === 'string' &&
-    value.fontFamily === 'helvetica' &&
+    isDocumentFontId(value.fontFamily) &&
     isFiniteNumber(value.fontSizeUserUnits) &&
     value.fontSizeUserUnits > 0 &&
     isFiniteNumber(value.lineHeight) &&

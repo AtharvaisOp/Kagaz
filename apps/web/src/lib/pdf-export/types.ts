@@ -7,6 +7,7 @@ import type { AnnotationImageExportSource } from './annotations/exportContracts'
 import type { FormExportSnapshot } from './forms/types';
 import type { RedactionRegion } from '../../features/pdf-redactions/model/types';
 import type { WatermarkConfig } from '../../features/pdf-watermarks/model/types';
+import type { FontAssetSnapshot } from '../fonts/fontAssets';
 
 export interface ExportSource {
   readonly id: SourceDocumentId;
@@ -27,6 +28,8 @@ export interface ExportWorkspaceRequest {
   readonly redactionsByPage?: ReadonlyMap<string, readonly RedactionRegion[]>;
   /** Committed watermark, independently snapshotted before asynchronous work. */
   readonly watermark?: WatermarkConfig | null;
+  /** Export-owned copies of the trusted bundled document-content font bytes. */
+  readonly fontAssets?: FontAssetSnapshot;
 }
 
 export type ExportProgress =

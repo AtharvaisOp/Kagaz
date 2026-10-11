@@ -1,12 +1,14 @@
 import type { WorkspacePage } from '../../pdf-workspace/model/types';
 import { parsePageRange } from '../../pdf-workspace/model/rangeParser';
 import type { WatermarkConfig, WatermarkTarget } from './types';
+import { isDocumentFontId } from '../../../lib/fonts/fontCatalog';
 
 export function createDefaultWatermark(id: string): WatermarkConfig {
   return {
     id,
     kind: 'text',
     text: 'DRAFT',
+    fontFamily: 'helvetica',
     fontSize: 48,
     color: { r: 0.5, g: 0.5, b: 0.5 },
     opacity: 0.3,
@@ -38,6 +40,7 @@ export function snapshotWatermark(config: WatermarkConfig): WatermarkConfig {
           ...base,
           kind: 'text',
           text: config.text,
+          fontFamily: config.fontFamily ?? 'helvetica',
           fontSize: config.fontSize,
           color: Object.freeze({ ...config.color }),
         }
@@ -119,6 +122,8 @@ export function validateWatermarkModel(
       return 'A selected watermark page was deleted. Choose the pages again.';
   }
   if (config.kind === 'text') {
+    if (!isDocumentFontId(config.fontFamily ?? 'helvetica'))
+      return 'Choose a supported watermark font.';
     if (!config.text.trim()) return 'Enter watermark text.';
     if (
       config.text.length > 200 ||

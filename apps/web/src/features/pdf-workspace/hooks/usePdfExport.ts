@@ -6,6 +6,8 @@ import {
 } from '../../../lib/pdf-export/fileNames';
 import { downloadPdf } from '../../../lib/pdf-export/downloadPdf';
 import { exportWorkspace } from '../../../lib/pdf-export/exportWorkspace';
+import { requiredDocumentFonts } from '../../../lib/pdf-export/exportWorkspace';
+import { FontTextError } from '../../../lib/fonts/fontErrors';
 import { AnnotationExportError } from '../../../lib/pdf-export/annotations/exportContracts';
 import { snapshotAnnotationImageAssets } from '../../../lib/pdf-export/annotations/imageAssets';
 import {
@@ -62,10 +64,12 @@ const IDLE_EXPORT_STATE: PdfExportState = {
 };
 
 export function friendlyExportError(error: unknown): string {
+  if (error instanceof FontTextError) return error.message;
   if (error instanceof AnnotationExportError) {
     switch (error.code) {
       case 'unsupported-text-font':
-        return 'This text contains characters unsupported by the PDF export font.';
+      case 'text-overflow':
+        return error.message;
       case 'missing-image-asset':
         return 'An image annotation is no longer available for export.';
       case 'missing-signature-asset':
@@ -151,7 +155,7 @@ export function snapshotAnnotationsForPages(
 
   for (const page of pages) {
     const annotations = state.present.byPage[page.id] ?? [];
-    const pageSnapshot = Object.freeze([...annotations]);
+    const pageSnapshot = Object.freeze(structuredClone([...annotations]));
     annotationsByPage.set(page.id, pageSnapshot);
     for (const annotation of pageSnapshot) {
       if (annotation.kind === 'image' || annotation.kind === 'signature') {
@@ -251,6 +255,14 @@ export function usePdfExport(
         pageSnapshot,
         annotationState,
       );
+      const fontIds = requiredDocumentFonts({
+        annotationsByPage: annotations.annotationsByPage,
+        forms,
+        watermark: watermarkSnapshot,
+      });
+      const fontAssets = import('../../../lib/fonts/fontAssets').then(
+        (assets) => assets.snapshotFontAssets(fontIds, signal),
+      );
       // Captures asset Blobs synchronously before the first asynchronous read.
       const imageAssets = snapshotAnnotationImageAssets(
         annotationAssets,
@@ -264,20 +276,24 @@ export function usePdfExport(
         fileName: getWorkspaceExportFileName(
           sourceNamesInPageOrder(pageSnapshot, sources),
         ),
-        bytes: Promise.all([imageAssets, watermarkImageAssets]).then(
-          ([assets, watermarkImages]) =>
-            exportWorkspace(
-              {
-                pages: pageSnapshot,
-                sources,
-                forms,
-                annotationsByPage: annotations.annotationsByPage,
-                imageAssets: new Map([...assets, ...watermarkImages]),
-                redactionsByPage,
-                watermark: watermarkSnapshot,
-              },
-              { signal, onProgress },
-            ),
+        bytes: Promise.all([
+          imageAssets,
+          watermarkImageAssets,
+          fontAssets,
+        ]).then(([assets, watermarkImages, fonts]) =>
+          exportWorkspace(
+            {
+              pages: pageSnapshot,
+              sources,
+              forms,
+              annotationsByPage: annotations.annotationsByPage,
+              imageAssets: new Map([...assets, ...watermarkImages]),
+              redactionsByPage,
+              watermark: watermarkSnapshot,
+              fontAssets: fonts,
+            },
+            { signal, onProgress },
+          ),
         ),
       };
     },
