@@ -124,6 +124,16 @@ jobs:
           KAGAZ_ARTIFACT_DIR: ${{ runner.temp }}/phase4c-artifacts
           KAGAZ_REQUIRE_QPDF: '1'
         run: node scripts/verify-phase5c.mjs
+      - name: Retain frontend startup diagnostics
+        if: always()
+        env:
+          KAGAZ_ARTIFACT_DIR: ${{ runner.temp }}/phase4c-artifacts
+        run: |
+          mkdir -p "$KAGAZ_ARTIFACT_DIR"
+          if [ -f /tmp/kagaz-web.log ]; then
+            cp /tmp/kagaz-web.log "$KAGAZ_ARTIFACT_DIR/kagaz-web.log"
+            cat /tmp/kagaz-web.log
+          fi
       - name: Save verification artifacts
         if: always()
         uses: actions/upload-artifact@v4

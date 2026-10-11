@@ -18,8 +18,28 @@ const page = await context.newPage();
 page.setDefaultTimeout(15000);
 const errors = [],
   uploads = [],
-  results = [];
+  results = [],
+  consoleMessages = [],
+  failedRequests = [],
+  failedResponses = [];
 page.on('pageerror', (error) => errors.push(error.message));
+page.on('console', (message) => {
+  if (message.type() === 'error' || message.type() === 'warning') {
+    consoleMessages.push({ type: message.type(), text: message.text() });
+  }
+});
+page.on('requestfailed', (request) => {
+  failedRequests.push({
+    url: request.url(),
+    method: request.method(),
+    failure: request.failure(),
+  });
+});
+page.on('response', (response) => {
+  if (response.status() >= 400) {
+    failedResponses.push({ url: response.url(), status: response.status() });
+  }
+});
 page.on('request', (request) => {
   if (request.method() === 'POST')
     uploads.push({
@@ -446,13 +466,31 @@ try {
   );
   console.log('PHASE_4A_BROWSER_PASSED');
 } catch (error) {
+  console.error(
+    JSON.stringify(
+      { consoleMessages, failedRequests, failedResponses },
+      null,
+      2,
+    ),
+  );
   await page.screenshot({ path: `${root}/failure.png`, fullPage: true });
   console.error(await page.locator('body').innerText());
   throw error;
 } finally {
   await writeFile(
     `${root}/phase4a-results.json`,
-    JSON.stringify({ results, uploads, errors }, null, 2),
+    JSON.stringify(
+      {
+        results,
+        uploads,
+        errors,
+        consoleMessages,
+        failedRequests,
+        failedResponses,
+      },
+      null,
+      2,
+    ),
   );
   await browser.close();
 }

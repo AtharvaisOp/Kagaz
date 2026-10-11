@@ -41,8 +41,13 @@ The investigated Devanagari font is not a selectable product font. It is the
 official [Noto Sans Devanagari Regular static TTF](https://github.com/notofonts/noto-fonts/blob/main/hinted/ttf/NotoSansDevanagari/NotoSansDevanagari-Regular.ttf),
 219,212 bytes, SHA-256
 `385e78e6359a9d88a0f243d53b1209d7548361ba2194e2b9ec779bcaa7e8949d`.
-The same Noto OFL applies. Research assets and generated comparison artifacts
+The same Noto OFL applies. The research font and generated comparison artifacts
 were kept outside the repository in `%LOCALAPPDATA%/Kagaz/phase5c-research`.
+The exception is a 5,987-byte synthetic Devanagari source PDF committed for
+redaction regressions. Its embedded subset, generation method, hash and imperfect
+extraction are documented in the [fixture provenance](../apps/web/src/lib/fonts/fixtures/README.md),
+with the original [Devanagari OFL notice](../apps/web/src/lib/fonts/fixtures/OFL-Devanagari.txt).
+That fixture does not add a selectable or supported Devanagari document font.
 
 ## Installed writer behavior
 

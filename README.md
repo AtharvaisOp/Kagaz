@@ -485,8 +485,10 @@ evidence, resource measurements and remaining isolation limits.
 - Render's free service can cold-start; request timeouts and retry are intentional.
 - Canvas annotations are projected visually; the current-page semantic list is
   the keyboard and screen-reader path for existing annotations.
-- Text export is limited to glyphs supported by Standard Helvetica; custom
-  font embedding is not implemented.
+- Created text can use Standard Helvetica or the bundled Noto Sans font. Noto
+  supports the verified Latin, Latin Extended, Greek and Cyrillic subset;
+  Devanagari, RTL and other unverified scripts remain visibly rejected. See the
+  [Phase 5C support matrix](docs/phase-5c.md#script-support-matrix).
 - There are no accounts, cloud storage, or collaboration features.
 - Very large PDFs may create browser memory pressure.
 - The page-copy export workflow may not preserve every document-level feature,

@@ -244,7 +244,10 @@ adds an existing 5-second Office archive fixture timeout under load; it reports
 **187 PASS, 11 FAIL, 8 SKIP**, exactly matching the unchanged native baseline.
 The local `pnpm test` command therefore does not pass; OCR/native limitations
 are recorded above, and no thresholds, skips or assertions were changed.
-Linux CI must independently validate the native envelope.
+Linux CI run 66 independently passed the quality job at
+`ec7989fed6a68b5a3f035896b1f523d2f3ad8f02`: **798 web PASS, 206 API PASS
+and 3 sampler PASS; 1,007 PASS, 0 FAIL, 0 SKIP**. Lint, typecheck, build,
+format and diff checks also passed there.
 
 Existing real Chromium scripts Phase 3F, Phase 3G, Phase 3G lifecycle, Phase 4A
 and Phase 5A pass. Phase 4B reaches explicit OCR submission and then fails
@@ -252,6 +255,18 @@ and Phase 5A pass. Phase 4B reaches explicit OCR submission and then fails
 submission and then fails `conversion-failed` without Linux LibreOffice/seccomp.
 No container suite can run locally without Docker. All Linux native/container
 CI gates remain, and the new Phase 5C verifier is appended after Phase 5B.
+
+Run 66's production container passed Office conversion/security (8 accepted
+outputs plus attack rejections), compression, constrained-resource/cancellation/
+shutdown auditing (13 result entries) and native OCR (6 accepted outputs). It
+then failed at the first Phase 4A browser fixture: `locator.setInputFiles` could
+not find the PDF file input after the existing 15-second timeout. The saved
+screenshot is entirely blank, and uploads/results/browser page-errors are empty.
+API health and the initial frontend HTTP probe had already succeeded; that does
+not prove transformed frontend modules loaded. Phase 5A/5B/5C CI steps were skipped.
+The old workflow did not retain `/tmp/kagaz-web.log` or failed module/console
+requests, so the log alone cannot establish the startup cause. The follow-up
+adds those diagnostics without changing any assertion or timeout.
 
 The complete frozen Phase 5B run passes: **148 result rows, 104 qpdf PASS checks,
 zero browser errors**. Only the two deliberately consented compression/OCR
@@ -323,19 +338,21 @@ in the Phase 5D follow-up.
 
 Observed local Chromium timings from the accepted run (not a benchmark):
 
-| Fixture                                    | Time       | Output bytes |
-| ------------------------------------------ | ---------- | ------------ |
-| First Noto application export              | 307.9 ms   | 303,025      |
-| Warm single Latin annotation               | 67.9 ms    | 303,043      |
-| Watermark across 10 pages                  | 144.2 ms   | 307,160      |
-| Watermark across 100 pages, one font       | 204.1 ms   | 349,755      |
-| 40 annotations over 10 pages, one font     | 125.4 ms   | 308,771      |
-| Unicode form appearance and flatten        | 99.9 ms    | 303,337      |
-| Devanagari donor sanitization + foreground | 1,366.4 ms | 8,234        |
-| Unicode source + annotation sanitization   | 1,493.7 ms | 8,235        |
-| UI annotation export/download              | 431 ms     | 303,049      |
-| UI watermark export/download               | 481 ms     | 303,058      |
-| Annotation preview settled at 120% zoom    | 1,112 ms   | —            |
+| Fixture                                         | Time       | Output bytes |
+| ----------------------------------------------- | ---------- | ------------ |
+| First Noto application export                   | 307.9 ms   | 303,025      |
+| Warm single Latin annotation                    | 67.9 ms    | 303,043      |
+| Watermark across 10 pages                       | 144.2 ms   | 307,160      |
+| Watermark across 100 pages, one font            | 204.1 ms   | 349,755      |
+| 40 annotations over 10 pages, one font          | 125.4 ms   | 308,771      |
+| Unicode form appearance and flatten             | 99.9 ms    | 303,337      |
+| Devanagari donor sanitization + foreground      | 1,366.4 ms | 8,234        |
+| Unicode source + annotation sanitization        | 1,493.7 ms | 8,235        |
+| UI annotation export/download                   | 431 ms     | 303,049      |
+| UI watermark export/download                    | 481 ms     | 303,058      |
+| Annotation preview settled at 120% zoom         | 1,112 ms   | —            |
+| Cold Noto selection to settled watermark dialog | 973.2 ms   | —            |
+| Warm Apply to settled main watermark preview    | 951.0 ms   | —            |
 
 The 100-page JS heap sample changes from 171.7 MB to 224.1 MB; that transient
 52.4 MB difference is not retained memory or a peak-allocation measurement.
@@ -349,6 +366,18 @@ zero font GETs/faces; repeated selection produced exactly one font GET and one
 loaded face, with zero non-GET requests. This is one local development sample:
 client caches were fresh, while Vite compilation, OS and server caches could be
 warm. Evidence: `%LOCALAPPDATA%/Kagaz/phase5c-font-load-timing/font-load-timing.json`.
+
+The separate watermark preview sample uses a fresh Chrome 155 process/context,
+1440 × 1100 viewport and DPR 2. Valid `ÉΛЖ watermark` text was entered before
+timing Noto selection. Settlement requires the ready marker, actual green glyph
+pixels and two animation frames; Apply then reuses the warmed font/parser bytes.
+The timings include Playwright dispatch, polling, the 90 ms debounce, queued PDF
+generation and PDF.js worker/rendering overhead. One font GET, zero non-GET
+requests and zero browser errors were observed. This source-free PDF.js path
+does not create a browser FontFace. This is a single development UI sample,
+with potentially warm Vite/OS/server caches, not a production benchmark.
+Evidence and inspected screenshots are under
+`%LOCALAPPDATA%/Kagaz/phase5c-watermark-preview-timing`.
 
 ## Design compliance and accessibility
 
@@ -375,8 +404,17 @@ is unmet. `main` is still the starting SHA when last checked. Publishing a draft
 PR for this verified subset is reviewable progress, not permission to merge it.
 Implementation commit: `fba795c4c00e832c4a286224049d7ce1f5d6c104`,
 `feat: add Unicode font embedding and shared text layout`.
-Exact branch SHA and CI outcomes must be checked after publication; neither local
-Windows results nor baseline Linux success imply final branch CI success.
+Verification/report commit: `ec7989fed6a68b5a3f035896b1f523d2f3ad8f02`,
+`test: verify Unicode PDFs and document phase 5c limits`.
+Both commits were pushed successfully. The attached [draft PR #5](https://github.com/AtharvaisOp/Kagaz/pull/5)
+targets `main`. [GitHub Actions run 66](https://github.com/AtharvaisOp/Kagaz/actions/runs/38153558094),
+ID `38153558094`, tested exact head `ec7989fed6a68b5a3f035896b1f523d2f3ad8f02`:
+quality **PASS**, production-container **FAIL** at the early Phase 4A startup
+described above. Native audits passed; later redaction/watermark/Unicode gates
+were skipped. The run's 18-file artifact is preserved externally under
+`%LOCALAPPDATA%/Kagaz/phase5c-ci66`; it is not evidence of a completed branch CI run.
+Exact follow-up branch SHA and CI outcomes must be checked after publication;
+neither local results nor the passing quality job imply final branch CI success.
 No Render configuration or API deployment changes are required.
 
 ## Full acceptance checklist
