@@ -317,7 +317,9 @@ try {
   await dialog().getByRole('button', { name: 'Compress', exact: true }).click();
   await dialog()
     .getByRole('alert')
-    .filter({ hasText: /unsupported by Standard Helvetica/ })
+    .filter({
+      hasText: /Noto Sans export currently supports Latin, Greek and Cyrillic/,
+    })
     .waitFor();
   assert.equal(uploads.length, blocked);
   await dialog().getByRole('button', { name: 'Close', exact: true }).click();

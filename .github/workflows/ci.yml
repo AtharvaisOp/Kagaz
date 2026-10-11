@@ -119,6 +119,11 @@ jobs:
           KAGAZ_ARTIFACT_DIR: ${{ runner.temp }}/phase4c-artifacts
           KAGAZ_REQUIRE_QPDF: '1'
         run: node scripts/verify-phase5b.mjs
+      - name: Verify Unicode font embedding, extraction, rendering and redaction
+        env:
+          KAGAZ_ARTIFACT_DIR: ${{ runner.temp }}/phase4c-artifacts
+          KAGAZ_REQUIRE_QPDF: '1'
+        run: node scripts/verify-phase5c.mjs
       - name: Save verification artifacts
         if: always()
         uses: actions/upload-artifact@v4

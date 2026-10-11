@@ -42,9 +42,10 @@ editor work with one discard confirmation.
 - Flatten all seven annotation kinds into browser-local Download and Extract
   output while preserving page order, rotation, and z-order
 
-Text export currently uses PDF Standard Helvetica. Characters that Helvetica
-cannot encode are rejected with an actionable export error rather than being
-silently replaced.
+Text annotations offer classic PDF Standard Helvetica and bundled Noto Sans.
+Noto supports verified Latin, accented Latin, Greek and Cyrillic text, using
+embedded PDF text and NFC normalization. Unsupported scripts, missing glyphs
+and custom-font text that does not fit its box fail visibly.
 
 ## Phase 3 form capabilities
 
@@ -56,8 +57,9 @@ silently replaced.
   content alongside Kagaz annotations
 - Keep XFA, password fields, push buttons, and unknown form
   structures blocked from export with source-specific guidance
-- Reject form appearance text that Standard Helvetica cannot encode instead
-  of corrupting the exported PDF
+- Regenerate supported Unicode appearances with bundled Noto Sans when
+  Helvetica cannot encode the value, and reject unsupported scripts or unsafe
+  widget geometry instead of corrupting the exported PDF
 
 ## Phase 3F visual signatures
 
@@ -114,14 +116,40 @@ the foreground watermark is composed using only the already-sanitized raster,
 then flattened into a fresh image-only page; original page content is never
 restored. Watermarks are visual marks, not a confidentiality mechanism.
 
-Text uses Standard Helvetica and rejects unsupported characters visibly. Text
-is limited to one line of 200 characters; oversized marks are fitted within page
+Text offers Standard Helvetica and bundled Noto Sans, with unsupported
+characters rejected visibly. Text is limited to one line of 200 characters;
+oversized marks are fitted within page
 margins. Image aspect ratio and PNG transparency are preserved; non-default JPEG
 camera orientation and excessive image sizes are rejected. Reconstructed
 redacted pages retain Phase 5A's 144 DPI fidelity and accessibility limitations.
 
 See [Phase 5B architecture and verification](docs/phase-5b.md) for placement,
 asset lifecycle, independent PDF evidence and limitations.
+
+## Unicode font scope
+
+Noto Sans stays local to the browser and is loaded from Kagaz's own bundled
+asset only when needed. Export embeds the licensed static font once per output
+document for annotations and watermarks. Committed annotation and watermark
+previews use source-free PDFs rendered with the same text path as export.
+Text annotations retain alignment, size, color, opacity, line-height and shared
+Undo/Redo. Forms preserve their existing ownership, signature and flattening
+rules; newly generated Unicode appearances are checked against widget bounds.
+
+Support is limited to independent Latin, Greek and Cyrillic glyphs covered by
+the bundled font. Decomposed accents that compose under NFC export as their
+canonical composed characters. Residual combining marks, Hindi/Marathi
+Devanagari, RTL, Bengali, Tamil, CJK, emoji and directional controls are rejected.
+PDF viewers can normalize compatibility ligatures and spacing when copying text;
+the report distinguishes this from the original embedded Unicode mappings.
+Arbitrary font upload is not provided. Redacted pages remain image-only, so
+new Unicode content on those pages also loses selectable text.
+
+Phase 5C is **PARTIAL** relative to the complete multilingual mission:
+Devanagari experiments improved visual shaping but failed logical extraction.
+See [Phase 5C engineering report](docs/phase-5c.md) and
+[font investigation](docs/phase5c-font-research.md) for precise evidence,
+release status, supported scripts and the remaining work.
 
 ## Browser-local redaction
 

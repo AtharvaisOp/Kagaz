@@ -1972,6 +1972,7 @@ try {
       pageId: 'page-0',
       box: { origin: { x: 50, y: 330 }, width: 240, height: 40, rotation: 0 },
       text: 'SECRET-ANNOTATION-ALPHA',
+      fontFamily: 'helvetica',
       fontSizeUserUnits: 16,
       lineHeight: 1.2,
       align: 'left',

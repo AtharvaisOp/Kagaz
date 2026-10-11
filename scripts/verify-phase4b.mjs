@@ -218,7 +218,9 @@ try {
     .click();
   await dialog()
     .getByRole('alert')
-    .filter({ hasText: /unsupported by Standard Helvetica/ })
+    .filter({
+      hasText: /Noto Sans export currently supports Latin, Greek and Cyrillic/,
+    })
     .waitFor();
   assert.equal(uploads.length, glyphCount);
   await page.keyboard.press('Escape');
