@@ -244,17 +244,18 @@ adds an existing 5-second Office archive fixture timeout under load; it reports
 **187 PASS, 11 FAIL, 8 SKIP**, exactly matching the unchanged native baseline.
 The local `pnpm test` command therefore does not pass; OCR/native limitations
 are recorded above, and no thresholds, skips or assertions were changed.
-Linux CI run 66 independently passed the quality job at
-`ec7989fed6a68b5a3f035896b1f523d2f3ad8f02`: **798 web PASS, 206 API PASS
-and 3 sampler PASS; 1,007 PASS, 0 FAIL, 0 SKIP**. Lint, typecheck, build,
-format and diff checks also passed there.
+Linux CI quality passed at both `ec7989fed6a68b5a3f035896b1f523d2f3ad8f02`
+(run 66) and `6f73dc987818807b86a4ab26595083e8dd798045` (run 67):
+**798 web PASS, 206 API PASS and 3 sampler PASS; 1,007 PASS, 0 FAIL, 0 SKIP**.
+Frozen install, lint, typecheck, build, format and diff checks also passed.
 
 Existing real Chromium scripts Phase 3F, Phase 3G, Phase 3G lifecycle, Phase 4A
 and Phase 5A pass. Phase 4B reaches explicit OCR submission and then fails
 `ocr-failed` on this Windows environment. Phase 4C reaches explicit DOCX
 submission and then fails `conversion-failed` without Linux LibreOffice/seccomp.
-No container suite can run locally without Docker. All Linux native/container
-CI gates remain, and the new Phase 5C verifier is appended after Phase 5B.
+No container suite can run locally without Docker. The new Phase 5C verifier
+runs after Phase 5B in Linux CI; both jobs and all native/browser gates passed
+at `6f73dc9` in run 67.
 
 Run 66's production container passed Office conversion/security (8 accepted
 outputs plus attack rejections), compression, constrained-resource/cancellation/
@@ -267,6 +268,24 @@ not prove transformed frontend modules loaded. Phase 5A/5B/5C CI steps were skip
 The old workflow did not retain `/tmp/kagaz-web.log` or failed module/console
 requests, so the log alone cannot establish the startup cause. The follow-up
 adds those diagnostics without changing any assertion or timeout.
+
+Run 67 passed both jobs, including the previously failed Phase 4A startup,
+Office, compression, OCR, security/resource audits and Phase 5A/5B/5C browser
+verifier steps. The exact CI step results are public; public access to its full
+job log returned HTTP 403, so the local verifier result counts below are not
+attributed to the Linux run. The 72,620,001-byte CI artifact is available from
+that run. The original run 66 startup cause remains undetermined; it did not
+repeat in run 67 or the isolated Windows reproduction.
+
+An isolated archive of `ec7989f`, fresh frozen offline dependencies and cold
+Vite 8.2.2 did not reproduce the blank UI on Windows Node 22.17.1. The upload
+input appeared 2,127 ms after cold navigation; independent PDF.js rendering and
+extraction passed. After a 60-second API-work interval, a fresh context navigated
+in 195 ms and completed the original 15-second `setInputFiles` check in 272 ms,
+then rendered the page. Both contexts recorded zero console/page errors, failed
+requests or HTTP errors. This does not establish the Linux failure's cause.
+The isolated server was stopped and the user's checkout/server preserved.
+Evidence: `%LOCALAPPDATA%/Kagaz/phase5c-startup-repro/startup-results.json`.
 
 The complete frozen Phase 5B run passes: **148 result rows, 104 qpdf PASS checks,
 zero browser errors**. Only the two deliberately consented compression/OCR
@@ -406,15 +425,21 @@ Implementation commit: `fba795c4c00e832c4a286224049d7ce1f5d6c104`,
 `feat: add Unicode font embedding and shared text layout`.
 Verification/report commit: `ec7989fed6a68b5a3f035896b1f523d2f3ad8f02`,
 `test: verify Unicode PDFs and document phase 5c limits`.
-Both commits were pushed successfully. The attached [draft PR #5](https://github.com/AtharvaisOp/Kagaz/pull/5)
+Diagnostic/report commit: `6f73dc987818807b86a4ab26595083e8dd798045`,
+`ci: retain frontend startup diagnostics and phase evidence`.
+All three commits were pushed successfully. The attached [draft PR #5](https://github.com/AtharvaisOp/Kagaz/pull/5)
 targets `main`. [GitHub Actions run 66](https://github.com/AtharvaisOp/Kagaz/actions/runs/38153558094),
 ID `38153558094`, tested exact head `ec7989fed6a68b5a3f035896b1f523d2f3ad8f02`:
 quality **PASS**, production-container **FAIL** at the early Phase 4A startup
 described above. Native audits passed; later redaction/watermark/Unicode gates
 were skipped. The run's 18-file artifact is preserved externally under
 `%LOCALAPPDATA%/Kagaz/phase5c-ci66`; it is not evidence of a completed branch CI run.
-Exact follow-up branch SHA and CI outcomes must be checked after publication;
-neither local results nor the passing quality job imply final branch CI success.
+[GitHub Actions run 67](https://github.com/AtharvaisOp/Kagaz/actions/runs/38155219228),
+ID `38155219228`, tested exact head `6f73dc987818807b86a4ab26595083e8dd798045`:
+quality **PASS** and production-container **PASS**, including real browser/API,
+redaction, watermark and Unicode verifiers. This report update adds no
+application behavior; the documentation publication commit will itself need an
+exact-SHA CI check. No production Vercel SHA or anonymous deployment was verified.
 No Render configuration or API deployment changes are required.
 
 ## Full acceptance checklist
@@ -439,7 +464,7 @@ No Render configuration or API deployment changes are required.
 - [x] No new upload or persistence is introduced; heavy-tool consent remains explicit.
 - [x] Complete Phase 5A/5B/5C accepted verifier evidence is recorded.
 - [x] Accessibility, mobile layout and reduced motion are exercised in real Chromium.
-- [ ] All final quality/native/container gates pass at the branch release SHA.
+- [x] Quality, native and container gates pass at the last code commit `6f73dc9`.
 - [ ] Exact final-SHA GitHub Actions success is recorded.
 - [ ] Final deployment SHA and anonymous production Unicode behavior are verified.
 - [x] Documentation accurately scopes unsupported scripts and technical debt.
