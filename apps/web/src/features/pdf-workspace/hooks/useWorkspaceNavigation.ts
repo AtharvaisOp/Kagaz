@@ -113,15 +113,27 @@ export function useWorkspaceNavigation({
       )
         resumeScrollSelection(event);
     };
+    const resumeOnPagePointer = (event: PointerEvent) => {
+      if (
+        event.target instanceof Element &&
+        event.target.closest(
+          '.thumbnail-rail, dialog, button, input, textarea, select, a, [role="button"], [role="slider"]',
+        )
+      )
+        return;
+      explicitSelectionRef.current = null;
+    };
     window.addEventListener('wheel', resumeScrollSelection, { passive: true });
     window.addEventListener('touchstart', resumeScrollSelection, {
       passive: true,
     });
     window.addEventListener('keydown', resumeOnScrollKey);
+    window.addEventListener('pointerdown', resumeOnPagePointer);
     return () => {
       window.removeEventListener('wheel', resumeScrollSelection);
       window.removeEventListener('touchstart', resumeScrollSelection);
       window.removeEventListener('keydown', resumeOnScrollKey);
+      window.removeEventListener('pointerdown', resumeOnPagePointer);
     };
   }, []);
 

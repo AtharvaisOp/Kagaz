@@ -179,7 +179,7 @@ PDFs / 169 pages / 50 typed rejections / zero errors or uploads**. The Phase 5B
 download targeting the current page contained its watermark only on the third
 page. Eight immediate thumbnail-to-Watermark browser runs targeted page 3 in
 **8/8** trials; a further **8/8** with a toolbar `touchstart` also kept page 3,
-and a wheel-scroll check resumed viewport-driven selection. Web tests passed
+and wheel and page-pointer checks resumed viewport-driven selection. Web tests passed
 **798/798**; Windows API tests retained the
 known **187 PASS / 11 FAIL / 8 SKIP** local OCRmyPDF limitation, and the workspace
 sampler passed **3/3**. These local results still require exact-head Linux CI.
@@ -209,7 +209,7 @@ clicking a thumbnail selected page 3, then toolbar focus or smooth scrolling
 let the visibility observer select page 1 before Watermark captured the target.
 The first failed PDF was structurally valid but watermarked page 1. A focused
 navigation fix holds the explicit choice through programmatic scrolling and
-restores viewport-driven selection on actual wheel, touch or scroll-key input;
+restores viewport-driven selection on actual wheel, touch, scroll-key or page-pointer input;
 the verifier now asserts the dialog target before applying and retains its
 strict page-3 PDF check. No redaction or font writer behavior was changed.
 
@@ -224,7 +224,7 @@ strict page-3 PDF check. No redaction or font writer behavior was changed.
 | Merge to `main` and exact-main CI                                     | Pending                                                                                                    |
 | Vercel READY at exact main SHA, alias and anonymous browser/PDF proof | Pending                                                                                                    |
 
-The navigation-fix build's initial main chunk is 837.45 kB / 257.36 kB gzip
+The navigation-fix build's initial main chunk is 837.70 kB / 257.39 kB gzip
 versus the Phase 5B baseline's 828.64 / 254.66; lazy fontkit remains
 710.93 / 329.66 kB gzip and separate 569.20 kB Noto TTF. Repeated annotation
 and watermark appearances reuse a document font. The research Type 3 output
