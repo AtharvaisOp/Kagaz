@@ -87,6 +87,9 @@ const unsupported = [
   ['devanagari-virama', 'हिन्दी'],
   ['devanagari-mixed', 'Kagaz कागदपत्र १२३'],
   ['devanagari-joiners', 'क्\u200dष क्\u200cष'],
+  ['devanagari-repeated-conjuncts', 'प्र प्र प्र क्ष क्ष ज्ञ ज्ञ'],
+  ['devanagari-reordered-matras', 'कि की कु कृ के कै को कौ । १२३'],
+  ['devanagari-mixed-punctuation', 'Kagaz नमस्ते १२३; हिन्दी, मराठी!'],
   ['arabic', 'مرحبا'],
   ['hebrew', 'שלום'],
   ['bengali', 'বাংলা'],
@@ -1509,6 +1512,14 @@ try {
         expectedError: 'watermark-unsupported-text',
       });
     }
+    await directExport(plain, 'unsupported-devanagari-multiple-paragraphs', {
+      annotations: [
+        annotation(
+          'नमस्ते विद्यार्थी\nमराठी भाषा प्रकल्प\nकागदपत्र क्षेत्र हिन्दी',
+        ),
+      ],
+      expectedError: 'unsupported-text-font',
+    });
     for (const [name, text, width, height, size] of [
       ['short-height', 'ÉΛЖ', 420, 4, 24],
       ['wrapped-lines', 'Καλημέρα '.repeat(20), 100, 45, 24],
@@ -1667,12 +1678,24 @@ try {
     assert(devanagariProof[0].darkPixels > 500);
     assert(devanagariProof[0].textOperators > 0);
     assert(devanagariProof[0].text.includes('मराठी'));
+    const intendedDevanagari = 'विद्यार्थी क्षेत्र मराठी भाषा';
+    await assert.rejects(
+      inspect(
+        'positioned-devanagari-candidate-must-fail-logical-extraction',
+        { bytes: devanagariBytes },
+        { expected: [intendedDevanagari], fontCount: 1 },
+      ),
+      /Unicode extraction mismatch/,
+      'A visually positioned Devanagari PDF must not be accepted when its text order is wrong.',
+    );
     results.push({
       name: 'positioned-devanagari-donor-present',
       text: devanagariProof[0].text,
       darkPixels: devanagariProof[0].darkPixels,
       fontCount: devanagariFonts.length,
-      note: 'Investigative source only; glyph positions are real, but pre-matra extraction is incomplete. No application support claim.',
+      intendedText: intendedDevanagari,
+      extractionRejected: true,
+      note: 'Investigative source only; glyph positions are real, but pre-matra extraction is incomplete. The extraction quality gate rejects it. No application support claim.',
     });
     await directExport(
       devanagariSource,
