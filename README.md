@@ -136,20 +136,34 @@ Text annotations retain alignment, size, color, opacity, line-height and shared
 Undo/Redo. Forms preserve their existing ownership, signature and flattening
 rules; newly generated Unicode appearances are checked against widget bounds.
 
-Support is limited to independent Latin, Greek and Cyrillic glyphs covered by
-the bundled font. Decomposed accents that compose under NFC export as their
-canonical composed characters. Residual combining marks, Hindi/Marathi
-Devanagari, RTL, Bengali, Tamil, CJK, emoji and directional controls are rejected.
+The **scoped Unicode release** supports the verified subset below, subject to
+actual glyph coverage and the documented form-appearance limits:
+
+| Created text                                                                                     | Annotation / watermark        | Regenerated safe form appearance                             |
+| ------------------------------------------------------------------------------------------------ | ----------------------------- | ------------------------------------------------------------ |
+| Basic Latin                                                                                      | Helvetica or Noto Sans        | Verified                                                     |
+| Accented and Extended Latin                                                                      | Noto Sans                     | Noto Sans when Helvetica cannot encode it                    |
+| Greek and Cyrillic                                                                               | Noto Sans                     | Noto Sans                                                    |
+| Decomposed accents composable under NFC                                                          | Canonical composed equivalent | Canonical equivalent where source semantics can be preserved |
+| Hindi/Marathi Devanagari, RTL, Bengali, Tamil, CJK, emoji, residual combining marks and controls | Visible rejection             | Visible rejection                                            |
+
+Noto Sans is **not** a claim that every script or character it contains is
+supported. The writer validates each glyph and rejects runs needing unverified
+shaping. User font upload is not offered.
 PDF viewers can normalize compatibility ligatures and spacing when copying text;
 the report distinguishes this from the original embedded Unicode mappings.
-Arbitrary font upload is not provided. Redacted pages remain image-only, so
+Redacted pages remain image-only, so
 new Unicode content on those pages also loses selectable text.
 
-Phase 5C is **PARTIAL** relative to the complete multilingual mission:
-Devanagari experiments improved visual shaping but failed logical extraction.
+The original full Phase 5C mission is **PARTIAL**: Hindi/Marathi Devanagari
+remains unsupported. Recovery research produced a promising standalone Type 3
+PDF, but PDF.js still loses joiners, and that writer is not integrated into
+Kagaz. The Latin/Greek/Cyrillic subset has separate verification and can be
+released only after final review, exact-SHA CI and production checks.
 See [Phase 5C engineering report](docs/phase-5c.md) and
-[font investigation](docs/phase5c-font-research.md) for precise evidence,
-release status, supported scripts and the remaining work.
+[Phase 5C-R release note](docs/phase-5c-recovery.md) for the supported matrix,
+evidence and release status; [font investigation](docs/phase5c-font-research.md)
+records the Devanagari experiments.
 
 ## Browser-local redaction
 
@@ -503,6 +517,7 @@ evidence, resource measurements and remaining isolation limits.
 - Phase 4D — [heavy-tool hardening and measured resource audit](docs/phase-4d.md) (complete)
 - Phase 5A — [true browser-local redaction](docs/phase-5a.md) (complete)
 - Phase 5B — [browser-local text and image watermarking](docs/phase-5b.md) (complete)
+- Phase 5C-R — [scoped Unicode release and Devanagari recovery](docs/phase-5c-recovery.md) (release verification pending)
 
 The browser-local architecture remains the default for operations that can be
 performed safely on the device.

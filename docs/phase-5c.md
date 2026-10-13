@@ -5,8 +5,12 @@
 **PARTIAL relative to the full mission.** The implemented subset covers verified
 Latin, accented Latin, Greek and Cyrillic text. Hindi/Marathi Devanagari and RTL
 creation remain rejected because the investigated writer alternatives do not
-reliably preserve logical extraction. This branch must not be merged or described
-as a completed production release under the requested acceptance rules.
+reliably preserve logical extraction across the product's PDF.js path. Phase 5C-R
+separates this unmet full target from a possible **scoped Unicode release** of the
+verified subset. That narrower release may be reviewed and merged only after its
+own final-SHA gates pass; it must never be described as universal Unicode or as
+completion of the original Devanagari target. See the
+[recovery decision and evidence](phase-5c-recovery.md).
 
 No API, native processing, Render, persistence, account, analytics or upload
 architecture was added. Ordinary editing, font selection, Download and Extract
@@ -88,20 +92,20 @@ sandbox. No OS-installed font or external font CDN is needed for PDF output.
 
 ## Script support matrix
 
-| Script/content                                               | Created text annotations and watermarks | Regenerated safe form appearances                             | Evidence/policy                                                                       |
-| ------------------------------------------------------------ | --------------------------------------- | ------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
-| Basic Latin                                                  | Verified Helvetica/Noto                 | Verified                                                      | Real extraction, font dictionaries and rendered glyph checks                          |
-| Accented and Latin Extended                                  | Noto, subject to exact glyph coverage   | Noto when Helvetica cannot encode                             | `Été Ångström Łódź café`, form equivalents                                            |
-| Greek                                                        | Noto, subject to glyph coverage         | Noto                                                          | `Ελληνικά Καλημέρα`, `Αθήνα`                                                          |
-| Cyrillic                                                     | Noto, subject to glyph coverage         | Noto                                                          | `Привет мир Україна`, `Москва`                                                        |
-| Decomposed accents that compose under NFC                    | Verified canonical equivalent           | Text values normalize; choice labels requiring rewrite reject | `Cafe\u0301 A\u030a` extracts as `Café Å`                                             |
-| Residual combining marks                                     | Rejected visibly                        | Rejected                                                      | Required mark positioning is outside supported writer semantics                       |
-| Hindi/Marathi Devanagari                                     | Rejected visibly                        | Rejected                                                      | Thirteen actual investigation strings, five writer alternatives fail semantic quality |
-| Arabic/Hebrew RTL                                            | Rejected visibly                        | Rejected                                                      | Joining/bidi writer and logical extraction not implemented                            |
-| Bengali/Tamil                                                | Rejected visibly                        | Rejected                                                      | No verified shaping path                                                              |
-| CJK/emoji                                                    | Rejected visibly                        | Rejected                                                      | No suitable supported bundled glyph path                                              |
-| Joiners, directional controls, private/unassigned characters | Rejected                                | Rejected                                                      | Outside the independent-glyph policy                                                  |
-| Other scripts, variable/color/uploaded fonts                 | Not supported or offered                | Not supported                                                 | No broader language/font claim                                                        |
+| Script/content                                               | Created text annotations and watermarks | Regenerated safe form appearances                             | Evidence/policy                                                                                                         |
+| ------------------------------------------------------------ | --------------------------------------- | ------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| Basic Latin                                                  | Verified Helvetica/Noto                 | Verified                                                      | Real extraction, font dictionaries and rendered glyph checks                                                            |
+| Accented and Latin Extended                                  | Noto, subject to exact glyph coverage   | Noto when Helvetica cannot encode                             | `Été Ångström Łódź café`, form equivalents                                                                              |
+| Greek                                                        | Noto, subject to glyph coverage         | Noto                                                          | `Ελληνικά Καλημέρα`, `Αθήνα`                                                                                            |
+| Cyrillic                                                     | Noto, subject to glyph coverage         | Noto                                                          | `Привет мир Україна`, `Москва`                                                                                          |
+| Decomposed accents that compose under NFC                    | Verified canonical equivalent           | Text values normalize; choice labels requiring rewrite reject | `Cafe\u0301 A\u030a` extracts as `Café Å`                                                                               |
+| Residual combining marks                                     | Rejected visibly                        | Rejected                                                      | Required mark positioning is outside supported writer semantics                                                         |
+| Hindi/Marathi Devanagari                                     | Rejected visibly                        | Rejected                                                      | Five conventional writer alternatives failed; a later Type 3 synthetic proof is not integrated and PDF.js drops joiners |
+| Arabic/Hebrew RTL                                            | Rejected visibly                        | Rejected                                                      | Joining/bidi writer and logical extraction not implemented                                                              |
+| Bengali/Tamil                                                | Rejected visibly                        | Rejected                                                      | No verified shaping path                                                                                                |
+| CJK/emoji                                                    | Rejected visibly                        | Rejected                                                      | No suitable supported bundled glyph path                                                                                |
+| Joiners, directional controls, private/unassigned characters | Rejected                                | Rejected                                                      | Outside the independent-glyph policy                                                                                    |
+| Other scripts, variable/color/uploaded fonts                 | Not supported or offered                | Not supported                                                 | No broader language/font claim                                                                                          |
 
 Safe unchanged source appearances are preserved under existing form flattening
 rules; this does not imply those source scripts can be edited or regenerated.
@@ -136,6 +140,16 @@ The installed Indic shaper also required a research-only external regenerator
 runtime shim. No shim, Devanagari selectable font or speculative shaping dependency
 was shipped. The [research record](phase5c-font-research.md) contains exact hashes,
 primary references, visual counts and the future logical-CID writer requirements.
+
+Phase 5C-R tested a sixth, distinct **research-only Type 3 writer** that draws
+each shaped grapheme outline and assigns occurrence-specific scalar codes. Its
+three-page PDF passes qpdf; PDFMiner and pypdf extract all 21 source lines exactly,
+while PDF.js drops ZWJ/ZWNJ on three lines even with normalization disabled.
+PDFium's independent render is close to the browser reference for the tested
+pages. This narrows the writer problem but does not qualify Devanagari for the
+editor, forms, previews, snapshots or release. Exact artifacts, extraction outputs
+and the upstream PDF.js category bug are recorded in the
+[recovery note](phase-5c-recovery.md) and [research record](phase5c-font-research.md).
 
 ## Metrics, layout and preview
 
@@ -323,6 +337,15 @@ pixels at 2x rendering. UI preview/export bounds use a 2.5% page-extent toleranc
 these are geometry/rendering tolerances, not permission for incorrect extracted
 letters. Tested ordinary strings must extract as their expected NFC text.
 
+Phase 5C-R extended this verifier without enabling Devanagari. The local real-
+Chromium result is **122 rows, 49 actual PDFs, 169 independently rendered and
+extracted pages, 50 typed safe rejections, zero browser errors/uploads**. Its
+50 qpdf-PASS result rows include one extra structurally valid, deliberately
+wrong semantic counterexample; they are not 50 successful application exports.
+This recovery result remains subject to final exact-SHA Linux CI. See the
+[recovery ledger](phase-5c-recovery.md) for synthetic Type 3 results and the
+separate scoped release decision.
+
 ## Performance and bundle budget
 
 The baseline initial main chunk is 828.64 kB / 254.66 kB gzip. The measured
@@ -417,18 +440,23 @@ screenshots alone.
 
 ## Git, CI and deployment boundary
 
-The phase remains on `codex/phase-5c-unicode-fonts`. No merge or production
-deployment has been performed: the full mission's Devanagari extraction criterion
-is unmet. `main` is still the starting SHA when last checked. Publishing a draft
-PR for this verified subset is reviewable progress, not permission to merge it.
+The recovery started from `8584d534d973b13b095827ec42ed058ffb29303f`
+on `codex/phase-5c-unicode-fonts`; `main` was
+`79c79c2736baddda3b391934a97e98c9bc5bc796`. The full Devanagari mission
+remains partial. The scoped Latin/Greek/Cyrillic branch can proceed through
+review, merge and production verification if its own final gates pass. This
+document alone is not evidence that those release steps have occurred.
 Implementation commit: `fba795c4c00e832c4a286224049d7ce1f5d6c104`,
 `feat: add Unicode font embedding and shared text layout`.
 Verification/report commit: `ec7989fed6a68b5a3f035896b1f523d2f3ad8f02`,
 `test: verify Unicode PDFs and document phase 5c limits`.
 Diagnostic/report commit: `6f73dc987818807b86a4ab26595083e8dd798045`,
 `ci: retain frontend startup diagnostics and phase evidence`.
-All three commits were pushed successfully. The attached [draft PR #5](https://github.com/AtharvaisOp/Kagaz/pull/5)
-targets `main`. [GitHub Actions run 66](https://github.com/AtharvaisOp/Kagaz/actions/runs/38153558094),
+Final prior-phase report commit:
+`8584d534d973b13b095827ec42ed058ffb29303f`,
+`docs: record verified phase 5c CI and limitations`.
+All four prior commits were pushed successfully. [PR #5](https://github.com/AtharvaisOp/Kagaz/pull/5)
+targets `main`; it was draft at the start of recovery. [GitHub Actions run 66](https://github.com/AtharvaisOp/Kagaz/actions/runs/38153558094),
 ID `38153558094`, tested exact head `ec7989fed6a68b5a3f035896b1f523d2f3ad8f02`:
 quality **PASS**, production-container **FAIL** at the early Phase 4A startup
 described above. Native audits passed; later redaction/watermark/Unicode gates
@@ -437,9 +465,14 @@ were skipped. The run's 18-file artifact is preserved externally under
 [GitHub Actions run 67](https://github.com/AtharvaisOp/Kagaz/actions/runs/38155219228),
 ID `38155219228`, tested exact head `6f73dc987818807b86a4ab26595083e8dd798045`:
 quality **PASS** and production-container **PASS**, including real browser/API,
-redaction, watermark and Unicode verifiers. This report update adds no
-application behavior; the documentation publication commit will itself need an
-exact-SHA CI check. No production Vercel SHA or anonymous deployment was verified.
+redaction, watermark and Unicode verifiers.
+[GitHub Actions run 68](https://github.com/AtharvaisOp/Kagaz/actions/runs/38257585289)
+tested exact recovery starting SHA `8584d534d973b13b095827ec42ed058ffb29303f`:
+both jobs succeeded, with 798 web, 206 API and 3 sampler tests (1,007 PASS,
+0 FAIL, 0 SKIP), plus Phase 5A/5B/5C browser gates. A subsequent recovery commit
+requires its **own** exact-SHA CI result before release. No recovery merge,
+final-main CI, Vercel READY commit/alias or anonymous production proof is recorded
+here; the [recovery note](phase-5c-recovery.md) is the current release ledger.
 No Render configuration or API deployment changes are required.
 
 ## Full acceptance checklist
@@ -464,18 +497,21 @@ No Render configuration or API deployment changes are required.
 - [x] No new upload or persistence is introduced; heavy-tool consent remains explicit.
 - [x] Complete Phase 5A/5B/5C accepted verifier evidence is recorded.
 - [x] Accessibility, mobile layout and reduced motion are exercised in real Chromium.
-- [x] Quality, native and container gates pass at the last code commit `6f73dc9`.
-- [ ] Exact final-SHA GitHub Actions success is recorded.
+- [x] Quality, native and container gates passed at recovery starting SHA `8584d53` in run 68.
+- [ ] Recovery final-SHA GitHub Actions success is recorded.
 - [ ] Final deployment SHA and anonymous production Unicode behavior are verified.
 - [x] Documentation accurately scopes unsupported scripts and technical debt.
 
 ## Next phase / engineer handoff
 
-Do not put Devanagari in the menu by adding font bytes alone. It requires an
-occurrence-aware logical CID/ToUnicode writer, real glyph positioning and cluster
-mapping, dependable extraction in PDF.js and another parser, mixed-script fonts,
-and full form/preview/redaction tests. ActualText alone did not solve the tested
-path. Keep the unsupported-script errors until that evidence exists.
+Do not put Devanagari in the menu by adding font bytes alone. The Type 3 proof
+shows a possible occurrence-aware glyph-outline/scalar-code strategy, but its
+PDF.js joiner loss, unmeasured selection geometry and per-occurrence resource cost
+need resolution. A production extension must prove shaping, logical extraction
+and selection in PDF.js and another parser, mixed-script runs, wrapping/rotation,
+form appearance, previews, history, snapshots, cancellation and redaction.
+`ActualText` alone did not solve the tested path. Keep unsupported-script errors
+until those checks pass in real Kagaz downloads.
 
 Phase 5D should profile browser memory and large-PDF performance: repeated
 source-free preview document/worker setup, font parsing/snapshot copies, visible
