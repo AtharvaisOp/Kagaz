@@ -82,7 +82,11 @@ export function useWorkspaceNavigation({
     const resumeScrollSelection = (event: Event) => {
       if (
         event.target instanceof Element &&
-        event.target.closest('.thumbnail-rail, dialog')
+        (event.target.closest('.thumbnail-rail, dialog') ||
+          (event.type === 'touchstart' &&
+            event.target.closest(
+              'button, input, textarea, select, a, [role="button"], [role="slider"]',
+            )))
       )
         return;
       explicitSelectionRef.current = null;

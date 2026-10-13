@@ -171,6 +171,19 @@ also structurally valid. This local verifier pass does not replace final Linux
 CI or production inspection. The changed verifier must be exercised at its
 committed SHA in the full pipeline.
 
+An additional full local regression at the navigation-fix head passed Phase 5A
+**70 rows / 42 qpdf-checked PDFs / zero errors or uploads**, Phase 5B **148 rows /
+104 qpdf-PASS result rows, including two negative controls / zero browser errors** (the two POST requests were the
+explicitly consented heavy-tool cases), and Phase 5C **122 rows / 49 application
+PDFs / 169 pages / 50 typed rejections / zero errors or uploads**. The Phase 5B
+download targeting the current page contained its watermark only on the third
+page. Eight immediate thumbnail-to-Watermark browser runs targeted page 3 in
+**8/8** trials; a further **8/8** with a toolbar `touchstart` also kept page 3,
+and a wheel-scroll check resumed viewport-driven selection. Web tests passed
+**798/798**; Windows API tests retained the
+known **187 PASS / 11 FAIL / 8 SKIP** local OCRmyPDF limitation, and the workspace
+sampler passed **3/3**. These local results still require exact-head Linux CI.
+
 [GitHub Actions run 68](https://github.com/AtharvaisOp/Kagaz/actions/runs/38257585289)
 at **exact starting SHA** `8584d534d973b13b095827ec42ed058ffb29303f`
 passed both jobs: 798 web + 206 API + 3 sampler = **1,007 PASS / 0 FAIL /
@@ -181,19 +194,38 @@ without changing assertions or timeouts. The new Phase 5C-R verifier extension
 and documentation need **new** exact-head CI evidence; previous run 68 cannot
 certify uncommitted recovery work.
 
+[Run 69](https://github.com/AtharvaisOp/Kagaz/actions/runs/38351148980)
+at `de6fe6c2f1dd90cecac6eae319c94c000ad07263` passed quality (**1,007/1,007
+tests**) and the container's native, resource and editor/API checks, then failed
+Phase 5A at the second zoom-drawn redaction: measured width `227.55208333333334`
+versus expected `220` PDF units. Phase 5B/5C were consequently skipped. The
+same Phase 5A gate passed locally on the later navigation-fix tree. The exact
+Linux zoom deviation remains unexplained; its assertion now records the before/
+after page bounds and viewport/scroll state if it recurs, without weakening
+the accepted geometry tolerance.
+
+The local Phase 5B rerun also exposed an inherited wrong-current-page UI race:
+clicking a thumbnail selected page 3, then toolbar focus or smooth scrolling
+let the visibility observer select page 1 before Watermark captured the target.
+The first failed PDF was structurally valid but watermarked page 1. A focused
+navigation fix holds the explicit choice through programmatic scrolling and
+restores viewport-driven selection on actual wheel, touch or scroll-key input;
+the verifier now asserts the dialog target before applying and retains its
+strict page-3 PDF check. No redaction or font writer behavior was changed.
+
 | Release gate                                                          | State in this recovery record                                                                              |
 | --------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
 | Scoped product implementation                                         | Preserved; Devanagari still visibly rejected                                                               |
 | Adversarial verifier extension                                        | Local Chromium PASS: 122 rows, 49 actual PDFs, 169 pages, 50 typed rejections, zero browser errors/uploads |
-| Frozen install, lint, typecheck, build, format/diff, sampler          | Passed at starting SHA; rerun at recovery head                                                             |
-| Phase 5A/5B/5C and native/container gates                             | Passed in run 68 at starting SHA; rerun at recovery head                                                   |
-| PR #5 accurately retitled, reviewed and ready                         | Pending                                                                                                    |
-| Scoped branch exact-SHA CI                                            | Pending                                                                                                    |
+| Frozen install, lint, typecheck, build, format/diff, sampler          | Local gates pass; final recovery-head Linux CI pending                                                     |
+| Phase 5A/5B/5C and native/container gates                             | Local browser gates pass; run 69 failed Phase 5A zoom geometry; final-head CI pending                      |
+| PR #5 accurately retitled, reviewed and ready                         | Retitled and rescoped; still draft pending final CI                                                        |
+| Scoped branch exact-SHA CI                                            | Pending; run 69 was not accepted                                                                           |
 | Merge to `main` and exact-main CI                                     | Pending                                                                                                    |
 | Vercel READY at exact main SHA, alias and anonymous browser/PDF proof | Pending                                                                                                    |
 
-The current branch's bundle measurement is the prior phase's: initial main chunk
-836.45 kB / 257.09 kB gzip versus 828.64 / 254.66 baseline; lazy fontkit
+The navigation-fix build's initial main chunk is 837.45 kB / 257.36 kB gzip
+versus the Phase 5B baseline's 828.64 / 254.66; lazy fontkit remains
 710.93 / 329.66 kB gzip and separate 569.20 kB Noto TTF. Repeated annotation
 and watermark appearances reuse a document font. The research Type 3 output
 has **no product bundle cost**, because neither its writer nor its Devanagari
@@ -203,7 +235,9 @@ remain future work.
 
 ## Design and engineering handoff
 
-No recovery research modified the UI. The verified subset continues to follow
+The Devanagari research did not add UI or a font choice. The focused navigation
+fix changes selection behavior while preserving the existing layout and motion.
+The verified subset continues to follow
 `design.md`: dark compact workspace, orange primary actions, cyan visible focus,
 responsive toolbar/dialog controls. The original Phase 5C UI implementation
 used the required gptTaste skill for restrained focus, loading/error feedback
@@ -232,6 +266,7 @@ focused malformed-PNG availability hardening described above.
 - [x] Verified Latin/Greek/Cyrillic scope and unsupported-script rejections remain explicit.
 - [x] Redaction invariants and inherited ordinary-PNG issue are documented separately.
 - [x] Recovery verifier extension has local accepted counts and adversarial extraction evidence.
+- [x] Local Phase 5A/5B/5C, eight quick-current-page trials, and web regression tests pass at the navigation-fix tree.
 - [ ] Complete recovery regression envelope, including native/container gates, passes at a committed SHA.
 - [ ] Recovery branch final-SHA quality/native/container CI passes.
 - [ ] PR #5 accurately describes the narrower release and is ready for review.
