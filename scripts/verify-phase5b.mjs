@@ -2463,6 +2463,11 @@ try {
     });
     await page.locator('.thumbnail-select').nth(2).click();
     await configureWatermark({ scope: 'current' });
+    assert.equal(
+      await watermarkDialog().locator('.watermark-target-status').innerText(),
+      '1 of 9 pages targeted · 3',
+      'the current-page watermark target changed during thumbnail navigation',
+    );
     await applyWatermark();
     await inspect('ui-current-page', await download('ui-current-page'), {
       watermark: rangeWatermark,
