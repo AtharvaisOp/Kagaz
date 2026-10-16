@@ -92,16 +92,15 @@ export function useWorkspaceNavigation({
       explicitSelectionRef.current = null;
     };
     const resumeOnScrollKey = (event: KeyboardEvent) => {
-      if (event.altKey || event.ctrlKey || event.metaKey) return;
       if (
-        event.target instanceof Element &&
-        event.target.closest(
-          'button, input, textarea, select, a, dialog, [role="button"], [role="slider"], [contenteditable="true"]',
-        )
+        event.altKey ||
+        event.ctrlKey ||
+        event.metaKey ||
+        event.defaultPrevented
       )
         return;
       if (
-        [
+        ![
           'ArrowUp',
           'ArrowDown',
           'PageUp',
@@ -111,7 +110,21 @@ export function useWorkspaceNavigation({
           ' ',
         ].includes(event.key)
       )
-        resumeScrollSelection(event);
+        return;
+      if (
+        event.target instanceof Element &&
+        event.target.closest(
+          '.thumbnail-rail, dialog, input, textarea, select, [role="slider"], [contenteditable="true"]',
+        )
+      )
+        return;
+      if (
+        event.key === ' ' &&
+        event.target instanceof Element &&
+        event.target.closest('button, a, [role="button"]')
+      )
+        return;
+      resumeScrollSelection(event);
     };
     const resumeOnPagePointer = (event: PointerEvent) => {
       if (

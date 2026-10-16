@@ -1370,8 +1370,9 @@ async function configureWatermark({
   ranges = null,
   selected = null,
   image = null,
+  open = true,
 } = {}) {
-  await button('Watermark').click();
+  if (open) await button('Watermark').click();
   await watermarkDialog().waitFor();
   await watermarkDialog()
     .getByRole('radio', {
@@ -2475,6 +2476,65 @@ try {
       targeted: [2],
       pageCount: 9,
     });
+    await page.locator('.thumbnail-select').nth(2).click();
+    await button('Watermark').evaluate((trigger) =>
+      trigger.focus({ preventScroll: true }),
+    );
+    const beforeKeyboardScroll = await page.evaluate(() => scrollY);
+    await page.keyboard.press('PageDown');
+    await page.keyboard.press('PageDown');
+    await page.waitForFunction(
+      (before) => scrollY > before + 100,
+      beforeKeyboardScroll,
+    );
+    await page.waitForFunction(() => {
+      const selectedIndex = Array.from(
+        document.querySelectorAll('.thumbnail-select'),
+      ).findIndex(
+        (thumbnail) => thumbnail.getAttribute('aria-current') === 'page',
+      );
+      const shells = Array.from(document.querySelectorAll('.pdf-page-shell'));
+      if (selectedIndex <= 2 || !shells[selectedIndex]) return false;
+
+      const bandTop = innerHeight * 0.12;
+      const bandBottom = innerHeight * 0.44;
+      const visibleRatio = (shell) => {
+        const rect = shell.getBoundingClientRect();
+        const overlap = Math.max(
+          0,
+          Math.min(rect.bottom, bandBottom) - Math.max(rect.top, bandTop),
+        );
+        return overlap / Math.max(rect.height, 1);
+      };
+      const selectedRatio = visibleRatio(shells[selectedIndex]);
+      return (
+        selectedRatio > 0 &&
+        visibleRatio(shells[2]) === 0 &&
+        selectedRatio >= Math.max(...shells.map(visibleRatio)) - 0.001
+      );
+    });
+    const keyboardSelectedIndex = await page.evaluate(() =>
+      Array.from(document.querySelectorAll('.thumbnail-select')).findIndex(
+        (thumbnail) => thumbnail.getAttribute('aria-current') === 'page',
+      ),
+    );
+    await page.keyboard.press('Space');
+    await configureWatermark({ scope: 'current', open: false });
+    assert.equal(
+      await watermarkDialog().locator('.watermark-target-status').innerText(),
+      `1 of 9 pages targeted · ${keyboardSelectedIndex + 1}`,
+      'keyboard scrolling from toolbar focus changed the current-page target',
+    );
+    await applyWatermark();
+    await inspect(
+      'ui-keyboard-current-page',
+      await download('ui-keyboard-current-page'),
+      {
+        watermark: rangeWatermark,
+        targeted: [keyboardSelectedIndex],
+        pageCount: 9,
+      },
+    );
     await fresh(publicSource);
     await configureWatermark();
     await applyWatermark();
