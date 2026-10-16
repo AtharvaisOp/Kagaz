@@ -49,6 +49,7 @@ page.on('request', (request) => {
 });
 const button = (name) => page.getByRole('button', { name, exact: true });
 const dialog = () => page.getByRole('dialog');
+let firstFresh = true;
 async function fixture(
   name,
   { forms = false, pages = 1, unsafe = false, image = true } = {},
@@ -95,10 +96,41 @@ async function fixture(
   return path;
 }
 async function fresh(files) {
-  await page.goto(web);
-  await page
-    .locator('input[type=file][accept="application/pdf,.pdf"]')
-    .setInputFiles(files);
+  const initialLoad = firstFresh;
+  firstFresh = false;
+  const failedRequestCount = failedRequests.length;
+  const failedResponseCount = failedResponses.length;
+  const pageErrorCount = errors.length;
+  const uploadInput = page.locator(
+    'input[type=file][accept="application/pdf,.pdf"]',
+  );
+  try {
+    await page.goto(web);
+    await uploadInput.setInputFiles(files);
+  } catch (error) {
+    const interruptedRequests = failedRequests.slice(failedRequestCount);
+    const interruptedByNetworkChange =
+      initialLoad &&
+      interruptedRequests.length > 0 &&
+      failedResponses.length === failedResponseCount &&
+      errors.length === pageErrorCount &&
+      interruptedRequests.every(
+        (request) =>
+          request.method === 'GET' &&
+          new URL(request.url).origin === new URL(web).origin &&
+          request.failure?.errorText === 'net::ERR_NETWORK_CHANGED',
+      );
+    if (!interruptedByNetworkChange) throw error;
+    const recovery = {
+      name: 'initial-vite-network-change-reload',
+      failedModuleRequests: interruptedRequests.length,
+      originalError: String(error),
+    };
+    console.warn('PHASE_4A_BROWSER_NETWORK_RECOVERY', JSON.stringify(recovery));
+    results.push(recovery);
+    await page.goto(web);
+    await uploadInput.setInputFiles(files);
+  }
   await page.locator('.pdf-canvas[data-ready=true]').first().waitFor();
   await page.waitForFunction(
     () => !document.body.innerText.includes('Checking this PDF'),

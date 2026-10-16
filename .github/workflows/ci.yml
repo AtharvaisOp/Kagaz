@@ -102,6 +102,7 @@ jobs:
           KAGAZ_ARTIFACT_DIR: ${{ runner.temp }}/phase4c-artifacts
           KAGAZ_WEB_URL: http://127.0.0.1:5173
         run: |
+          ip -ts monitor link route > /tmp/kagaz-network-events.log 2>&1 &
           pnpm --filter @kagaz/web dev --host 127.0.0.1 > /tmp/kagaz-web.log 2>&1 &
           for i in $(seq 1 30); do curl -fsS http://127.0.0.1:5173/ > /dev/null && break; sleep 1; done
           node scripts/verify-phase4b-container.mjs
@@ -134,6 +135,10 @@ jobs:
           if [ -f /tmp/kagaz-web.log ]; then
             cp /tmp/kagaz-web.log "$KAGAZ_ARTIFACT_DIR/kagaz-web.log"
             cat /tmp/kagaz-web.log
+          fi
+          if [ -f /tmp/kagaz-network-events.log ]; then
+            cp /tmp/kagaz-network-events.log "$KAGAZ_ARTIFACT_DIR/kagaz-network-events.log"
+            cat /tmp/kagaz-network-events.log
           fi
       - name: Save verification artifacts
         if: always()

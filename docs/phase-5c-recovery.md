@@ -184,9 +184,9 @@ and wheel and page-pointer checks resumed viewport-driven selection. Web tests p
 known **187 PASS / 11 FAIL / 8 SKIP** local OCRmyPDF limitation, and the workspace
 sampler passed **3/3**. These local results still require exact-head Linux CI.
 
-The final redaction-transition and verifier patch repeated the full local
+The final redaction-transition, navigation and verifier patch repeated the full local
 browser gates: Phase 5A **70 rows / 42 qpdf-PASS PDFs / zero errors or uploads**,
-Phase 5B **148 rows / 104 qpdf-PASS results / zero browser errors / two consented
+Phase 5B **149 rows / 105 qpdf-PASS results / zero browser errors / two consented
 heavy-tool requests**, and Phase 5C **122 rows / 49 application PDFs / 169
 inspected pages / 50 typed rejections / zero browser errors or uploads**. The
 extra qpdf-PASS Phase 5C result is an intentionally wrong Devanagari PDF that
@@ -235,9 +235,22 @@ proven. Run 66's earlier blank page lacked these diagnostics, so its cause
 cannot be retroactively assigned. The failure is retained in the ledger and
 requires a later exact-head complete CI pass. The CI step now sends Phase 4A/B/C
 to `127.0.0.1`, matching Vite's bind address and the Phase 5 verifiers, rather
-than using the `localhost` default. This removes one DNS/address-family variable;
-it is a focused mitigation, not a proven explanation for `ERR_NETWORK_CHANGED`.
-No verifier assertion or timeout was weakened.
+than using the `localhost` default.
+
+[Run 72](https://github.com/AtharvaisOp/Kagaz/actions/runs/38922348541)
+at `07894dfec387c93478c2bab3d2f82b41c8168c0a` passed quality (**798 web +
+206 API + 3 sampler = 1,007/1,007 tests**) and the native/container/resource
+audits. It then reproduced the same first Phase 4A blank page on `127.0.0.1`:
+many same-origin Vite module GETs ended in `net::ERR_NETWORK_CHANGED`, no HTTP
+error response or product exception was recorded, and the file input never
+mounted. Phase 5A/B/C were skipped. The address-family change did not resolve
+the transport interruption. The trigger remains unproven, though Docker's
+network interface changes are a testable hypothesis. The CI step now records
+timestamped link/route events. The Phase 4A verifier makes at most one logged
+reload of the **initial** page only when every failed same-origin GET is
+`ERR_NETWORK_CHANGED` and there are no HTTP or page errors. It fails on any
+other startup problem or a failed reload; no PDF, security or UI assertion was
+weakened. A new exact-head full CI pass is still required.
 
 The local Phase 5B rerun also exposed an inherited wrong-current-page UI race:
 clicking a thumbnail selected page 3, then toolbar focus or smooth scrolling
@@ -247,6 +260,17 @@ navigation fix holds the explicit choice through programmatic scrolling and
 restores viewport-driven selection on actual wheel, touch, scroll-key or page-pointer input;
 the verifier now asserts the dialog target before applying and retains its
 strict page-3 PDF check. No redaction export or font writer behavior was changed.
+Final review exposed another path through the same selection guard: PageDown
+from a focused toolbar button scrolled the visible page while the explicit
+thumbnail choice stayed pinned. A six-page real-Chromium reproduction moved
+from page 3 to page 5 without changing `aria-current`. The key handler now
+resumes viewport selection for scrolling keys from toolbar controls while
+retaining dialog, form, thumbnail-rail and Space-activation exclusions. The
+reproduction then selected pages 4 and 5 and the current-page Watermark dialog
+targeted page 5 with zero browser errors. The full Phase 5B verifier also
+checks that the selected page occupies the viewer's active viewport band and
+that the actual downloaded PDF targets that page after this keyboard path.
+
 The final local Phase 5B reruns exposed a separate verifier race: its immediate
 post-Cancel/Escape focus assertion could execute before the application's
 intentional next-animation-frame focus restoration. The verifier now waits at
@@ -258,9 +282,9 @@ if that interaction does not complete; no product focus behavior was changed.
 | Scoped product implementation                                         | Preserved; Devanagari still visibly rejected                                                               |
 | Adversarial verifier extension                                        | Local Chromium PASS: 122 rows, 49 actual PDFs, 169 pages, 50 typed rejections, zero browser errors/uploads |
 | Frozen install, lint, typecheck, build, format/diff, sampler          | Local gates pass; final recovery-head Linux CI pending                                                     |
-| Phase 5A/5B/5C and native/container gates                             | Local browser gates pass; run 70 passed both jobs, run 71 failed browser startup; final-head CI pending    |
+| Phase 5A/5B/5C and native/container gates                             | Local browser gates pass; run 70 passed, runs 71/72 failed browser startup; final-head CI pending          |
 | PR #5 accurately retitled, reviewed and ready                         | Retitled and rescoped; still draft pending final CI                                                        |
-| Scoped branch exact-SHA CI                                            | Pending; run 70 passed at an earlier head, run 71 did not pass container                                   |
+| Scoped branch exact-SHA CI                                            | Pending; run 70 passed at an earlier head, runs 71/72 did not pass container                               |
 | Merge to `main` and exact-main CI                                     | Pending                                                                                                    |
 | Vercel READY at exact main SHA, alias and anonymous browser/PDF proof | Pending                                                                                                    |
 
@@ -312,7 +336,7 @@ focused malformed-PNG availability hardening described above.
 - [x] Verified Latin/Greek/Cyrillic scope and unsupported-script rejections remain explicit.
 - [x] Redaction invariants and inherited ordinary-PNG issue are documented separately.
 - [x] Recovery verifier extension has local accepted counts and adversarial extraction evidence.
-- [x] Local Phase 5A/5B/5C, eight quick-current-page trials, and web regression tests pass at the final recovery tree.
+- [x] Local Phase 5A/5B/5C, eight quick-current-page trials, keyboard-current-page PDF, and web regression tests pass at the final recovery tree.
 - [ ] Complete recovery regression envelope, including native/container gates, passes at a committed SHA.
 - [ ] Recovery branch final-SHA quality/native/container CI passes.
 - [ ] PR #5 accurately describes the narrower release and is ready for review.
