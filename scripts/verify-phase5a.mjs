@@ -1021,6 +1021,14 @@ try {
     for (const zoomActions of [0, 2]) {
       await fresh(plain);
       await button('Redact').click();
+      assert.equal(
+        await page
+          .locator('.pdf-page-shell')
+          .first()
+          .evaluate((element) => getComputedStyle(element).transitionDuration),
+        '0s',
+        'redaction editing must not move the page beneath an active pointer',
+      );
       for (let index = 0; index < zoomActions; index++)
         await button('Zoom in').click();
       const surface = page.locator('.pdf-page-surface').first();

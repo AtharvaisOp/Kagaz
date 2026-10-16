@@ -1095,6 +1095,10 @@ input:focus-visible + * {
     min-height 180ms ease;
 }
 
+.pdf-page-shell--redacting {
+  transition: none;
+}
+
 .pdf-page-surface {
   position: relative;
   overflow: hidden;
