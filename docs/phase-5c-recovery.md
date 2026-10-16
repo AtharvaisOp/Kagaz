@@ -184,6 +184,17 @@ and wheel and page-pointer checks resumed viewport-driven selection. Web tests p
 known **187 PASS / 11 FAIL / 8 SKIP** local OCRmyPDF limitation, and the workspace
 sampler passed **3/3**. These local results still require exact-head Linux CI.
 
+The final redaction-transition and verifier patch repeated the full local
+browser gates: Phase 5A **70 rows / 42 qpdf-PASS PDFs / zero errors or uploads**,
+Phase 5B **148 rows / 104 qpdf-PASS results / zero browser errors / two consented
+heavy-tool requests**, and Phase 5C **122 rows / 49 application PDFs / 169
+inspected pages / 50 typed rejections / zero browser errors or uploads**. The
+extra qpdf-PASS Phase 5C result is an intentionally wrong Devanagari PDF that
+fails the semantic extraction gate. Web tests passed **798/798**, lint,
+typecheck, build, format and diff checks passed, and the workspace sampler
+passed **3/3**. These results precede the final CI run; the Windows API native
+limitation above remains unchanged.
+
 [GitHub Actions run 68](https://github.com/AtharvaisOp/Kagaz/actions/runs/38257585289)
 at **exact starting SHA** `8584d534d973b13b095827ec42ed058ffb29303f`
 passed both jobs: 798 web + 206 API + 3 sampler = **1,007 PASS / 0 FAIL /
@@ -200,9 +211,33 @@ tests**) and the container's native, resource and editor/API checks, then failed
 Phase 5A at the second zoom-drawn redaction: measured width `227.55208333333334`
 versus expected `220` PDF units. Phase 5B/5C were consequently skipped. The
 same Phase 5A gate passed locally on the later navigation-fix tree. The exact
-Linux zoom deviation remains unexplained; its assertion now records the before/
-after page bounds and viewport/scroll state if it recurs, without weakening
-the accepted geometry tolerance.
+Linux zoom deviation was not captured with before/after bounds. Inspection found
+that `.pdf-page-shell` animates width and minimum height for 180 ms during zoom;
+a moving centered page could change pointer-to-PDF coordinates by the observed
+amount. Redaction mode now disables that size transition so the editing surface
+stays stationary. The verifier asserts zero transition time and records before/
+after page bounds and viewport/scroll state if geometry still drifts. The
+accepted PDF-coordinate tolerance was not weakened.
+
+[Run 70](https://github.com/AtharvaisOp/Kagaz/actions/runs/38393484288)
+at `aa528f8` passed both Linux jobs: 1,007 quality tests, native/resource and
+editor/API checks, and the complete Phase 5A/5B/5C browser gates. This proves
+the scoped recovery at that commit, but it predates the page-pointer guard and
+redaction transition fix. [Run 71](https://github.com/AtharvaisOp/Kagaz/actions/runs/38394279921)
+at `12396a4` passed quality but failed before the phase gates in the first
+Phase 4A browser startup. The file input never mounted. Browser diagnostics
+recorded four Vite module requests failing with `net::ERR_NETWORK_CHANGED`
+(`useEditorHistory.ts`, `usePdfRedactions.ts`, `usePdfWatermarks.ts`, and
+`ConvertDialog.tsx`); no HTTP error response or product exception was recorded.
+Vite reported ready and the initial HTTP readiness probe succeeded. A host
+network change during browser startup is plausible, but the trigger is not
+proven. Run 66's earlier blank page lacked these diagnostics, so its cause
+cannot be retroactively assigned. The failure is retained in the ledger and
+requires a later exact-head complete CI pass. The CI step now sends Phase 4A/B/C
+to `127.0.0.1`, matching Vite's bind address and the Phase 5 verifiers, rather
+than using the `localhost` default. This removes one DNS/address-family variable;
+it is a focused mitigation, not a proven explanation for `ERR_NETWORK_CHANGED`.
+No verifier assertion or timeout was weakened.
 
 The local Phase 5B rerun also exposed an inherited wrong-current-page UI race:
 clicking a thumbnail selected page 3, then toolbar focus or smooth scrolling
@@ -211,16 +246,21 @@ The first failed PDF was structurally valid but watermarked page 1. A focused
 navigation fix holds the explicit choice through programmatic scrolling and
 restores viewport-driven selection on actual wheel, touch, scroll-key or page-pointer input;
 the verifier now asserts the dialog target before applying and retains its
-strict page-3 PDF check. No redaction or font writer behavior was changed.
+strict page-3 PDF check. No redaction export or font writer behavior was changed.
+The final local Phase 5B reruns exposed a separate verifier race: its immediate
+post-Cancel/Escape focus assertion could execute before the application's
+intentional next-animation-frame focus restoration. The verifier now waits at
+most one second for the exact Watermark trigger to regain focus and still fails
+if that interaction does not complete; no product focus behavior was changed.
 
 | Release gate                                                          | State in this recovery record                                                                              |
 | --------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
 | Scoped product implementation                                         | Preserved; Devanagari still visibly rejected                                                               |
 | Adversarial verifier extension                                        | Local Chromium PASS: 122 rows, 49 actual PDFs, 169 pages, 50 typed rejections, zero browser errors/uploads |
 | Frozen install, lint, typecheck, build, format/diff, sampler          | Local gates pass; final recovery-head Linux CI pending                                                     |
-| Phase 5A/5B/5C and native/container gates                             | Local browser gates pass; run 69 failed Phase 5A zoom geometry; final-head CI pending                      |
+| Phase 5A/5B/5C and native/container gates                             | Local browser gates pass; run 70 passed both jobs, run 71 failed browser startup; final-head CI pending    |
 | PR #5 accurately retitled, reviewed and ready                         | Retitled and rescoped; still draft pending final CI                                                        |
-| Scoped branch exact-SHA CI                                            | Pending; run 69 was not accepted                                                                           |
+| Scoped branch exact-SHA CI                                            | Pending; run 70 passed at an earlier head, run 71 did not pass container                                   |
 | Merge to `main` and exact-main CI                                     | Pending                                                                                                    |
 | Vercel READY at exact main SHA, alias and anonymous browser/PDF proof | Pending                                                                                                    |
 
@@ -232,16 +272,22 @@ has **no product bundle cost**, because neither its writer nor its Devanagari
 font is shipped. Full embedding remains the validated production choice;
 subsetting, aggregate preview-canvas memory and cross-source form-font reuse
 remain future work.
+Local Vite logs also emitted PDF.js `standardFontDataUrl` warnings while
+rendering synthetic standard-font source fixtures. The accepted visual and
+security oracles passed, but fallback-font behavior for arbitrary unembedded
+source PDFs warrants a separate configuration and appearance audit.
 
 ## Design and engineering handoff
 
 The Devanagari research did not add UI or a font choice. The focused navigation
-fix changes selection behavior while preserving the existing layout and motion.
-The verified subset continues to follow
-`design.md`: dark compact workspace, orange primary actions, cyan visible focus,
+fix changes selection behavior; redaction editing suppresses only the page-size
+transition that could move the pointer target. Normal viewing motion remains.
+The verified subset continues to follow `design.md`: dark compact workspace,
+orange primary actions, cyan visible focus,
 responsive toolbar/dialog controls. The original Phase 5C UI implementation
 used the required gptTaste skill for restrained focus, loading/error feedback
-and reduced-motion polish. Existing desktop, 768/390/360 px, keyboard,
+and reduced-motion polish. The recovery consulted it while keeping `design.md`
+authoritative for this focused behavior fix. Existing desktop, 768/390/360 px, keyboard,
 Undo/Redo, Start Over and preview/download checks must remain green in the
 recovery verifier. No new motion or frontend design system is proposed.
 
@@ -266,7 +312,7 @@ focused malformed-PNG availability hardening described above.
 - [x] Verified Latin/Greek/Cyrillic scope and unsupported-script rejections remain explicit.
 - [x] Redaction invariants and inherited ordinary-PNG issue are documented separately.
 - [x] Recovery verifier extension has local accepted counts and adversarial extraction evidence.
-- [x] Local Phase 5A/5B/5C, eight quick-current-page trials, and web regression tests pass at the navigation-fix tree.
+- [x] Local Phase 5A/5B/5C, eight quick-current-page trials, and web regression tests pass at the final recovery tree.
 - [ ] Complete recovery regression envelope, including native/container gates, passes at a committed SHA.
 - [ ] Recovery branch final-SHA quality/native/container CI passes.
 - [ ] PR #5 accurately describes the narrower release and is ready for review.

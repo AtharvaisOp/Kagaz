@@ -83,6 +83,15 @@ page.setDefaultTimeout(20000);
 page.on('dialog', (dialog) => dialog.accept());
 await verifier.goto(verifierUrl);
 const button = (name) => page.getByRole('button', { name, exact: true });
+const assertWatermarkFocusRestored = async () => {
+  const trigger = await button('Watermark').elementHandle();
+  assert(trigger, 'Watermark trigger is missing after dialog close.');
+  await page.waitForFunction(
+    (target) => document.activeElement === target,
+    trigger,
+    { timeout: 1000 },
+  );
+};
 const digest = (bytes) =>
   createHash('sha256').update(Buffer.from(bytes)).digest('hex');
 const secrets = [
@@ -2131,11 +2140,7 @@ try {
       await button('Undo').isDisabled(),
       'Preview/Cancel created an invisible history step.',
     );
-    assert(
-      await button('Watermark').evaluate(
-        (current) => current === document.activeElement,
-      ),
-    );
+    await assertWatermarkFocusRestored();
     await button('Watermark').click();
     for (let index = 0; index < 28; index++) {
       await page.keyboard.press('Tab');
@@ -2148,11 +2153,7 @@ try {
     }
     await page.keyboard.press('Escape');
     await watermarkDialog().waitFor({ state: 'detached' });
-    assert(
-      await button('Watermark').evaluate(
-        (current) => current === document.activeElement,
-      ),
-    );
+    await assertWatermarkFocusRestored();
     results.push({
       name: 'keyboard-preview-cancel-escape-focus',
       invisibleHistory: false,
@@ -2635,11 +2636,7 @@ try {
         path: join(artifactRoot, `responsive-${width}-preview.png`),
       });
       await page.keyboard.press('Escape');
-      assert(
-        await button('Watermark').evaluate(
-          (current) => current === document.activeElement,
-        ),
-      );
+      await assertWatermarkFocusRestored();
       await page.locator('.pdf-page-surface').first().scrollIntoViewIfNeeded();
       await previewFootprint();
       await page.screenshot({
