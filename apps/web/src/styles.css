@@ -1095,6 +1095,10 @@ input:focus-visible + * {
     min-height 180ms ease;
 }
 
+.pdf-page-shell--redacting {
+  transition: none;
+}
+
 .pdf-page-surface {
   position: relative;
   overflow: hidden;
@@ -2047,6 +2051,13 @@ input:focus-visible + * {
   max-width: 260px;
   color: #fca5a5;
   font-size: 11px;
+}
+
+.annotation-font-status {
+  align-self: center;
+  color: #67e8f9;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 10px;
 }
 
 .annotation-tool-group,

@@ -10,6 +10,8 @@ import type { RedactionRegion } from '../../../features/pdf-redactions/model/typ
 import type { WorkspacePage } from '../../../features/pdf-workspace/model/types';
 import { normalizeRotation } from '../../../features/pdf-workspace/model/operations';
 import { flattenAnnotationsOntoCopiedPage } from '../annotations/flattenAnnotations';
+import { createAnnotationExportContext } from '../annotations/flattenAnnotations';
+import type { FontAssetSnapshot } from '../../fonts/fontAssets';
 import type { AnnotationImageResolver } from '../annotations/exportContracts';
 import type { AnnotationImageExportSource } from '../annotations/exportContracts';
 import type { WatermarkConfig } from '../../../features/pdf-watermarks/model/types';
@@ -110,6 +112,7 @@ export async function finalizeRedactions(
     readonly config: WatermarkConfig;
     readonly imageAssets: ReadonlyMap<string, AnnotationImageExportSource>;
   },
+  fontAssets?: FontAssetSnapshot,
 ): Promise<ReadonlySet<string>> {
   checkAbort(signal);
   const sourcePage = source.getPage(workspacePage.sourcePageIndex);
@@ -128,7 +131,7 @@ export async function finalizeRedactions(
     page,
     annotations,
     appearance,
-    undefined,
+    await createAnnotationExportContext(appearance, imageResolver, fontAssets),
     imageResolver,
   );
   checkAbort(signal);
@@ -180,6 +183,7 @@ export async function finalizeRedactions(
       watermark.imageAssets,
       undefined,
       signal,
+      fontAssets,
     );
     checkAbort(signal);
     drawWatermarkOnPage(

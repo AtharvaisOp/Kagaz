@@ -83,6 +83,15 @@ page.setDefaultTimeout(20000);
 page.on('dialog', (dialog) => dialog.accept());
 await verifier.goto(verifierUrl);
 const button = (name) => page.getByRole('button', { name, exact: true });
+const assertWatermarkFocusRestored = async () => {
+  const trigger = await button('Watermark').elementHandle();
+  assert(trigger, 'Watermark trigger is missing after dialog close.');
+  await page.waitForFunction(
+    (target) => document.activeElement === target,
+    trigger,
+    { timeout: 1000 },
+  );
+};
 const digest = (bytes) =>
   createHash('sha256').update(Buffer.from(bytes)).digest('hex');
 const secrets = [
@@ -1361,8 +1370,9 @@ async function configureWatermark({
   ranges = null,
   selected = null,
   image = null,
+  open = true,
 } = {}) {
-  await button('Watermark').click();
+  if (open) await button('Watermark').click();
   await watermarkDialog().waitFor();
   await watermarkDialog()
     .getByRole('radio', {
@@ -1972,6 +1982,7 @@ try {
       pageId: 'page-0',
       box: { origin: { x: 50, y: 330 }, width: 240, height: 40, rotation: 0 },
       text: 'SECRET-ANNOTATION-ALPHA',
+      fontFamily: 'helvetica',
       fontSizeUserUnits: 16,
       lineHeight: 1.2,
       align: 'left',
@@ -2130,11 +2141,7 @@ try {
       await button('Undo').isDisabled(),
       'Preview/Cancel created an invisible history step.',
     );
-    assert(
-      await button('Watermark').evaluate(
-        (current) => current === document.activeElement,
-      ),
-    );
+    await assertWatermarkFocusRestored();
     await button('Watermark').click();
     for (let index = 0; index < 28; index++) {
       await page.keyboard.press('Tab');
@@ -2147,11 +2154,7 @@ try {
     }
     await page.keyboard.press('Escape');
     await watermarkDialog().waitFor({ state: 'detached' });
-    assert(
-      await button('Watermark').evaluate(
-        (current) => current === document.activeElement,
-      ),
-    );
+    await assertWatermarkFocusRestored();
     results.push({
       name: 'keyboard-preview-cancel-escape-focus',
       invisibleHistory: false,
@@ -2462,12 +2465,84 @@ try {
     });
     await page.locator('.thumbnail-select').nth(2).click();
     await configureWatermark({ scope: 'current' });
+    assert.equal(
+      await watermarkDialog().locator('.watermark-target-status').innerText(),
+      '1 of 9 pages targeted · 3',
+      'the current-page watermark target changed during thumbnail navigation',
+    );
     await applyWatermark();
     await inspect('ui-current-page', await download('ui-current-page'), {
       watermark: rangeWatermark,
       targeted: [2],
       pageCount: 9,
     });
+    await page.locator('.thumbnail-select').nth(2).click();
+    await button('Watermark').evaluate((trigger) =>
+      trigger.focus({ preventScroll: true }),
+    );
+    const beforeKeyboardScroll = await page.evaluate(() => scrollY);
+    await page.keyboard.press('PageDown');
+    await page.keyboard.press('PageDown');
+    await page.waitForFunction(
+      (before) => scrollY > before + 100,
+      beforeKeyboardScroll,
+    );
+    await page.waitForFunction(() => {
+      const selectedIndex = Array.from(
+        document.querySelectorAll('.thumbnail-select'),
+      ).findIndex(
+        (thumbnail) => thumbnail.getAttribute('aria-current') === 'page',
+      );
+      const shells = Array.from(document.querySelectorAll('.pdf-page-shell'));
+      if (selectedIndex <= 2 || !shells[selectedIndex]) return false;
+
+      const bandTop = innerHeight * 0.12;
+      const bandBottom = innerHeight * 0.44;
+      const visibleRatio = (shell) => {
+        const rect = shell.getBoundingClientRect();
+        const overlap = Math.max(
+          0,
+          Math.min(rect.bottom, bandBottom) - Math.max(rect.top, bandTop),
+        );
+        return overlap / Math.max(rect.height, 1);
+      };
+      const selectedRatio = visibleRatio(shells[selectedIndex]);
+      const selectionMatchesViewport =
+        selectedRatio > 0 &&
+        visibleRatio(shells[2]) === 0 &&
+        selectedRatio >= Math.max(...shells.map(visibleRatio)) - 0.001;
+      const root = document.documentElement;
+      const sample = `${scrollY}:${selectedIndex}`;
+      const stableSamples =
+        root.dataset.phase5bKeyboardSelection === sample
+          ? Number(root.dataset.phase5bKeyboardSelectionCount ?? 0) + 1
+          : 1;
+      root.dataset.phase5bKeyboardSelection = sample;
+      root.dataset.phase5bKeyboardSelectionCount = String(stableSamples);
+      return selectionMatchesViewport && stableSamples >= 3;
+    });
+    const keyboardSelectedIndex = await page.evaluate(() =>
+      Array.from(document.querySelectorAll('.thumbnail-select')).findIndex(
+        (thumbnail) => thumbnail.getAttribute('aria-current') === 'page',
+      ),
+    );
+    await page.keyboard.press('Space');
+    await configureWatermark({ scope: 'current', open: false });
+    assert.equal(
+      await watermarkDialog().locator('.watermark-target-status').innerText(),
+      `1 of 9 pages targeted · ${keyboardSelectedIndex + 1}`,
+      'keyboard scrolling from toolbar focus changed the current-page target',
+    );
+    await applyWatermark();
+    await inspect(
+      'ui-keyboard-current-page',
+      await download('ui-keyboard-current-page'),
+      {
+        watermark: rangeWatermark,
+        targeted: [keyboardSelectedIndex],
+        pageCount: 9,
+      },
+    );
     await fresh(publicSource);
     await configureWatermark();
     await applyWatermark();
@@ -2629,11 +2704,7 @@ try {
         path: join(artifactRoot, `responsive-${width}-preview.png`),
       });
       await page.keyboard.press('Escape');
-      assert(
-        await button('Watermark').evaluate(
-          (current) => current === document.activeElement,
-        ),
-      );
+      await assertWatermarkFocusRestored();
       await page.locator('.pdf-page-surface').first().scrollIntoViewIfNeeded();
       await previewFootprint();
       await page.screenshot({

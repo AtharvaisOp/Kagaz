@@ -118,9 +118,63 @@ describe('watermark configuration and targeting', () => {
     expect(Object.isFrozen(captured)).toBe(true);
     expect(Object.isFrozen(captured.customPosition)).toBe(true);
   });
+  it('preserves the selected font in snapshots and rejects unknown font identities', () => {
+    const text = {
+      ...initial,
+      kind: 'text' as const,
+      text: 'Αθήνα',
+      fontFamily: 'noto-sans' as const,
+      fontSize: 48,
+      color: { r: 0, g: 0, b: 0 },
+    };
+    expect(snapshotWatermark(text)).toMatchObject({ fontFamily: 'noto-sans' });
+    expect(validateWatermarkModel(text)).toBeNull();
+    expect(
+      validateWatermarkModel({
+        ...text,
+        fontFamily: 'unknown',
+      } as unknown as WatermarkConfig),
+    ).toContain('supported watermark font');
+    expect(snapshotWatermark({ ...text, fontFamily: undefined })).toMatchObject(
+      { fontFamily: 'helvetica' },
+    );
+  });
 });
 
 describe('single watermark history', () => {
+  it('records font changes once and restores the selected font through Undo/Redo', () => {
+    let state = watermarkReducer(createWatermarkHistory(), {
+      type: 'APPLY',
+      config: initial,
+      transactionId: 'first',
+    });
+    const unicode = {
+      ...initial,
+      kind: 'text' as const,
+      text: 'DRAFT',
+      fontFamily: 'noto-sans' as const,
+      fontSize: 48,
+      color: { r: 0.5, g: 0.5, b: 0.5 },
+    };
+    state = watermarkReducer(state, {
+      type: 'APPLY',
+      config: unicode,
+      transactionId: 'font-change',
+    });
+    expect(state.present).toMatchObject({ fontFamily: 'noto-sans' });
+    expect(
+      watermarkReducer(state, {
+        type: 'APPLY',
+        config: unicode,
+        transactionId: 'noop',
+      }),
+    ).toBe(state);
+    state = watermarkReducer(state, { type: 'UNDO' });
+    expect(state.present).toMatchObject({ fontFamily: 'helvetica' });
+    state = watermarkReducer(state, { type: 'REDO' });
+    expect(state.present).toMatchObject({ fontFamily: 'noto-sans' });
+    expect(state.past).toHaveLength(2);
+  });
   it('applies/edits/removes/undoes/redoes and ignores identical edits without invisible entries', () => {
     let state = createWatermarkHistory();
     state = watermarkReducer(state, {

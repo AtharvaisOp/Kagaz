@@ -1,5 +1,6 @@
 import type { RgbColor } from '../../pdf-annotations/model/types';
 import type { WorkspacePageId } from '../../pdf-workspace/model/types';
+import type { DocumentFontId } from '../../../lib/fonts/fontCatalog';
 
 export type WatermarkTarget =
   | { readonly kind: 'all' }
@@ -29,6 +30,8 @@ export interface WatermarkBase {
 export interface TextWatermarkConfig extends WatermarkBase {
   readonly kind: 'text';
   readonly text: string;
+  /** Omitted legacy configurations retain Standard Helvetica. */
+  readonly fontFamily?: DocumentFontId;
   /** Physical points; export divides by UserUnit before drawing in raw PDF space. */
   readonly fontSize: number;
   readonly color: RgbColor;

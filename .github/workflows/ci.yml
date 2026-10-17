@@ -100,11 +100,13 @@ jobs:
       - name: Verify editor and real container together
         env:
           KAGAZ_ARTIFACT_DIR: ${{ runner.temp }}/phase4c-artifacts
+          KAGAZ_WEB_URL: http://127.0.0.1:5173
         run: |
+          ip -ts monitor link route > /tmp/kagaz-network-events.log 2>&1 &
           pnpm --filter @kagaz/web dev --host 127.0.0.1 > /tmp/kagaz-web.log 2>&1 &
-          for i in $(seq 1 30); do curl -fsS http://localhost:5173/ > /dev/null && break; sleep 1; done
+          for i in $(seq 1 30); do curl -fsS http://127.0.0.1:5173/ > /dev/null && break; sleep 1; done
           node scripts/verify-phase4b-container.mjs
-          docker run -d --name kagaz-browser-api --init --memory=512m --cpus=0.5 --read-only --tmpfs /tmp:rw,noexec,nosuid,size=256m --cap-drop=ALL --security-opt=no-new-privileges --pids-limit=64 -p 127.0.0.1:4000:4000 kagaz-api:verify
+          docker run -d --name kagaz-browser-api --init --memory=512m --cpus=0.5 --read-only --tmpfs /tmp:rw,noexec,nosuid,size=256m --cap-drop=ALL --security-opt=no-new-privileges --pids-limit=64 -e CORS_ORIGINS=http://127.0.0.1:5173 -p 127.0.0.1:4000:4000 kagaz-api:verify
           for i in $(seq 1 30); do curl -fsS http://localhost:4000/health > /dev/null && break; sleep 1; done
           node scripts/verify-phase4a.mjs
           node scripts/verify-phase4b.mjs
@@ -119,6 +121,25 @@ jobs:
           KAGAZ_ARTIFACT_DIR: ${{ runner.temp }}/phase4c-artifacts
           KAGAZ_REQUIRE_QPDF: '1'
         run: node scripts/verify-phase5b.mjs
+      - name: Verify Unicode font embedding, extraction, rendering and redaction
+        env:
+          KAGAZ_ARTIFACT_DIR: ${{ runner.temp }}/phase4c-artifacts
+          KAGAZ_REQUIRE_QPDF: '1'
+        run: node scripts/verify-phase5c.mjs
+      - name: Retain frontend startup diagnostics
+        if: always()
+        env:
+          KAGAZ_ARTIFACT_DIR: ${{ runner.temp }}/phase4c-artifacts
+        run: |
+          mkdir -p "$KAGAZ_ARTIFACT_DIR"
+          if [ -f /tmp/kagaz-web.log ]; then
+            cp /tmp/kagaz-web.log "$KAGAZ_ARTIFACT_DIR/kagaz-web.log"
+            cat /tmp/kagaz-web.log
+          fi
+          if [ -f /tmp/kagaz-network-events.log ]; then
+            cp /tmp/kagaz-network-events.log "$KAGAZ_ARTIFACT_DIR/kagaz-network-events.log"
+            cat /tmp/kagaz-network-events.log
+          fi
       - name: Save verification artifacts
         if: always()
         uses: actions/upload-artifact@v4

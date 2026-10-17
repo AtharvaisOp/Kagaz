@@ -11,6 +11,14 @@ export function applyAnnotationStyleDefaults(
     case 'text':
       return {
         ...annotation,
+        fontFamily:
+          patch.fontFamily === undefined
+            ? annotation.fontFamily
+            : (styles.fontFamily ?? 'helvetica'),
+        lineHeight:
+          patch.lineHeight === undefined
+            ? annotation.lineHeight
+            : (styles.lineHeight ?? 1.2),
         color:
           patch.strokeColor === undefined
             ? annotation.color

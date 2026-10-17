@@ -1021,6 +1021,14 @@ try {
     for (const zoomActions of [0, 2]) {
       await fresh(plain);
       await button('Redact').click();
+      assert.equal(
+        await page
+          .locator('.pdf-page-shell')
+          .first()
+          .evaluate((element) => getComputedStyle(element).transitionDuration),
+        '0s',
+        'redaction editing must not move the page beneath an active pointer',
+      );
       for (let index = 0; index < zoomActions; index++)
         await button('Zoom in').click();
       const surface = page.locator('.pdf-page-surface').first();
@@ -1054,13 +1062,22 @@ try {
       await page.mouse.up();
       const geometry = (await regionBoxes())[0];
       assert(geometry, 'drawn region missing');
+      const afterBox = await surface.boundingBox();
+      const layout = await page.evaluate(() => ({
+        zoom: document.querySelector('[aria-label="Current zoom"]')
+          ?.textContent,
+        viewportWidth: window.innerWidth,
+        documentWidth: document.documentElement.clientWidth,
+        scrollX: window.scrollX,
+        scrollY: window.scrollY,
+      }));
       for (const [actual, expected] of geometry.map((value, index) => [
         value,
         [40, 325, 220, 40][index],
       ])) {
         assert(
           Math.abs(actual - expected) < 1.5,
-          `zoom geometry ${actual} != ${expected}`,
+          `zoom geometry ${actual} != ${expected}: ${JSON.stringify({ zoomActions, geometry, beforeBox: box, afterBox, layout })}`,
         );
       }
       await inspect(

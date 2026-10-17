@@ -521,7 +521,11 @@ try {
   page.on('download', downloaded);
   const beforeFailure = await state();
   await button('Download PDF').click();
-  await page.getByText(/unsupported by Standard Helvetica/).waitFor();
+  // Phase 5C selects the bundled font for non-ASCII form appearances. This
+  // unchanged CJK counterexample must still fail with no partial download.
+  await page
+    .getByText(/Noto Sans export currently supports Latin, Greek and Cyrillic/)
+    .waitFor();
   assert.equal(downloads, 0);
   assert.deepEqual(await state(), beforeFailure);
   await button('Extract pages').click();
@@ -609,7 +613,11 @@ try {
     await input().fill('Mobile unsupported 漢字');
     await input().press('Enter');
     await button('Download PDF').click();
-    await page.getByText(/unsupported by Standard Helvetica/).waitFor();
+    await page
+      .getByText(
+        /Noto Sans export currently supports Latin, Greek and Cyrillic/,
+      )
+      .waitFor();
     await start('dismiss', 1);
     await start('accept', 1);
     await page.locator('.upload-layout').waitFor();

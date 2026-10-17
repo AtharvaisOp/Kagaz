@@ -2,7 +2,6 @@ import {
   PDFDocument,
   PDFName,
   PDFNumber,
-  StandardFonts,
   degrees,
   drawImage,
   drawText,
@@ -26,36 +25,33 @@ import { PdfExportError } from '../types';
 import { assertWatermarkGeometry, watermarkPlacement } from './geometry';
 import { assertWatermarkImageBytes } from './imageSafety';
 import { prepareWatermarkImageSource } from './nativeImage';
+import type { DocumentFontId } from '../../fonts/fontCatalog';
+import type { FontAssetSnapshot } from '../../fonts/fontAssets';
+import {
+  pdfFontContextFromHelvetica,
+  preparePdfFont,
+  type PdfFontContext,
+} from '../../fonts/pdfFont';
 
 export interface WatermarkExportContext {
   readonly config: WatermarkConfig;
   readonly font: PDFFont | null;
+  readonly fontContext: PdfFontContext | null;
   readonly image: PDFImage | null;
 }
 
-// Fixed Helvetica AFM FontBBox [-166,-225,1000,931]. These conservative ink
-// extents include accents/descenders and bearings, not only Ascender/Descender.
-// Symmetric one-em side guards bound the global bearings without shifting the
-// advance line away from the selected center/corner's fitted appearance box.
-const HELVETICA_LEFT_BEARING = 1;
-const HELVETICA_RIGHT_BEARING = 1;
-const HELVETICA_DESCENT = 0.225;
-const HELVETICA_HEIGHT = 1.156;
-
-function unkernedTextWidth(
+/** Include advances and actual glyph ink so bearings/descenders fit every font. */
+function textAppearanceBounds(
+  context: PdfFontContext,
   text: string,
-  font: PDFFont,
-  fontSize: number,
-): number {
-  // pdf-lib drawText emits one unkerned Tj. Its whole-string width helper adds
-  // kerning, which can underestimate repeated AV pairs and clip a fitted mark.
-  return (
-    [...text].reduce(
-      (total, glyph) => total + font.widthOfTextAtSize(glyph, fontSize),
-      0,
-    ) +
-    (HELVETICA_LEFT_BEARING + HELVETICA_RIGHT_BEARING) * fontSize
-  );
+  size: number,
+) {
+  const measured = context.measure(text, size);
+  const minX = Math.min(0, measured.inkBounds.minX);
+  const maxX = Math.max(measured.width, measured.inkBounds.maxX);
+  const minY = measured.inkBounds.minY;
+  const maxY = measured.inkBounds.maxY;
+  return { minX, minY, width: maxX - minX, height: maxY - minY };
 }
 
 function assertConfiguration(config: WatermarkConfig): void {
@@ -63,7 +59,7 @@ function assertConfiguration(config: WatermarkConfig): void {
   if (error) throw new PdfExportError('watermark-invalid', error);
 }
 
-function assertTextEncoding(text: string, font: PDFFont): void {
+function assertTextEncoding(text: string, font: PdfFontContext): string {
   if (
     !text.trim() ||
     text.length > 200 ||
@@ -76,19 +72,24 @@ function assertTextEncoding(text: string, font: PDFFont): void {
       'Enter one line of watermark text, at most 200 characters, without control characters.',
     );
   try {
-    font.encodeText(text);
-  } catch {
+    return font.validate(text);
+  } catch (error) {
     throw new PdfExportError(
       'watermark-unsupported-text',
-      'This watermark contains characters unsupported by PDF Standard Helvetica. Use supported characters; custom fonts are not available yet.',
+      error instanceof Error
+        ? error.message
+        : 'This watermark contains text that the selected font cannot safely export.',
     );
   }
 }
 
 /** The same glyph validation runs before Apply, preview, and final output. */
-export async function validateWatermarkText(text: string): Promise<void> {
+export async function validateWatermarkText(
+  text: string,
+  fontFamily: DocumentFontId = 'helvetica',
+): Promise<void> {
   const document = await PDFDocument.create();
-  assertTextEncoding(text, await document.embedFont(StandardFonts.Helvetica));
+  assertTextEncoding(text, await preparePdfFont(document, fontFamily));
 }
 
 /** One font/image embed per document, shared by every targeted ordinary page. */
@@ -98,15 +99,24 @@ export async function createWatermarkExportContext(
   imageAssets: ReadonlyMap<string, AnnotationImageExportSource>,
   preparedResources?: Pick<AnnotationExportContext, 'font' | 'imageCache'>,
   signal?: AbortSignal,
+  fontAssets?: FontAssetSnapshot,
 ): Promise<WatermarkExportContext> {
   assertConfiguration(config);
-  const captured = snapshotWatermark(config);
+  let captured = snapshotWatermark(config);
   if (captured.kind === 'text') {
-    const font =
-      preparedResources?.font ??
-      (await document.embedFont(StandardFonts.Helvetica));
-    assertTextEncoding(captured.text, font);
-    return { config: captured, font, image: null };
+    const fontFamily = captured.fontFamily ?? 'helvetica';
+    const fontContext =
+      fontFamily === 'helvetica' && preparedResources?.font
+        ? pdfFontContextFromHelvetica(preparedResources.font)
+        : await preparePdfFont(document, fontFamily, fontAssets);
+    const text = assertTextEncoding(captured.text, fontContext);
+    captured = snapshotWatermark({ ...captured, text });
+    return {
+      config: captured,
+      font: fontContext.font,
+      fontContext,
+      image: null,
+    };
   }
   const source = imageAssets.get(captured.assetId);
   if (!source || source.assetId !== captured.assetId)
@@ -128,7 +138,7 @@ export async function createWatermarkExportContext(
     if (image.width !== dimensions.width || image.height !== dimensions.height)
       throw new Error('Image dimensions changed during decoding.');
     preparedResources?.imageCache.set(captured.assetId, image);
-    return { config: captured, font: null, image };
+    return { config: captured, font: null, fontContext: null, image };
   } catch (error) {
     if (error instanceof PdfExportError) throw error;
     throw new PdfExportError(
@@ -190,17 +200,22 @@ export function validateWatermarkPageGeometry(
       naturalWidth / imageRatio,
     );
   }
-  if (!context.font)
+  if (!context.fontContext)
     throw new PdfExportError(
       'watermark-render-failed',
       'The watermark font was not prepared.',
     );
   const fontSize = config.fontSize / geometry.userUnit;
+  const appearance = textAppearanceBounds(
+    context.fontContext,
+    config.text,
+    fontSize,
+  );
   return watermarkPlacement(
     config,
     geometry,
-    unkernedTextWidth(config.text, context.font, fontSize),
-    fontSize * HELVETICA_HEIGHT,
+    appearance.width,
+    appearance.height,
   );
 }
 
@@ -259,14 +274,19 @@ function drawWatermark(
     );
     return;
   }
-  if (!context.font)
+  if (!context.font || !context.fontContext)
     throw new PdfExportError(
       'watermark-render-failed',
       'The watermark font was not prepared.',
     );
   const fontSize = config.fontSize / geometry.userUnit;
-  const descent = fontSize * HELVETICA_DESCENT * placement.sizingRatio;
-  const leftBearing = fontSize * HELVETICA_LEFT_BEARING * placement.sizingRatio;
+  const appearance = textAppearanceBounds(
+    context.fontContext,
+    config.text,
+    fontSize,
+  );
+  const descent = -appearance.minY * placement.sizingRatio;
+  const leftBearing = -appearance.minX * placement.sizingRatio;
   const angle = (placement.rotation * Math.PI) / 180;
   const fontName = page.node.newFontDictionary(
     'KagazWatermarkFont',

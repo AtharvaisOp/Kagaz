@@ -4,6 +4,7 @@ import { projectPdfBoxToOrientedFrame } from '../geometry/orientedFrame';
 import type { TextEditSession } from '../model/textEditSession';
 import type { AnnotationViewport } from './annotationProjection';
 import { projectTextBoxInset, projectTextFontSize } from './textProjection';
+import { useDocumentTextSupport } from '../../../lib/fonts/useDocumentTextSupport';
 
 interface TextEditorOverlayProps {
   readonly session: TextEditSession;
@@ -22,6 +23,10 @@ export function TextEditorOverlay({
 }: TextEditorOverlayProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const frame = projectPdfBoxToOrientedFrame(session.box, viewport);
+  const support = useDocumentTextSupport(
+    session.fontFamily ?? 'helvetica',
+    session.text,
+  );
 
   useEffect(() => {
     textareaRef.current?.focus({ preventScroll: true });
@@ -38,8 +43,16 @@ export function TextEditorOverlay({
           : 'Edit annotation text'
       }
       value={session.text}
+      maxLength={10000}
+      aria-invalid={support.status === 'error' || undefined}
       onChange={(event) => onChange(session.sessionId, event.target.value)}
-      onBlur={() => onCommit(session.sessionId)}
+      onBlur={(event) => {
+        if (
+          !(event.relatedTarget instanceof Element) ||
+          !event.relatedTarget.closest('.annotation-toolbar')
+        )
+          onCommit(session.sessionId);
+      }}
       onKeyDown={(event) => {
         event.stopPropagation();
         if (event.key === 'Escape') {
@@ -61,6 +74,12 @@ export function TextEditorOverlay({
           session.color.g * 255,
         )}, ${Math.round(session.color.b * 255)}, ${session.opacity})`,
         fontSize: projectTextFontSize(session.fontSizeUserUnits, viewport),
+        fontFamily:
+          session.fontFamily === 'noto-sans'
+            ? '"Kagaz Noto Sans", sans-serif'
+            : 'Helvetica, Arial, sans-serif',
+        fontKerning: 'none',
+        fontVariantLigatures: 'none',
         lineHeight: session.lineHeight,
         textAlign: session.align,
         padding: projectTextBoxInset(viewport),

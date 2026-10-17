@@ -27,6 +27,35 @@ function stroke(color = black, widthUserUnits = 8, opacity = 0.9) {
 }
 
 describe('patch-local vector annotation styles', () => {
+  it('updates font and line height without overwriting selected text appearance', () => {
+    const annotation: PdfAnnotation = {
+      id: 'text',
+      workspacePageId: 'page-1',
+      kind: 'text',
+      box,
+      text: 'Αθήνα',
+      fontFamily: 'helvetica',
+      fontSizeUserUnits: 24,
+      lineHeight: 1.2,
+      align: 'right',
+      color: blue,
+      opacity: 0.8,
+    };
+    const updated = applyAnnotationStyleDefaults(
+      annotation,
+      { ...defaults, fontFamily: 'noto-sans', lineHeight: 1.5 },
+      { fontFamily: 'noto-sans', lineHeight: 1.5 },
+    );
+    expect(updated).toMatchObject({
+      text: 'Αθήνα',
+      fontFamily: 'noto-sans',
+      lineHeight: 1.5,
+      fontSizeUserUnits: 24,
+      align: 'right',
+      color: blue,
+      opacity: 0.8,
+    });
+  });
   it('changes highlight opacity without changing its color', () => {
     const annotation: PdfAnnotation = {
       id: 'highlight',

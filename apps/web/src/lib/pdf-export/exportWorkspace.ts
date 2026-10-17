@@ -6,6 +6,7 @@ import {
   type ExportWorkspaceRequest,
 } from './types';
 import { AnnotationExportError } from './annotations/exportContracts';
+import type { AnnotationImageExportSource } from './annotations/exportContracts';
 import type { PDFDocument } from 'pdf-lib';
 import { FormExportError, type FormExportCapability } from './forms/types';
 import {
@@ -15,6 +16,40 @@ import {
 } from '../../features/pdf-watermarks/model/watermark';
 import { assertWatermarkImageBytes } from './watermarks/imageSafety';
 import { prepareWatermarkImageSource } from './watermarks/nativeImage';
+import type { DocumentFontId } from '../fonts/fontCatalog';
+import { FontTextError } from '../fonts/fontErrors';
+
+/** Captured logical IDs select only immutable bundled assets, never an OS font. */
+export function requiredDocumentFonts(
+  request: Pick<
+    ExportWorkspaceRequest,
+    'annotationsByPage' | 'watermark' | 'forms'
+  >,
+): ReadonlySet<DocumentFontId> {
+  const fontIds = new Set<DocumentFontId>();
+  for (const annotations of request.annotationsByPage.values())
+    for (const annotation of annotations)
+      if (annotation.kind === 'text') fontIds.add(annotation.fontFamily);
+  if (request.watermark?.kind === 'text')
+    fontIds.add(request.watermark.fontFamily ?? 'helvetica');
+  for (const source of request.forms.sources) {
+    for (const field of source.fields) {
+      const values =
+        typeof field.value === 'string'
+          ? [field.value]
+          : typeof field.value === 'object' && field.value !== null
+            ? field.value
+            : [];
+      if (
+        [...values, ...field.options.map((option) => option.displayValue)].some(
+          (text) => /[^\x20-\x7e\r\n]/u.test(text),
+        )
+      )
+        fontIds.add('noto-sans');
+    }
+  }
+  return fontIds;
+}
 
 function throwIfAborted(signal?: AbortSignal): void {
   if (signal?.aborted) {
@@ -57,6 +92,17 @@ export async function exportWorkspace(
   } = {},
 ): Promise<Uint8Array> {
   const pages = request.pages.map((page) => ({ ...page }));
+  const sources = new Map(
+    Array.from(request.sources, ([id, source]) => [id, { ...source }] as const),
+  );
+  const annotationsByPage = new Map(
+    Array.from(
+      request.annotationsByPage,
+      ([pageId, annotations]) =>
+        [pageId, structuredClone(annotations)] as const,
+    ),
+  );
+  const forms = structuredClone(request.forms);
   if (request.watermark) {
     const invalid = validateWatermarkModel(
       request.watermark,
@@ -67,7 +113,25 @@ export async function exportWorkspace(
   const watermark = request.watermark
     ? snapshotWatermark(request.watermark)
     : null;
-  const imageAssets = new Map(request.imageAssets);
+  const imageAssets = new Map<string, AnnotationImageExportSource>(
+    Array.from(
+      request.imageAssets,
+      ([id, asset]) => [id, { ...asset, bytes: asset.bytes.slice(0) }] as const,
+    ),
+  );
+  const suppliedFontAssets = request.fontAssets
+    ? new Map(
+        Array.from(
+          request.fontAssets,
+          ([id, bytes]) => [id, Uint8Array.from(bytes)] as const,
+        ),
+      )
+    : undefined;
+  const fontIds = requiredDocumentFonts({
+    annotationsByPage,
+    forms,
+    watermark,
+  });
   const hasWatermark = pages.some((page) =>
     watermarkAppliesToPage(watermark, page.id),
   );
@@ -102,14 +166,11 @@ export async function exportWorkspace(
   ];
   const sourceDocuments = new Map<string, PDFDocument>();
   const formSnapshots = new Map(
-    request.forms.sources.map((snapshot) => [
-      snapshot.sourceDocumentId,
-      snapshot,
-    ]),
+    forms.sources.map((snapshot) => [snapshot.sourceDocumentId, snapshot]),
   );
 
   throwIfAborted(options.signal);
-  if (request.forms.hasChangedTextDraft) {
+  if (forms.hasChangedTextDraft) {
     throw new FormExportError(
       'active-draft',
       'Finish or cancel the active form text edit before exporting.',
@@ -121,12 +182,17 @@ export async function exportWorkspace(
     total: uniqueSourceIds.length,
   });
 
-  const [pdfLib, flattening, formPreparation, signatureSafety] =
+  const [pdfLib, flattening, formPreparation, signatureSafety, fontAssets] =
     await Promise.all([
       import('pdf-lib'),
       import('./annotations/flattenAnnotations'),
       import('./forms/prepareFormSource'),
       import('../pdf-signatures/signatureSafety'),
+      suppliedFontAssets
+        ? Promise.resolve(suppliedFontAssets)
+        : import('../fonts/fontAssets').then((assets) =>
+            assets.snapshotFontAssets(fontIds, options.signal),
+          ),
     ]);
   const { PDFDocument, degrees } = pdfLib;
   const redactionFinalization = hasRedactions
@@ -154,7 +220,7 @@ export async function exportWorkspace(
     }
     for (const [index, sourceId] of uniqueSourceIds.entries()) {
       throwIfAborted(options.signal);
-      const source = request.sources.get(sourceId);
+      const source = sources.get(sourceId);
       if (!source) {
         throw new PdfExportError(
           'missing-source',
@@ -253,6 +319,7 @@ export async function exportWorkspace(
           pdfLib,
           source.fileName,
           () => throwIfAborted(options.signal),
+          fontAssets,
         );
       }
       throwIfAborted(options.signal);
@@ -323,6 +390,7 @@ export async function exportWorkspace(
     const annotationContext = await flattening.createAnnotationExportContext(
       output,
       flattening.createAnnotationImageResolver(imageAssets),
+      fontAssets,
     );
     // Assets for watermarked reconstructed pages must stay in their throwaway
     // composition; embedding them here would serialize unused original bytes.
@@ -339,6 +407,7 @@ export async function exportWorkspace(
             imageAssets,
             annotationContext,
             options.signal,
+            fontAssets,
           )
         : null;
     for (const [index, workspacePage] of pages.entries()) {
@@ -367,12 +436,13 @@ export async function exportWorkspace(
             sourceDocument,
             workspacePage,
             regions,
-            request.annotationsByPage.get(workspacePage.id) ?? [],
+            annotationsByPage.get(workspacePage.id) ?? [],
             flattening.createAnnotationImageResolver(imageAssets),
             options.signal,
             watermark && watermarkAppliesToPage(watermark, workspacePage.id)
               ? { config: watermark, imageAssets }
               : undefined,
+            fontAssets,
           );
           for (const fingerprint of fingerprints)
             originalRedactedContent.add(fingerprint);
@@ -387,7 +457,7 @@ export async function exportWorkspace(
 
         await flattening.flattenAnnotationsOntoCopiedPage(
           copiedPage,
-          request.annotationsByPage.get(workspacePage.id) ?? [],
+          annotationsByPage.get(workspacePage.id) ?? [],
           output,
           annotationContext,
         );
@@ -414,7 +484,8 @@ export async function exportWorkspace(
       } catch (error: unknown) {
         if (
           error instanceof PdfExportError ||
-          error instanceof AnnotationExportError
+          error instanceof AnnotationExportError ||
+          error instanceof FontTextError
         ) {
           throw error;
         }

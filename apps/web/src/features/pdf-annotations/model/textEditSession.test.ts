@@ -25,6 +25,33 @@ const session: TextEditSession = {
 };
 
 describe('text edit session boundary', () => {
+  it('retains the selected font and Unicode content through edit, undo and redo', () => {
+    const original = textAnnotationFromSession(session);
+    if (!original) throw new Error('text fixture missing');
+    let state = annotationReducer(createAnnotationHistoryState(), {
+      type: 'ADD_ANNOTATION',
+      annotation: original,
+    });
+    const edited = textAnnotationFromSession({
+      ...session,
+      mode: 'edit',
+      original,
+      fontFamily: 'noto-sans',
+      text: 'Αθήνα\nПривет Łódź',
+      lineHeight: 1.5,
+    });
+    if (!edited) throw new Error('Unicode fixture missing');
+    state = annotationReducer(state, {
+      type: 'REPLACE_ANNOTATION',
+      annotation: edited,
+    });
+    expect(state.present.byPage['page-1']?.[0]).toEqual(edited);
+    state = annotationReducer(state, { type: 'UNDO' });
+    expect(state.present.byPage['page-1']?.[0]).toEqual(original);
+    state = annotationReducer(state, { type: 'REDO' });
+    expect(state.present.byPage['page-1']?.[0]).toEqual(edited);
+    expect(edited.fontFamily).toBe('noto-sans');
+  });
   it('turns arbitrary typing into one durable creation commit', () => {
     let state = createAnnotationHistoryState();
     const boundary = createTextEditBoundary();

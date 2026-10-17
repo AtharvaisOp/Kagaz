@@ -5,6 +5,7 @@ import {
 } from '../../pdf-annotations/rendering/annotationProjection';
 import { projectTextFontSize } from '../../pdf-annotations/rendering/textProjection';
 import type { AnnotationImageAsset } from '../../pdf-annotations/runtime/annotationAssetRegistry';
+import type { TextAnnotation } from '../../pdf-annotations/model/types';
 
 import type {
   PdfAnnotation,
@@ -62,6 +63,13 @@ export type ThumbnailAnnotationCommand =
         ThumbnailPoint,
       ];
       readonly text: string;
+      readonly annotation?: TextAnnotation;
+      readonly preparedLines?: readonly {
+        readonly text: string;
+        readonly x: number;
+        readonly baseline: number;
+        readonly advances: readonly number[];
+      }[];
       readonly fontSize: number;
       readonly align: 'left' | 'center' | 'right';
       readonly color: RgbColor;
@@ -217,6 +225,7 @@ export function projectThumbnailAnnotations(
             kind: 'text' as const,
             points: orientedBoxPoints(projection),
             text: annotation.text,
+            ...(annotation.fontFamily === 'noto-sans' ? { annotation } : {}),
             fontSize: projectTextFontSize(
               annotation.fontSizeUserUnits,
               viewport,
@@ -245,6 +254,62 @@ function cssColor(color: RgbColor, opacity: number): string {
   return `rgba(${Math.round(color.r * 255)}, ${Math.round(
     color.g * 255,
   )}, ${Math.round(color.b * 255)}, ${opacity})`;
+}
+
+/** Uses the export layout and exact local font; thumbnails remain cheap Canvas surfaces. */
+export async function prepareUnicodeThumbnailAnnotations(
+  commands: readonly ThumbnailAnnotationCommand[],
+  signal: AbortSignal,
+): Promise<readonly ThumbnailAnnotationCommand[]> {
+  if (
+    !commands.some((command) => command.kind === 'text' && command.annotation)
+  )
+    return commands;
+  const [
+    { PDFDocument },
+    { preparePdfFont },
+    { ensureBrowserDocumentFont },
+    { layoutText },
+  ] = await Promise.all([
+    import('pdf-lib'),
+    import('../../../lib/fonts/pdfFont'),
+    import('../../../lib/fonts/fontAssets'),
+    import('../../../lib/pdf-export/annotations/textLayout'),
+  ]);
+  await ensureBrowserDocumentFont('noto-sans', signal);
+  const font = await preparePdfFont(await PDFDocument.create(), 'noto-sans');
+  if (signal.aborted) return [];
+  return commands.map((command) => {
+    if (command.kind !== 'text' || !command.annotation) return command;
+    const annotation = command.annotation;
+    const scale = command.fontSize / annotation.fontSizeUserUnits;
+    try {
+      const lines = layoutText({
+        text: annotation.text,
+        font: font.font,
+        fontContext: font,
+        fontSize: annotation.fontSizeUserUnits,
+        lineHeight: annotation.lineHeight,
+        maxWidth: annotation.box.width,
+        maxHeight: annotation.box.height,
+        align: annotation.align,
+      });
+      return {
+        ...command,
+        preparedLines: lines.map((line) => ({
+          text: line.text,
+          x: line.xOffset * scale,
+          baseline: (annotation.box.height - line.baselineY) * scale,
+          advances: Array.from(
+            line.text,
+            (character) => font.measure(character, command.fontSize).width,
+          ),
+        })),
+      };
+    } catch {
+      return { ...command, text: 'Unsupported text', annotation: undefined };
+    }
+  });
 }
 
 function drawPolygon(
@@ -349,6 +414,29 @@ export function drawThumbnailAnnotations(
       context.translate(topLeft.x, topLeft.y);
       context.rotate(angle);
       context.fillStyle = cssColor(command.color, command.opacity);
+      if (command.preparedLines) {
+        context.font = `${command.fontSize}px "Kagaz Noto Sans"`;
+        context.fontKerning = 'none';
+        context.textBaseline = 'alphabetic';
+        context.textAlign = 'left';
+        context.beginPath();
+        context.rect(
+          0,
+          0,
+          width,
+          Math.hypot(bottomLeft.x - topLeft.x, bottomLeft.y - topLeft.y),
+        );
+        context.clip();
+        for (const line of command.preparedLines) {
+          let x = line.x;
+          for (const [index, character] of Array.from(line.text).entries()) {
+            context.fillText(character, x, line.baseline);
+            x += line.advances[index] ?? 0;
+          }
+        }
+        context.restore();
+        continue;
+      }
       context.font = `${command.fontSize}px Helvetica, Arial, sans-serif`;
       context.textBaseline = 'top';
       context.textAlign = command.align;

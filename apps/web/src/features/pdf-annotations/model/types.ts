@@ -1,3 +1,4 @@
+import type { DocumentFontId } from '../../../lib/fonts/fontCatalog';
 import type {
   PageRotation,
   SourceDocumentId,
@@ -55,7 +56,7 @@ export interface AnnotationBase<K extends AnnotationKind> {
 export interface TextAnnotation extends AnnotationBase<'text'> {
   readonly box: PdfOrientedBox;
   readonly text: string;
-  readonly fontFamily: 'helvetica';
+  readonly fontFamily: DocumentFontId;
   readonly fontSizeUserUnits: number;
   readonly lineHeight: number;
   readonly align: 'left' | 'center' | 'right';

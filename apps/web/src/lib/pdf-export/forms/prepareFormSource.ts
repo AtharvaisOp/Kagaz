@@ -3,10 +3,10 @@ import type {
   PDFDropdown,
   PDFField,
   PDFOptionList,
-  PDFFont,
   PDFForm,
   PDFRef,
   PDFSignature,
+  PDFWidgetAnnotation,
 } from 'pdf-lib';
 import type * as PdfLibModule from 'pdf-lib';
 
@@ -15,6 +15,9 @@ import {
   type FormExportFieldSnapshot,
   type FormExportSourceSnapshot,
 } from './types';
+import { preparePdfFont, type PdfFontContext } from '../../fonts/pdfFont';
+import type { FontAssetSnapshot } from '../../fonts/fontAssets';
+import { canonicalDocumentText } from '../../fonts/textPolicy';
 
 type PdfLibRuntime = Pick<
   typeof PdfLibModule,
@@ -29,7 +32,12 @@ type PdfLibRuntime = Pick<
   | 'PDFRef'
   | 'PDFSignature'
   | 'PDFTextField'
-  | 'StandardFonts'
+  | 'TextAlignment'
+  | 'cleanText'
+  | 'layoutCombedText'
+  | 'layoutMultilineText'
+  | 'layoutSinglelineText'
+  | 'mergeLines'
 >;
 
 function isStringArray(value: unknown): value is readonly string[] {
@@ -288,57 +296,37 @@ function displayValuesForChoice(
   return displayValues;
 }
 
-function validateHelvetica(
-  font: PDFFont,
-  text: string,
-  fileName: string,
-): void {
-  try {
-    for (const line of text.split(/\r\n|\r|\n/)) font.encodeText(line);
-  } catch {
-    throw formError(
-      'unsupported-text-font',
-      'A filled form value contains characters unsupported by Standard Helvetica.',
-      fileName,
-    );
-  }
-}
-
-function validateAppearanceText(
+function appearanceTexts(
   item: ValidatedField,
-  font: PDFFont,
   pdfLib: PdfLibRuntime,
   fileName: string,
-): void {
+): readonly string[] {
   const { field, snapshot } = item;
-  if (snapshot.changed) {
+  if (snapshot.changed && !snapshot.readOnly) {
     if (snapshot.kind === 'text' || snapshot.kind === 'multiline-text') {
-      validateHelvetica(font, assertStringValue(snapshot, fileName), fileName);
+      return [assertStringValue(snapshot, fileName)];
     } else if (snapshot.kind === 'dropdown') {
-      for (const value of item.choiceDisplayValues)
-        validateHelvetica(font, value, fileName);
+      return item.choiceDisplayValues;
     } else if (snapshot.kind === 'option-list') {
-      for (const option of snapshot.options)
-        validateHelvetica(font, option.displayValue, fileName);
+      return field instanceof pdfLib.PDFOptionList ? field.getOptions() : [];
     }
-    return;
+    return [];
   }
 
-  if (!field.needsAppearancesUpdate()) return;
+  if (!field.needsAppearancesUpdate()) return [];
   if (field instanceof pdfLib.PDFTextField) {
-    validateHelvetica(font, field.getText() ?? '', fileName);
+    return [field.getText() ?? ''];
   } else if (field instanceof pdfLib.PDFDropdown) {
-    validateHelvetica(font, field.getSelected()[0] ?? '', fileName);
+    return [field.getSelected()[0] ?? ''];
   } else if (field instanceof pdfLib.PDFOptionList) {
-    for (const option of field.getOptions())
-      validateHelvetica(font, option, fileName);
+    return field.getOptions();
   }
+  return [];
 }
 
 function validateFields(
   form: PDFForm,
   snapshot: FormExportSourceSnapshot,
-  font: PDFFont,
   pdfLib: PdfLibRuntime,
   fileName: string,
 ): readonly ValidatedField[] {
@@ -364,13 +352,248 @@ function validateFields(
           : [];
     return { snapshot: fieldSnapshot, field, choiceDisplayValues };
   });
-  for (const item of validated)
-    validateAppearanceText(item, font, pdfLib, fileName);
   return validated;
+}
+
+/** Select one verified appearance font; existing clean source appearances stay intact. */
+async function prepareAppearanceFont(
+  document: PDFDocument,
+  fields: readonly ValidatedField[],
+  pdfLib: PdfLibRuntime,
+  fileName: string,
+  throwIfAborted: () => void,
+  fontAssets?: FontAssetSnapshot,
+): Promise<PdfFontContext> {
+  const texts = fields.flatMap((item) =>
+    appearanceTexts(item, pdfLib, fileName),
+  );
+  let font = await preparePdfFont(document, 'helvetica', fontAssets);
+  throwIfAborted();
+  try {
+    for (const text of texts) font.validate(text);
+  } catch {
+    try {
+      // Reject known shaping/script limits before loading or parsing any font.
+      for (const text of texts) canonicalDocumentText(text, 'noto-sans');
+    } catch (error) {
+      throw formError(
+        'unsupported-text-font',
+        error instanceof Error
+          ? error.message
+          : 'This form text requires unsupported script shaping.',
+        fileName,
+      );
+    }
+    try {
+      font = await preparePdfFont(document, 'noto-sans', fontAssets);
+    } catch (error) {
+      throw formError(
+        'appearance-update-failed',
+        error instanceof Error
+          ? error.message
+          : 'Kagaz could not load the bundled font for this form appearance.',
+        fileName,
+      );
+    }
+    throwIfAborted();
+  }
+  try {
+    for (const text of texts) font.validate(text);
+    for (const item of fields) {
+      if (
+        !(item.field instanceof pdfLib.PDFDropdown) &&
+        !(item.field instanceof pdfLib.PDFOptionList)
+      )
+        continue;
+      // The provider consumes exact source option labels. Rewriting those labels
+      // would broaden field semantics; reject uncomposed labels explicitly.
+      for (const text of appearanceTexts(item, pdfLib, fileName)) {
+        if (font.validate(text) !== text)
+          throw new Error(
+            'This form option label uses a decomposed combining sequence. Kagaz cannot safely rewrite source option labels for Unicode export.',
+          );
+      }
+    }
+  } catch (error) {
+    throw formError(
+      'unsupported-text-font',
+      error instanceof Error
+        ? error.message
+        : 'A form appearance contains text that cannot be safely exported with the supported fonts.',
+      fileName,
+    );
+  }
+  return font;
+}
+
+function appearanceFontSize(field: {
+  getDefaultAppearance(): string | undefined;
+}): number | undefined {
+  // Match the exact numeric Tf grammar consumed by pdf-lib 1.17.1's default
+  // appearance provider, including its last-operator-wins rule.
+  const expression =
+    /\/([^\0\t\n\f\r ]+)[\0\t\n\f\r ]+(\d*\.\d+|\d+)[\0\t\n\f\r ]+Tf/g;
+  const matches = [
+    ...(field.getDefaultAppearance() ?? '').matchAll(expression),
+  ];
+  const value = Number(matches.at(-1)?.[2]);
+  return Number.isFinite(value) ? value : undefined;
+}
+
+/** A newly generated Unicode appearance must not silently clip glyphs/options. */
+function validateUnicodeAppearanceGeometry(
+  item: ValidatedField,
+  font: PdfFontContext,
+  pdfLib: PdfLibRuntime,
+  fileName: string,
+): void {
+  const field = item.field;
+  if (font.fontId !== 'noto-sans' || !field.needsAppearancesUpdate()) return;
+  if (
+    !(field instanceof pdfLib.PDFTextField) &&
+    !(field instanceof pdfLib.PDFDropdown) &&
+    !(field instanceof pdfLib.PDFOptionList)
+  )
+    return;
+  const assertWidget = (widget: PDFWidgetAnnotation) => {
+    const rectangle = widget.getRectangle();
+    const rotation = widget.getAppearanceCharacteristics()?.getRotation() ?? 0;
+    const border = widget.getBorderStyle()?.getWidth() ?? 0;
+    if (
+      !Number.isFinite(rotation) ||
+      rotation % 90 !== 0 ||
+      !Number.isFinite(border) ||
+      border < 0
+    )
+      throw new Error('Unsupported Unicode widget geometry.');
+    const sideways = Math.abs(rotation % 180) === 90;
+    const width = sideways ? rectangle.height : rectangle.width;
+    const height = sideways ? rectangle.width : rectangle.height;
+    const combed = field instanceof pdfLib.PDFTextField && field.isCombed();
+    const padding = combed ? 0 : 1;
+    const bounds = {
+      x: border + padding,
+      y: border + padding,
+      width: width - 2 * (border + padding),
+      height: height - 2 * (border + padding),
+    };
+    if (!(bounds.width > 0 && bounds.height > 0))
+      throw new Error('Unicode widget has no usable text area.');
+    const fontSize =
+      appearanceFontSize(widget) ?? appearanceFontSize(field.acroField);
+    const optionLabels =
+      field instanceof pdfLib.PDFOptionList ? field.getOptions() : [];
+    if (field instanceof pdfLib.PDFOptionList && field.isSorted())
+      optionLabels.sort();
+    const text =
+      field instanceof pdfLib.PDFTextField
+        ? (field.getText() ?? '')
+        : field instanceof pdfLib.PDFDropdown
+          ? (field.getSelected()[0] ?? '')
+          : optionLabels.join('\n');
+    const options = {
+      bounds,
+      font: font.font,
+      fontSize,
+      alignment:
+        field instanceof pdfLib.PDFTextField
+          ? field.getAlignment()
+          : pdfLib.TextAlignment.Left,
+    };
+    const layoutAtSize = (size: number | undefined) => {
+      const sizedOptions = { ...options, fontSize: size };
+      if (
+        field instanceof pdfLib.PDFOptionList ||
+        (field instanceof pdfLib.PDFTextField && field.isMultiline())
+      ) {
+        const layout = pdfLib.layoutMultilineText(text, sizedOptions);
+        return { lines: layout.lines, fontSize: layout.fontSize };
+      }
+      if (field instanceof pdfLib.PDFTextField && field.isCombed()) {
+        const layout = pdfLib.layoutCombedText(text, {
+          ...sizedOptions,
+          cellCount: field.getMaxLength() ?? 0,
+        });
+        // pdf-lib 1.17.1 stores the full line in each cell.text, although its
+        // encoded appearance emits just that cell's character (or empty text).
+        // Measure the emitted glyph, using the same preprocessing as its layout.
+        const characters = Array.from(
+          pdfLib.mergeLines(pdfLib.cleanText(text)),
+        );
+        return {
+          lines: layout.cells.map((cell, index) => ({
+            ...cell,
+            text: characters[index] ?? '',
+          })),
+          fontSize: layout.fontSize,
+        };
+      }
+      const layout = pdfLib.layoutSinglelineText(text, sizedOptions);
+      return { lines: [layout.line], fontSize: layout.fontSize };
+    };
+    const fits = (layout: ReturnType<typeof layoutAtSize>) =>
+      Number.isFinite(layout.fontSize) &&
+      layout.fontSize > 0 &&
+      layout.lines.every((line) => {
+        if (!line.text.trim()) return true;
+        const ink = font.measure(line.text, layout.fontSize).inkBounds;
+        return (
+          // The provider passes x/y=border/2 to drawTextField/drawOptionList;
+          // those add border/2+padding. Their final clip equals these bounds.
+          line.x + ink.minX >= bounds.x - 1e-6 &&
+          line.x + ink.maxX <= bounds.x + bounds.width + 1e-6 &&
+          line.y + ink.minY >= bounds.y - 1e-6 &&
+          line.y + ink.maxY <= bounds.y + bounds.height + 1e-6
+        );
+      });
+    if (!fits(layoutAtSize(fontSize))) {
+      // Preserve a fitting saved size. When the font substitution would clip,
+      // use pdf-lib's bounded auto-fit at or below that size, then recheck ink.
+      const automatic = layoutAtSize(0);
+      let fittedSize = Math.floor(
+        fontSize && fontSize > 0
+          ? Math.min(fontSize, automatic.fontSize)
+          : automatic.fontSize,
+      );
+      // The provider's line-height estimate can still clip the last descender.
+      // Recheck ink down to its documented 4pt floor, bounded by its 500pt cap.
+      if (fittedSize < 4 || !fits(layoutAtSize(4)))
+        throw new Error('Unicode form text would be clipped.');
+      while (fittedSize > 4 && !fits(layoutAtSize(fittedSize))) fittedSize -= 1;
+      const sourceAppearance =
+        widget.getDefaultAppearance() ??
+        field.acroField.getDefaultAppearance() ??
+        '';
+      const fontOperators = [
+        ...sourceAppearance.matchAll(
+          /\/([^\0\t\n\f\r ]+)[\0\t\n\f\r ]+(\d*\.\d+|\d+)[\0\t\n\f\r ]+Tf/g,
+        ),
+      ];
+      const last = fontOperators.at(-1);
+      const replacement = `/${font.font.name} ${fittedSize} Tf`;
+      widget.setDefaultAppearance(
+        last?.index !== undefined
+          ? sourceAppearance.slice(0, last.index) +
+              replacement +
+              sourceAppearance.slice(last.index + last[0].length)
+          : `${sourceAppearance}\n${replacement}`,
+      );
+    }
+  };
+  try {
+    for (const widget of field.acroField.getWidgets()) assertWidget(widget);
+  } catch {
+    throw formError(
+      'appearance-update-failed',
+      "The Unicode form appearance cannot be safely fitted inside its source widget. Its saved alignment, padding or size clips glyphs. Shorten the value or adjust the source PDF's text area/alignment; Kagaz will not export clipped Unicode text.",
+      fileName,
+    );
+  }
 }
 
 function applyFieldValue(
   item: ValidatedField,
+  font: PdfFontContext,
   pdfLib: PdfLibRuntime,
   fileName: string,
 ): void {
@@ -382,7 +605,7 @@ function applyFieldValue(
       case 'text':
       case 'multiline-text':
         if (!(field instanceof pdfLib.PDFTextField)) break;
-        field.setText(assertStringValue(snapshot, fileName));
+        field.setText(font.validate(assertStringValue(snapshot, fileName)));
         return;
       case 'checkbox':
         if (!(field instanceof pdfLib.PDFCheckBox)) break;
@@ -453,6 +676,7 @@ export async function prepareFormSource(
   pdfLib: PdfLibRuntime,
   fileName: string,
   throwIfAborted: () => void,
+  fontAssets?: FontAssetSnapshot,
 ): Promise<void> {
   const form = document.getForm();
   if (form.hasXFA()) {
@@ -475,17 +699,35 @@ export async function prepareFormSource(
     unsignedSignatureFields,
     fileName,
   );
-  const font = await document.embedFont(pdfLib.StandardFonts.Helvetica);
-  const fields = validateFields(form, snapshot, font, pdfLib, fileName);
+  const fields = validateFields(form, snapshot, pdfLib, fileName);
+  const font = await prepareAppearanceFont(
+    document,
+    fields,
+    pdfLib,
+    fileName,
+    throwIfAborted,
+    fontAssets,
+  );
   throwIfAborted();
 
   for (const field of fields) {
-    applyFieldValue(field, pdfLib, fileName);
+    applyFieldValue(field, font, pdfLib, fileName);
+    // The default provider consumes PDFFont directly. Normalize source text only
+    // when it already requires regeneration; no existing clean appearance is rewritten.
+    if (
+      field.field instanceof pdfLib.PDFTextField &&
+      field.field.needsAppearancesUpdate()
+    ) {
+      const current = field.field.getText() ?? '';
+      const normalized = font.validate(current);
+      if (current !== normalized) field.field.setText(normalized);
+    }
+    validateUnicodeAppearanceGeometry(field, font, pdfLib, fileName);
     throwIfAborted();
   }
 
   try {
-    form.updateFieldAppearances(font);
+    form.updateFieldAppearances(font.font);
   } catch {
     throw formError(
       'appearance-update-failed',

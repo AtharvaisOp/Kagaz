@@ -7,6 +7,7 @@ import { adoptResolvedPdfPage } from '../runtime/pdfPageLifecycle';
 import {
   drawThumbnailAnnotations,
   projectThumbnailAnnotations,
+  prepareUnicodeThumbnailAnnotations,
 } from './thumbnailAnnotations';
 import type { AnnotationAssetRegistry } from '../../pdf-annotations/runtime/annotationAssetRegistry';
 import type { PdfAnnotation } from '../../pdf-annotations/model/types';
@@ -175,28 +176,50 @@ export function ThumbnailCanvas({
     if (!canvas || !viewport || status !== 'ready') return;
     const context = canvas.getContext('2d');
     if (!context) return;
-    context.clearRect(0, 0, canvas.width, canvas.height);
+    const cancellation = new AbortController();
+    const commands = projectThumbnailAnnotations(annotations, viewport, {
+      get: (assetId) => assetRegistry.get(assetId),
+    });
+    const paint = (prepared: typeof commands) => {
+      if (cancellation.signal.aborted) return;
+      context.clearRect(0, 0, canvas.width, canvas.height);
+      if (
+        formController.sources.get(page.sourceDocumentId)?.status === 'acroform'
+      ) {
+        drawThumbnailForms(
+          context,
+          projectThumbnailForms(
+            formController.getWidgetsForWorkspacePage(page),
+            formController.getField,
+            formController.getValue,
+            viewport,
+          ),
+          pixelRatio,
+        );
+      }
+      drawThumbnailAnnotations(context, prepared, pixelRatio);
+    };
     if (
-      formController.sources.get(page.sourceDocumentId)?.status === 'acroform'
+      commands.some((command) => command.kind === 'text' && command.annotation)
     ) {
-      drawThumbnailForms(
-        context,
-        projectThumbnailForms(
-          formController.getWidgetsForWorkspacePage(page),
-          formController.getField,
-          formController.getValue,
-          viewport,
-        ),
-        pixelRatio,
-      );
-    }
-    drawThumbnailAnnotations(
-      context,
-      projectThumbnailAnnotations(annotations, viewport, {
-        get: (assetId) => assetRegistry.get(assetId),
-      }),
-      pixelRatio,
-    );
+      void prepareUnicodeThumbnailAnnotations(commands, cancellation.signal)
+        .then(paint)
+        .catch(() => {
+          // Never substitute an OS font for a bundled-font document appearance.
+          paint(
+            commands.map((command) =>
+              command.kind === 'text' && command.annotation
+                ? {
+                    ...command,
+                    text: 'Font unavailable',
+                    annotation: undefined,
+                  }
+                : command,
+            ),
+          );
+        });
+    } else paint(commands);
+    return () => cancellation.abort();
   }, [
     annotations,
     assetRegistry,

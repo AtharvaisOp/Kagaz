@@ -319,7 +319,7 @@ export function PdfPage({
   return (
     <article
       ref={setPageRef}
-      className="pdf-page-shell"
+      className={`pdf-page-shell${redactionActive ? ' pdf-page-shell--redacting' : ''}`}
       data-workspace-page-id={page.id}
       aria-label={`Page ${workspacePageNumber}`}
       style={{

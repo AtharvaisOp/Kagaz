@@ -5,6 +5,7 @@ import type {
   RgbColor,
   TextAnnotation,
 } from './types';
+import type { DocumentFontId } from '../../../lib/fonts/fontCatalog';
 
 export interface TextEditSession {
   readonly sessionId: string;
@@ -13,6 +14,8 @@ export interface TextEditSession {
   readonly annotationId: AnnotationId;
   readonly box: PdfOrientedBox;
   readonly text: string;
+  /** Omitted by legacy sessions; defaults to the compatibility font. */
+  readonly fontFamily?: DocumentFontId;
   readonly fontSizeUserUnits: number;
   readonly lineHeight: number;
   readonly align: 'left' | 'center' | 'right';
@@ -26,6 +29,7 @@ export type TextEditSessionPatch = Partial<
     TextEditSession,
     | 'box'
     | 'text'
+    | 'fontFamily'
     | 'fontSizeUserUnits'
     | 'lineHeight'
     | 'align'
@@ -59,7 +63,7 @@ export function textAnnotationFromSession(
     kind: 'text',
     box: session.box,
     text: session.text,
-    fontFamily: 'helvetica',
+    fontFamily: session.fontFamily ?? 'helvetica',
     fontSizeUserUnits: session.fontSizeUserUnits,
     lineHeight: session.lineHeight,
     align: session.align,

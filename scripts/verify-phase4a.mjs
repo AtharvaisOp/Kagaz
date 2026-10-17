@@ -18,8 +18,28 @@ const page = await context.newPage();
 page.setDefaultTimeout(15000);
 const errors = [],
   uploads = [],
-  results = [];
+  results = [],
+  consoleMessages = [],
+  failedRequests = [],
+  failedResponses = [];
 page.on('pageerror', (error) => errors.push(error.message));
+page.on('console', (message) => {
+  if (message.type() === 'error' || message.type() === 'warning') {
+    consoleMessages.push({ type: message.type(), text: message.text() });
+  }
+});
+page.on('requestfailed', (request) => {
+  failedRequests.push({
+    url: request.url(),
+    method: request.method(),
+    failure: request.failure(),
+  });
+});
+page.on('response', (response) => {
+  if (response.status() >= 400) {
+    failedResponses.push({ url: response.url(), status: response.status() });
+  }
+});
 page.on('request', (request) => {
   if (request.method() === 'POST')
     uploads.push({
@@ -29,6 +49,7 @@ page.on('request', (request) => {
 });
 const button = (name) => page.getByRole('button', { name, exact: true });
 const dialog = () => page.getByRole('dialog');
+let firstFresh = true;
 async function fixture(
   name,
   { forms = false, pages = 1, unsafe = false, image = true } = {},
@@ -75,10 +96,41 @@ async function fixture(
   return path;
 }
 async function fresh(files) {
-  await page.goto(web);
-  await page
-    .locator('input[type=file][accept="application/pdf,.pdf"]')
-    .setInputFiles(files);
+  const initialLoad = firstFresh;
+  firstFresh = false;
+  const failedRequestCount = failedRequests.length;
+  const failedResponseCount = failedResponses.length;
+  const pageErrorCount = errors.length;
+  const uploadInput = page.locator(
+    'input[type=file][accept="application/pdf,.pdf"]',
+  );
+  try {
+    await page.goto(web);
+    await uploadInput.setInputFiles(files);
+  } catch (error) {
+    const interruptedRequests = failedRequests.slice(failedRequestCount);
+    const interruptedByNetworkChange =
+      initialLoad &&
+      interruptedRequests.length > 0 &&
+      failedResponses.length === failedResponseCount &&
+      errors.length === pageErrorCount &&
+      interruptedRequests.every(
+        (request) =>
+          request.method === 'GET' &&
+          new URL(request.url).origin === new URL(web).origin &&
+          request.failure?.errorText === 'net::ERR_NETWORK_CHANGED',
+      );
+    if (!interruptedByNetworkChange) throw error;
+    const recovery = {
+      name: 'initial-vite-network-change-reload',
+      failedModuleRequests: interruptedRequests.length,
+      originalError: String(error),
+    };
+    console.warn('PHASE_4A_BROWSER_NETWORK_RECOVERY', JSON.stringify(recovery));
+    results.push(recovery);
+    await page.goto(web);
+    await uploadInput.setInputFiles(files);
+  }
   await page.locator('.pdf-canvas[data-ready=true]').first().waitFor();
   await page.waitForFunction(
     () => !document.body.innerText.includes('Checking this PDF'),
@@ -317,7 +369,9 @@ try {
   await dialog().getByRole('button', { name: 'Compress', exact: true }).click();
   await dialog()
     .getByRole('alert')
-    .filter({ hasText: /unsupported by Standard Helvetica/ })
+    .filter({
+      hasText: /Noto Sans export currently supports Latin, Greek and Cyrillic/,
+    })
     .waitFor();
   assert.equal(uploads.length, blocked);
   await dialog().getByRole('button', { name: 'Close', exact: true }).click();
@@ -444,13 +498,31 @@ try {
   );
   console.log('PHASE_4A_BROWSER_PASSED');
 } catch (error) {
+  console.error(
+    JSON.stringify(
+      { consoleMessages, failedRequests, failedResponses },
+      null,
+      2,
+    ),
+  );
   await page.screenshot({ path: `${root}/failure.png`, fullPage: true });
   console.error(await page.locator('body').innerText());
   throw error;
 } finally {
   await writeFile(
     `${root}/phase4a-results.json`,
-    JSON.stringify({ results, uploads, errors }, null, 2),
+    JSON.stringify(
+      {
+        results,
+        uploads,
+        errors,
+        consoleMessages,
+        failedRequests,
+        failedResponses,
+      },
+      null,
+      2,
+    ),
   );
   await browser.close();
 }

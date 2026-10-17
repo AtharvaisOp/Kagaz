@@ -1,4 +1,5 @@
 import type { FillStyle, RgbColor, StrokeStyle } from './types';
+import type { DocumentFontId } from '../../../lib/fonts/fontCatalog';
 
 export type AnnotationTool =
   | 'select'
@@ -17,6 +18,8 @@ export interface AnnotationStyleDefaults {
   readonly strokeWidth: number;
   readonly opacity: number;
   readonly fontSize: number;
+  readonly fontFamily?: DocumentFontId;
+  readonly lineHeight?: number;
   readonly textAlign: 'left' | 'center' | 'right';
 }
 
@@ -26,6 +29,8 @@ export const DEFAULT_ANNOTATION_STYLE: AnnotationStyleDefaults = {
   strokeWidth: 2,
   opacity: 0.35,
   fontSize: 14,
+  fontFamily: 'helvetica',
+  lineHeight: 1.2,
   textAlign: 'left',
 };
 

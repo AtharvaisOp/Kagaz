@@ -1,9 +1,33 @@
+/// <reference types="node" />
 import { describe, expect, it, vi } from 'vitest';
 import type { PDFObject } from 'pdf-lib';
 
 import { exportWorkspace } from './exportWorkspace';
 import type { FormExportSnapshot } from './forms/types';
 import type { ExportSource } from './types';
+import { readFile } from 'node:fs/promises';
+import type { DocumentFontId } from '../fonts/fontCatalog';
+import type * as FontAssetsModule from '../fonts/fontAssets';
+
+vi.mock('../fonts/fontAssets', async (importOriginal) => {
+  const original = await importOriginal<typeof FontAssetsModule>();
+  return {
+    ...original,
+    snapshotFontAssets: async (ids: Iterable<DocumentFontId>) => {
+      const assets = new Map<DocumentFontId, Uint8Array>();
+      if (new Set(ids).has('noto-sans')) {
+        const bytes = Uint8Array.from(
+          await readFile(
+            new URL('../../assets/fonts/NotoSans-Regular.ttf', import.meta.url),
+          ),
+        );
+        await original.validateBundledFontBytes(bytes);
+        assets.set('noto-sans', bytes);
+      }
+      return assets;
+    },
+  };
+});
 
 const pdfLib = await import('pdf-lib');
 const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
@@ -100,6 +124,25 @@ async function widgetCount(bytes: Uint8Array): Promise<number> {
   }
 }
 
+async function firstPageTextSizes(
+  bytes: Uint8Array,
+): Promise<readonly number[]> {
+  const loading = pdfjs.getDocument({ data: bytes.slice() });
+  try {
+    const document = await loading.promise;
+    const content = await (await document.getPage(1)).getTextContent();
+    return content.items.flatMap((item) => {
+      if (!('str' in item) || !item.str.trim()) return [];
+      const size: unknown = item.transform[0];
+      if (typeof size !== 'number' || !Number.isFinite(size))
+        throw new Error('PDF.js returned an invalid text font size.');
+      return [size];
+    });
+  } finally {
+    await loading.destroy();
+  }
+}
+
 async function makeCompleteForm(): Promise<File> {
   const document = await pdfLib.PDFDocument.create();
   const first = document.addPage([500, 700]);
@@ -167,6 +210,61 @@ async function makeTextForm(
   field.setText('Original');
   field.addToPage(pdfPage, { x: 30, y: 100, width: 220, height: 30 });
   return fileFromBytes(await document.save(), fileName);
+}
+
+async function makeUnicodeForm(): Promise<File> {
+  const document = await pdfLib.PDFDocument.create();
+  const pdfPage = document.addPage([500, 600]);
+  const form = document.getForm();
+  const name = form.createTextField('name');
+  name.setText('Original');
+  name.addToPage(pdfPage, { x: 30, y: 520, width: 400, height: 30 });
+  const notes = form.createTextField('notes');
+  notes.enableMultiline();
+  notes.setText('Old notes');
+  notes.addToPage(pdfPage, { x: 30, y: 390, width: 400, height: 100 });
+  const choice = form.createDropdown('choice');
+  choice.addOptions(['Old']);
+  choice.select('Old');
+  choice.addToPage(pdfPage, { x: 30, y: 330, width: 300, height: 30 });
+  const list = form.createOptionList('list');
+  list.addOptions(['Old']);
+  list.select('Old');
+  list.enableMultiselect();
+  list.addToPage(pdfPage, { x: 30, y: 170, width: 300, height: 130 });
+  name.setFontSize(12);
+  notes.setFontSize(12);
+  choice.setFontSize(12);
+  list.setFontSize(12);
+  form
+    .createCheckBox('accepted')
+    .addToPage(pdfPage, { x: 30, y: 100, width: 20, height: 20 });
+  const radio = form.createRadioGroup('role');
+  radio.addOptionToPage('Yes', pdfPage, {
+    x: 80,
+    y: 100,
+    width: 20,
+    height: 20,
+  });
+  radio.addOptionToPage('No', pdfPage, {
+    x: 120,
+    y: 100,
+    width: 20,
+    height: 20,
+  });
+  // Preserve a valid existing appearance; the selected Unicode source labels
+  // are regenerated only during the guarded export preparation.
+  form.updateFieldAppearances();
+  const options = ['Αθήνα', 'Москва', 'Łódź'].map((value) => ({
+    value: pdfLib.PDFHexString.fromText(value),
+    display: pdfLib.PDFHexString.fromText(value),
+  }));
+  choice.acroField.setOptions(options);
+  list.acroField.setOptions(options);
+  return fileFromBytes(
+    await document.save({ updateFieldAppearances: false }),
+    'unicode-kinds.pdf',
+  );
 }
 
 async function makeRepeatedForm(): Promise<File> {
@@ -962,6 +1060,352 @@ describe('safe AcroForm export', () => {
     }
   });
 
+  it.each(['Łódź Žluťoučký', 'Αθήνα Ελληνικά', 'Привет Москва', 'Cafe\u0301'])(
+    'exports searchable Unicode text field appearances %s',
+    async (value) => {
+      const result = await exportSource(
+        await makeTextForm('unicode-safe.pdf'),
+        safeForms('source', [
+          {
+            name: 'name',
+            kind: 'text',
+            value,
+            changed: true,
+            readOnly: false,
+            options: [],
+            multiSelect: false,
+          },
+        ]),
+      );
+      expect(await textByPage(result)).toEqual([
+        expect.stringContaining(value.normalize('NFC')),
+      ]);
+      expect(await widgetCount(result)).toBe(0);
+      const loaded = await pdfLib.PDFDocument.load(result, {
+        throwOnInvalidObject: true,
+      });
+      expect(loaded.getForm().getFields()).toHaveLength(0);
+      expect(
+        loaded.context
+          .enumerateIndirectObjects()
+          .some(
+            ([, object]) =>
+              object instanceof pdfLib.PDFDict &&
+              object
+                .lookupMaybe(pdfLib.PDFName.of('Subtype'), pdfLib.PDFName)
+                ?.toString() === '/Type0' &&
+              object.has(pdfLib.PDFName.of('ToUnicode')),
+          ),
+      ).toBe(true);
+    },
+  );
+
+  it.each(['ΑΒΓΔ', 'ЖЙЯФ', 'Ło\u0301dź'])(
+    'fits actual Unicode combed cells without shrinking a valid saved size %s',
+    async (value) => {
+      const document = await pdfLib.PDFDocument.create();
+      const pdfPage = document.addPage([300, 200]);
+      const field = document.getForm().createTextField('name');
+      field.setMaxLength(6);
+      field.enableCombing();
+      field.setText('ABCD');
+      field.addToPage(pdfPage, {
+        x: 30,
+        y: 120,
+        width: 120,
+        height: 30,
+      });
+      field.setFontSize(12);
+      const result = await exportSource(
+        fileFromBytes(await document.save(), 'unicode-combed.pdf'),
+        safeForms('source', [
+          {
+            name: 'name',
+            kind: 'text',
+            value,
+            changed: true,
+            readOnly: false,
+            options: [],
+            multiSelect: false,
+          },
+        ]),
+      );
+      expect((await textByPage(result))[0]?.replace(/\s/g, '')).toBe(
+        value.normalize('NFC'),
+      );
+      expect(await widgetCount(result)).toBe(0);
+      const loading = pdfjs.getDocument({ data: result.slice() });
+      try {
+        const loaded = await loading.promise;
+        const content = await (await loaded.getPage(1)).getTextContent();
+        const items = content.items.filter(
+          (item) => 'str' in item && item.str.trim(),
+        );
+        expect(items.length).toBeGreaterThan(0);
+        for (const item of items) {
+          if ('transform' in item) expect(item.transform[0]).toBe(12);
+        }
+      } finally {
+        await loading.destroy();
+      }
+    },
+  );
+
+  it('rejects a Unicode negative bearing that the source provider clips inside its padded text area', async () => {
+    const document = await pdfLib.PDFDocument.create();
+    const pdfPage = document.addPage([300, 200]);
+    const field = document.getForm().createTextField('name');
+    field.setText('Original');
+    field.addToPage(pdfPage, { x: 30, y: 100, width: 220, height: 30 });
+    field.setFontSize(12);
+    const file = fileFromBytes(await document.save(), 'negative-bearing.pdf');
+    await expect(
+      exportSource(
+        file,
+        safeForms('source', [
+          {
+            name: 'name',
+            kind: 'text',
+            value: 'jΑ',
+            changed: true,
+            readOnly: false,
+            options: [],
+            multiSelect: false,
+          },
+        ]),
+      ),
+    ).rejects.toMatchObject({ code: 'appearance-update-failed' });
+  });
+
+  it('reduces a saved Unicode size when a descender would enter the padded clip area', async () => {
+    const document = await pdfLib.PDFDocument.create();
+    const pdfPage = document.addPage([300, 200]);
+    const field = document.getForm().createTextField('name');
+    field.setText('Original');
+    field.addToPage(pdfPage, { x: 30, y: 100, width: 220, height: 21 });
+    field.setFontSize(12);
+    const result = await exportSource(
+      fileFromBytes(await document.save(), 'descender-padding.pdf'),
+      safeForms('source', [
+        {
+          name: 'name',
+          kind: 'text',
+          value: 'Αρ',
+          changed: true,
+          readOnly: false,
+          options: [],
+          multiSelect: false,
+        },
+      ]),
+    );
+    expect(await textByPage(result)).toEqual(['Αρ']);
+    expect(await firstPageTextSizes(result)).toEqual([11]);
+    expect(await widgetCount(result)).toBe(0);
+  });
+
+  it('fits sorted Unicode option appearances in the same order as the source provider', async () => {
+    const document = await pdfLib.PDFDocument.create();
+    const pdfPage = document.addPage([300, 200]);
+    const list = document.getForm().createOptionList('list');
+    list.addOptions(['R', 'A']);
+    list.select('R');
+    list.enableMultiselect();
+    list.enableSorting();
+    list.addToPage(pdfPage, { x: 30, y: 100, width: 220, height: 44 });
+    list.setFontSize(12);
+    document.getForm().updateFieldAppearances();
+    list.acroField.setOptions(
+      ['ρ', 'Α'].map((value) => ({
+        value: pdfLib.PDFHexString.fromText(value),
+        display: pdfLib.PDFHexString.fromText(value),
+      })),
+    );
+    list.acroField.setValues([pdfLib.PDFHexString.fromText('ρ')]);
+    const result = await exportSource(
+      fileFromBytes(
+        await document.save({ updateFieldAppearances: false }),
+        'sorted-descender.pdf',
+      ),
+      safeForms('source', [
+        {
+          name: 'list',
+          kind: 'option-list',
+          value: ['ρ'],
+          changed: true,
+          readOnly: false,
+          options: ['ρ', 'Α'].map((value) => ({
+            exportValue: value,
+            displayValue: value,
+          })),
+          multiSelect: true,
+        },
+      ]),
+    );
+    expect((await textByPage(result))[0]?.replace(/\s/g, '')).toBe('Αρ');
+    expect(await firstPageTextSizes(result)).toEqual([11, 11]);
+    expect(await widgetCount(result)).toBe(0);
+  });
+
+  it('regenerates multiline and choice Unicode appearances while retaining checkbox/radio and rotation safety', async () => {
+    const options = ['Αθήνα', 'Москва', 'Łódź'].map((value) => ({
+      exportValue: value,
+      displayValue: value,
+    }));
+    const fields = [
+      {
+        name: 'name',
+        kind: 'text',
+        value: 'Łódź Café',
+        changed: true,
+        readOnly: false,
+        options: [],
+        multiSelect: false,
+      },
+      {
+        name: 'notes',
+        kind: 'multiline-text',
+        value: 'Ελληνικά\r\nПривет мир\rŁódź',
+        changed: true,
+        readOnly: false,
+        options: [],
+        multiSelect: false,
+      },
+      {
+        name: 'choice',
+        kind: 'dropdown',
+        value: 'Αθήνα',
+        changed: true,
+        readOnly: false,
+        options,
+        multiSelect: false,
+      },
+      {
+        name: 'list',
+        kind: 'option-list',
+        value: ['Москва', 'Łódź'],
+        changed: true,
+        readOnly: false,
+        options,
+        multiSelect: true,
+      },
+      {
+        name: 'accepted',
+        kind: 'checkbox',
+        value: true,
+        changed: true,
+        readOnly: false,
+        options: [],
+        multiSelect: false,
+      },
+      {
+        name: 'role',
+        kind: 'radio',
+        value: 'Yes',
+        changed: true,
+        readOnly: false,
+        options: [],
+        multiSelect: false,
+      },
+    ] as const;
+    const file = await makeUnicodeForm();
+    for (const rotation of [0, 90, 180, 270] as const) {
+      const result = await exportSource(file, safeForms('source', fields), [
+        page('unicode-page', 'source', 0, rotation),
+      ]);
+      const text = (await textByPage(result))[0]!;
+      for (const value of [
+        'Łódź Café',
+        'Ελληνικά',
+        'Привет мир',
+        'Αθήνα',
+        'Москва',
+        'Łódź',
+      ])
+        expect(text).toContain(value);
+      expect(text).not.toContain('Original');
+      const output = await pdfLib.PDFDocument.load(result, {
+        throwOnInvalidObject: true,
+      });
+      expect(output.getPage(0).getRotation().angle).toBe(rotation);
+      expect(output.getForm().getFields()).toHaveLength(0);
+      expect(await widgetCount(result)).toBe(0);
+    }
+  });
+
+  it('clears Unicode text safely and preserves source readonly values rather than a conflicting snapshot', async () => {
+    const sourceFile = await makeTextForm('empty-readonly.pdf');
+    const field = (value: string, readOnly = false) =>
+      safeForms('source', [
+        {
+          name: 'name',
+          kind: 'text',
+          value,
+          changed: true,
+          readOnly,
+          options: [],
+          multiSelect: false,
+        },
+      ]);
+    expect(await textByPage(await exportSource(sourceFile, field('')))).toEqual(
+      [''],
+    );
+    expect(
+      await textByPage(await exportSource(sourceFile, field('नमस्ते', true))),
+    ).toEqual([expect.stringContaining('Original')]);
+  });
+
+  it('rejects Unicode form content that cannot fit even at the bounded minimum appearance size', async () => {
+    const exporting = exportSource(
+      await makeTextForm('unicode-overflow.pdf'),
+      safeForms('source', [
+        {
+          name: 'name',
+          kind: 'text',
+          value: 'Ж'.repeat(500),
+          changed: true,
+          readOnly: false,
+          options: [],
+          multiSelect: false,
+        },
+      ]),
+    );
+    await expect(exporting).rejects.toMatchObject({
+      code: 'appearance-update-failed',
+    });
+    await expect(exporting).rejects.toThrowError('safely fitted');
+  });
+
+  it.each([
+    'नमस्ते',
+    'मराठी भाषा',
+    'कागदपत्र',
+    'विद्यार्थी',
+    'प्रकल्प',
+    'क्षेत्र',
+    'कृपया',
+    'हिन्दी',
+    'العربية',
+    'עברית',
+    'a\u0307\u0323',
+  ])('fails closed on unverified form shaping %s', async (value) => {
+    await expect(
+      exportSource(
+        await makeTextForm('unsupported-shaping.pdf'),
+        safeForms('source', [
+          {
+            name: 'name',
+            kind: 'text',
+            value,
+            changed: true,
+            readOnly: false,
+            options: [],
+            multiSelect: false,
+          },
+        ]),
+      ),
+    ).rejects.toMatchObject({ code: 'unsupported-text-font' });
+  });
+
   it('maps canonical choice values to display text and validates display glyphs', async () => {
     const snapshot = (displayValue: string) =>
       safeForms('source', [
@@ -982,6 +1426,25 @@ describe('safe AcroForm export', () => {
     expect(await textByPage(result)).toEqual([
       expect.stringContaining('Japan'),
     ]);
+
+    const unicode = await exportSource(
+      await makeMappedDropdown('JP', 'Αθήνα'),
+      snapshot('Αθήνα'),
+    );
+    expect(await textByPage(unicode)).toEqual([
+      expect.stringContaining('Αθήνα'),
+    ]);
+    expect(await widgetCount(unicode)).toBe(0);
+    const decomposed = exportSource(
+      await makeMappedDropdown('JP', 'Cafe\u0301'),
+      snapshot('Cafe\u0301'),
+    );
+    await expect(decomposed).rejects.toMatchObject({
+      code: 'unsupported-text-font',
+    });
+    await expect(decomposed).rejects.toThrowError(
+      'decomposed combining sequence',
+    );
 
     await expect(
       exportSource(await makeMappedDropdown('JP', '日本'), snapshot('日本')),

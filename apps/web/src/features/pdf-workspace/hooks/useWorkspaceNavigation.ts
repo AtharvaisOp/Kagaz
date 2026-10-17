@@ -33,10 +33,19 @@ export function useWorkspaceNavigation({
   const pageElementsRef = useRef(new Map<WorkspacePageId, HTMLElement>());
   const selectedPageIdRef = useRef(selectedPageId);
   const visibilityRef = useRef(new Map<WorkspacePageId, PageVisibility>());
+  const explicitSelectionRef = useRef<WorkspacePageId | null>(null);
 
   useEffect(() => {
     selectedPageIdRef.current = selectedPageId;
   }, [selectedPageId]);
+
+  useEffect(() => {
+    if (
+      explicitSelectionRef.current &&
+      !pages.some((page) => page.id === explicitSelectionRef.current)
+    )
+      explicitSelectionRef.current = null;
+  }, [pages]);
 
   const registerPage = useCallback(
     (pageId: WorkspacePageId, element: HTMLElement | null) => {
@@ -45,6 +54,12 @@ export function useWorkspaceNavigation({
       } else {
         pageElementsRef.current.delete(pageId);
         visibilityRef.current.delete(pageId);
+        // Callback refs briefly detach during rerenders; only clear if it stays absent.
+        if (explicitSelectionRef.current === pageId)
+          queueMicrotask(() => {
+            if (!pageElementsRef.current.has(pageId))
+              explicitSelectionRef.current = null;
+          });
       }
     },
     [],
@@ -52,6 +67,8 @@ export function useWorkspaceNavigation({
 
   const scrollToPage = useCallback(
     (pageId: WorkspacePageId) => {
+      explicitSelectionRef.current = pageId;
+      selectedPageIdRef.current = pageId;
       onSelectPage(pageId);
       pageElementsRef.current.get(pageId)?.scrollIntoView({
         behavior: prefersReducedMotion() ? 'auto' : 'smooth',
@@ -60,6 +77,78 @@ export function useWorkspaceNavigation({
     },
     [onSelectPage],
   );
+
+  useEffect(() => {
+    const resumeScrollSelection = (event: Event) => {
+      if (
+        event.target instanceof Element &&
+        (event.target.closest('.thumbnail-rail, dialog') ||
+          (event.type === 'touchstart' &&
+            event.target.closest(
+              'button, input, textarea, select, a, [role="button"], [role="slider"]',
+            )))
+      )
+        return;
+      explicitSelectionRef.current = null;
+    };
+    const resumeOnScrollKey = (event: KeyboardEvent) => {
+      if (
+        event.altKey ||
+        event.ctrlKey ||
+        event.metaKey ||
+        event.defaultPrevented
+      )
+        return;
+      if (
+        ![
+          'ArrowUp',
+          'ArrowDown',
+          'PageUp',
+          'PageDown',
+          'Home',
+          'End',
+          ' ',
+        ].includes(event.key)
+      )
+        return;
+      if (
+        event.target instanceof Element &&
+        event.target.closest(
+          '.thumbnail-rail, dialog, input, textarea, select, [role="slider"], [contenteditable="true"]',
+        )
+      )
+        return;
+      if (
+        event.key === ' ' &&
+        event.target instanceof Element &&
+        event.target.closest('button, a, [role="button"]')
+      )
+        return;
+      resumeScrollSelection(event);
+    };
+    const resumeOnPagePointer = (event: PointerEvent) => {
+      if (
+        event.target instanceof Element &&
+        event.target.closest(
+          '.thumbnail-rail, dialog, button, input, textarea, select, a, [role="button"], [role="slider"]',
+        )
+      )
+        return;
+      explicitSelectionRef.current = null;
+    };
+    window.addEventListener('wheel', resumeScrollSelection, { passive: true });
+    window.addEventListener('touchstart', resumeScrollSelection, {
+      passive: true,
+    });
+    window.addEventListener('keydown', resumeOnScrollKey);
+    window.addEventListener('pointerdown', resumeOnPagePointer);
+    return () => {
+      window.removeEventListener('wheel', resumeScrollSelection);
+      window.removeEventListener('touchstart', resumeScrollSelection);
+      window.removeEventListener('keydown', resumeOnScrollKey);
+      window.removeEventListener('pointerdown', resumeOnPagePointer);
+    };
+  }, []);
 
   useEffect(() => {
     if (typeof IntersectionObserver === 'undefined') {
@@ -86,6 +175,9 @@ export function useWorkspaceNavigation({
           pageOrder,
           visibilityRef.current,
         );
+        // Toolbar focus and smooth thumbnail jumps can scroll the viewport without
+        // changing the page the user explicitly selected.
+        if (explicitSelectionRef.current) return;
         if (currentPageId && currentPageId !== selectedPageIdRef.current) {
           onSelectPage(currentPageId);
         }

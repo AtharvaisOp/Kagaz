@@ -1,5 +1,6 @@
 export type AnnotationExportErrorCode =
   | 'unsupported-text-font'
+  | 'text-overflow'
   | 'missing-image-asset'
   | 'missing-signature-asset'
   | 'image-read-failed'
