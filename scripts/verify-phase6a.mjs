@@ -9,6 +9,8 @@ const { chromium } = require(
   process.env.KAGAZ_PLAYWRIGHT_MODULE || 'playwright',
 );
 const pdfLib = require('../apps/web/node_modules/pdf-lib');
+const pdfjs =
+  await import('../apps/web/node_modules/pdfjs-dist/legacy/build/pdf.mjs');
 const artifactDirectory = process.env.KAGAZ_ARTIFACT_DIR;
 assert(artifactDirectory, 'Set KAGAZ_ARTIFACT_DIR outside the repository.');
 const artifacts = resolve(artifactDirectory);
@@ -37,9 +39,7 @@ const context = await browser.newContext({
   acceptDownloads: true,
 });
 const page = await context.newPage();
-const verifier = await context.newPage();
 page.setDefaultTimeout(15_000);
-verifier.setDefaultTimeout(15_000);
 const pageErrors = [];
 const nonGetRequests = [];
 const results = [];
@@ -100,32 +100,25 @@ const downloadPdf = async (name) => {
   const document = await pdfLib.PDFDocument.load(bytes);
   return { file, bytes, document };
 };
-const extractText = async (bytes) =>
-  verifier.evaluate(async (buffer) => {
-    const pdfjs = await import('/node_modules/pdfjs-dist/build/pdf.mjs');
-    pdfjs.GlobalWorkerOptions.workerSrc =
-      '/node_modules/pdfjs-dist/build/pdf.worker.mjs';
-    const task = pdfjs.getDocument({
-      data: new Uint8Array(buffer),
-      useSystemFonts: true,
-    });
-    const document = await task.promise;
-    try {
-      const pages = [];
-      for (let pageNumber = 1; pageNumber <= document.numPages; pageNumber++) {
-        const current = await document.getPage(pageNumber);
-        try {
-          const content = await current.getTextContent();
-          pages.push(content.items.map((item) => item.str || '').join(' '));
-        } finally {
-          current.cleanup();
-        }
+const extractText = async (bytes) => {
+  const task = pdfjs.getDocument({ data: bytes, useSystemFonts: true });
+  const document = await task.promise;
+  try {
+    const pages = [];
+    for (let pageNumber = 1; pageNumber <= document.numPages; pageNumber++) {
+      const current = await document.getPage(pageNumber);
+      try {
+        const content = await current.getTextContent();
+        pages.push(content.items.map((item) => item.str || '').join(' '));
+      } finally {
+        current.cleanup();
       }
-      return pages;
-    } finally {
-      await task.destroy();
     }
-  }, Array.from(bytes));
+    return pages;
+  } finally {
+    await task.destroy();
+  }
+};
 const closeAssistant = async (dialog) => {
   await dialog.getByRole('button', { name: 'Close AI Assistant' }).click();
   await dialog.waitFor({ state: 'hidden' });
@@ -135,7 +128,6 @@ const closeAssistant = async (dialog) => {
 };
 
 try {
-  await verifier.goto(appUrl);
   await page.goto(appUrl);
   await page
     .locator('input[type=file][accept="application/pdf,.pdf"]')
