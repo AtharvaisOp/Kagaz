@@ -17,8 +17,9 @@ Updated: 2026-10-17
 - Stage: F — final production-readiness audit and documentation accuracy; engineering/CI gates complete.
 - Branch: `codex/phase-5f-final-audit`, based on `af3b000cb8d7f37b37ad85891720ef5914cd2cfc`.
 - Audit report commit: `b6af61480779308ddd7eb182f5ef52315409ce4f` (`docs: record final production readiness audit`).
+- PR: [#9](https://github.com/AtharvaisOp/Kagaz/pull/9), draft, current head `0076d206fb7b7bca9c4d06b40b5b8d343c037ebc`.
 - Changes: corrected stale release statements and recorded audit findings in [phase-5f.md](phase-5f.md).
-- Immediate next action: push this branch, open the docs PR, require exact-head PR CI, merge, then verify the resulting main SHA and deployment readiness.
+- Immediate next action: require exact-head PR CI, update the PR as ready when all checks pass, merge, then verify the resulting main SHA and deployment readiness.
 
 ## Completed stages
 
