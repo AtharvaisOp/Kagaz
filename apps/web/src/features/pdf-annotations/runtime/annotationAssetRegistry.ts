@@ -1,5 +1,6 @@
 import type { AnnotationAssetId } from '../model/types';
 import { rejectUnsupportedJpegOrientation } from './jpegExifOrientation';
+import { WATERMARK_MAX_IMAGE_BYTES } from '../../../lib/pdf-export/watermarks/imageSafety';
 
 export interface AnnotationImageAsset {
   readonly assetId: AnnotationAssetId;
@@ -23,6 +24,8 @@ export interface AnnotationAssetRegistryDependencies {
   readonly createObjectUrl: (blob: Blob) => string;
   readonly revokeObjectUrl: (url: string) => void;
   readonly decode: (blob: Blob, objectUrl: string) => Promise<DecodedImage>;
+  /** Applies bounded decoding/canonicalization before untrusted bytes reach Image(). */
+  readonly prepare?: (blob: Blob, signal?: AbortSignal) => Promise<Blob>;
 }
 
 const supportedMimeTypes = new Set(['image/png', 'image/jpeg']);
@@ -52,6 +55,7 @@ export function createAnnotationAssetRegistry(
   const assets = new Map<AnnotationAssetId, AnnotationImageAsset>();
   const listeners = new Map<AnnotationAssetId, Set<() => void>>();
   const pendingUrls = new Set<string>();
+  const activePreparations = new Set<AbortController>();
   let generation = 0;
   const revokePending = (url: string) => {
     if (pendingUrls.delete(url)) dependencies.revokeObjectUrl(url);
@@ -86,19 +90,44 @@ export function createAnnotationAssetRegistry(
       if (!supportedMimeTypes.has(blob.type)) {
         throw new Error('Choose a PNG or JPEG image.');
       }
+      if (!blob.size || blob.size > WATERMARK_MAX_IMAGE_BYTES) {
+        throw new Error('The selected image is empty or too large.');
+      }
       const mimeType = blob.type as AnnotationImageAsset['mimeType'];
       if (mimeType === 'image/jpeg') {
         await rejectUnsupportedJpegOrientation(blob);
       }
       if (cancelled())
         throw new DOMException('Image loading was cancelled.', 'AbortError');
+      let preparedBlob = blob;
+      if (dependencies.prepare) {
+        const preparation = new AbortController();
+        const abortPreparation = () => preparation.abort();
+        activePreparations.add(preparation);
+        signal?.addEventListener('abort', abortPreparation, { once: true });
+        try {
+          preparedBlob = await dependencies.prepare(blob, preparation.signal);
+        } catch (error) {
+          if (cancelled() || preparation.signal.aborted)
+            throw new DOMException(
+              'Image loading was cancelled.',
+              'AbortError',
+            );
+          throw error;
+        } finally {
+          activePreparations.delete(preparation);
+          signal?.removeEventListener('abort', abortPreparation);
+        }
+      }
+      if (cancelled())
+        throw new DOMException('Image loading was cancelled.', 'AbortError');
       const assetId = dependencies.createId();
-      const objectUrl = dependencies.createObjectUrl(blob);
+      const objectUrl = dependencies.createObjectUrl(preparedBlob);
       pendingUrls.add(objectUrl);
       const abort = () => revokePending(objectUrl);
       signal?.addEventListener('abort', abort, { once: true });
       try {
-        const decoded = await dependencies.decode(blob, objectUrl);
+        const decoded = await dependencies.decode(preparedBlob, objectUrl);
         if (cancelled()) {
           const close = (decoded.image as { close?: () => void }).close;
           close?.call(decoded.image);
@@ -116,7 +145,7 @@ export function createAnnotationAssetRegistry(
         }
         const asset: AnnotationImageAsset = {
           assetId,
-          blob,
+          blob: preparedBlob,
           fileName:
             typeof File !== 'undefined' && blob instanceof File
               ? blob.name
@@ -162,6 +191,7 @@ export function createAnnotationAssetRegistry(
     destroy,
     destroyAll(): void {
       generation += 1;
+      for (const preparation of activePreparations) preparation.abort();
       for (const url of pendingUrls) revokePending(url);
       for (const assetId of [...assets.keys()]) destroy(assetId);
     },
@@ -178,10 +208,25 @@ export type AnnotationAssetRegistry = ReturnType<
 export function createBrowserAnnotationAssetRegistry(
   createId: () => AnnotationAssetId,
 ): AnnotationAssetRegistry {
+  const prepare = async (blob: Blob, signal?: AbortSignal) => {
+    const { prepareWatermarkImageFile } =
+      await import('../../../lib/pdf-export/watermarks/nativeImage');
+    try {
+      return (await prepareWatermarkImageFile(blob, signal)).blob;
+    } catch (error) {
+      if (error instanceof DOMException && error.name === 'AbortError')
+        throw error;
+      throw new Error(
+        'The selected image could not be opened safely. Choose a valid PNG or JPEG.',
+        { cause: error },
+      );
+    }
+  };
   return createAnnotationAssetRegistry({
     createId,
     createObjectUrl: (blob) => URL.createObjectURL(blob),
     revokeObjectUrl: (url) => URL.revokeObjectURL(url),
     decode: browserDecodeImage,
+    prepare,
   });
 }

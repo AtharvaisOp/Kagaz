@@ -15,6 +15,7 @@ import {
   watermarkAppliesToPage,
 } from '../../features/pdf-watermarks/model/watermark';
 import { assertWatermarkImageBytes } from './watermarks/imageSafety';
+import { validateWatermarkPngDeflate } from './watermarks/pngInflateSafety';
 import { prepareWatermarkImageSource } from './watermarks/nativeImage';
 import type { DocumentFontId } from '../fonts/fontCatalog';
 import { FontTextError } from '../fonts/fontErrors';
@@ -206,6 +207,38 @@ export async function exportWorkspace(
     : null;
 
   try {
+    const annotationImageAssetIds = new Set<string>();
+    for (const annotations of annotationsByPage.values()) {
+      for (const annotation of annotations) {
+        if (annotation.kind === 'image' || annotation.kind === 'signature')
+          annotationImageAssetIds.add(annotation.assetId);
+      }
+    }
+    for (const assetId of annotationImageAssetIds) {
+      throwIfAborted(options.signal);
+      const source = imageAssets.get(assetId);
+      if (!source) continue;
+      try {
+        const bytes =
+          source.bytes instanceof Uint8Array
+            ? source.bytes.slice()
+            : new Uint8Array(source.bytes.slice(0));
+        assertWatermarkImageBytes(bytes, source.mimeType);
+        if (source.mimeType === 'image/png')
+          await validateWatermarkPngDeflate(bytes, options.signal);
+        imageAssets.set(assetId, { ...source, bytes });
+      } catch (error) {
+        if (error instanceof PdfExportError && error.code === 'aborted')
+          throw error;
+        throw new AnnotationExportError(
+          'image-invalid',
+          'A visual annotation image could not be decoded safely. Choose a valid PNG or JPEG and try again.',
+          null,
+          assetId,
+        );
+      }
+      throwIfAborted(options.signal);
+    }
     if (watermark?.kind === 'image' && hasWatermark) {
       const source = imageAssets.get(watermark.assetId);
       if (source) {

@@ -18,6 +18,12 @@ const pngBytes = Uint8Array.from(
   ),
   (character) => character.charCodeAt(0),
 );
+const malformedPngBytes = Uint8Array.from(
+  atob(
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADklEQVR4nAQAAAAAAAAAAAAAANvPr/sAAAAASUVORK5CYII=',
+  ),
+  (character) => character.charCodeAt(0),
+);
 
 async function makePdf(
   fileName: string,
@@ -138,6 +144,32 @@ describe('exportWorkspace', () => {
         imageAssets: new Map(),
       }),
     ).rejects.toMatchObject({ code: 'missing-signature-asset' });
+  });
+  it('rejects malformed PNG signatures before pdf-lib embedding', async () => {
+    const file = await makePdf('malformed-image.pdf', [
+      { width: 300, height: 200 },
+    ]);
+    const embed = vi.spyOn(pdfLib.PDFDocument.prototype, 'embedPng');
+    await expect(
+      exportWorkspace({
+        pages: [page('p', 'source', 0)],
+        sources: new Map([['source', source('source', file)]]),
+        forms: plainForms('source'),
+        annotationsByPage: new Map([['p', [signature('p')]]]),
+        imageAssets: new Map([
+          [
+            'signature-asset',
+            {
+              assetId: 'signature-asset',
+              mimeType: 'image/png',
+              bytes: malformedPngBytes,
+            },
+          ],
+        ]),
+      }),
+    ).rejects.toMatchObject({ code: 'image-invalid' });
+    expect(embed).not.toHaveBeenCalled();
+    embed.mockRestore();
   });
   it('exports click-time signatures after editor move/delete, and follows Undo/Redo without changing history', async () => {
     const file = await makePdf('snapshot.pdf', [{ width: 300, height: 200 }]);
