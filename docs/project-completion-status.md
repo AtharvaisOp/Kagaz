@@ -19,7 +19,7 @@ Updated: 2026-10-17
 - Audit report commit: `b6af61480779308ddd7eb182f5ef52315409ce4f` (`docs: record final production readiness audit`).
 - PR: [#9](https://github.com/AtharvaisOp/Kagaz/pull/9), draft, current head `0076d206fb7b7bca9c4d06b40b5b8d343c037ebc`.
 - Changes: corrected stale release statements and recorded audit findings in [phase-5f.md](phase-5f.md).
-- Immediate next action: require exact-head PR CI, update the PR as ready when all checks pass, merge, then verify the resulting main SHA and deployment readiness.
+- PR CI Run 85 failed only because `apps/web/src/lib/fonts/fontAssets.test.ts` exceeded its 5-second limit while 77 Vitest workers and API tests ran concurrently. Both package test scripts now cap Vitest concurrency at four workers; the local web suite passes 77 files / 802 tests with this cap. Local API-native integration is limited by unavailable Windows qpdf/Ghostscript/OCRmyPDF. Push the fix and require exact-head Linux CI before marking the PR ready or merging.
 
 ## Completed stages
 
