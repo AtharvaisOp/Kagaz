@@ -16,6 +16,7 @@ Updated: 2026-10-17
 - Stage: E — focused accessibility and responsive polish; implementation and local browser checks complete, exact-head CI / PR / merge pending.
 - Branch: `codex/phase-5e-accessibility`.
 - Base SHA: `a0072a9b4546851807955ec31e4bcdb86797318d`.
+- Stage E implementation SHA: `ebe6d0b902d2f6dcfda0236add1c04d5b68d86dd` (`fix: improve responsive PDF controls and keyboard access`).
 - Report: [phase-5e.md](phase-5e.md).
 - Local validation passed: frozen install (pnpm 12.3.4), lint, typecheck, web tests (77 files / 802 tests), build, format check, workspace sampler (3/3), Phase 3F, Phase 3G, Phase 3G lifecycle, Phase 5E browser matrix (1440/768/390/360 px, DPR 2), and `git diff --check`.
 - Immediate next action: inspect final diff, commit the Phase 5E changes, open a focused PR, and require exact-head CI before merge.
