@@ -215,6 +215,7 @@ export function ThumbnailRail({
   formController,
 }: ThumbnailRailProps) {
   const [railRoot, setRailRoot] = useState<HTMLElement | null>(null);
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
   const [announcement, setAnnouncement] = useState('');
   const pendingFocusPageId = useRef<WorkspacePageId | null>(null);
   const pageOrder = pages.map((page) => page.id);
@@ -231,9 +232,52 @@ export function ThumbnailRail({
 
   useEffect(() => {
     if (mobileOpen) {
-      railRoot?.focus();
+      closeButtonRef.current?.focus();
     }
   }, [mobileOpen, railRoot]);
+
+  useEffect(() => {
+    if (!mobileOpen) return;
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        onCloseMobile();
+        return;
+      }
+
+      if (event.key !== 'Tab' || !railRoot) return;
+
+      const focusable = Array.from(
+        railRoot.querySelectorAll<HTMLElement>(
+          'a[href], button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex]:not([tabindex="-1"])',
+        ),
+      ).filter((element) => element.getClientRects().length > 0);
+      const first = focusable[0];
+      const last = focusable.at(-1);
+
+      if (!first || !last) {
+        event.preventDefault();
+        railRoot.focus();
+        return;
+      }
+
+      const active = document.activeElement;
+      if (!railRoot.contains(active)) {
+        event.preventDefault();
+        (event.shiftKey ? last : first).focus();
+      } else if (event.shiftKey && active === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && active === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [mobileOpen, onCloseMobile, railRoot]);
 
   const handleDelete = (pageId: WorkspacePageId) => {
     const position = pageOrder.indexOf(pageId);
@@ -268,7 +312,10 @@ export function ThumbnailRail({
         id="thumbnail-rail"
         className="thumbnail-rail"
         data-mobile-open={mobileOpen || undefined}
-        aria-label="Workspace pages"
+        role={mobileOpen ? 'dialog' : undefined}
+        aria-modal={mobileOpen || undefined}
+        aria-label={mobileOpen ? undefined : 'Workspace pages'}
+        aria-labelledby={mobileOpen ? 'thumbnail-rail-title' : undefined}
         tabIndex={mobileOpen ? -1 : undefined}
       >
         <div className="sr-only" role="status" aria-live="polite">
@@ -277,11 +324,12 @@ export function ThumbnailRail({
         <div className="thumbnail-rail-header">
           <div>
             <p className="thumbnail-eyebrow">Page manager</p>
-            <h2>
+            <h2 id="thumbnail-rail-title">
               Pages <span>{pages.length}</span>
             </h2>
           </div>
           <button
+            ref={closeButtonRef}
             className="icon-button thumbnail-close"
             type="button"
             aria-label="Close page manager"

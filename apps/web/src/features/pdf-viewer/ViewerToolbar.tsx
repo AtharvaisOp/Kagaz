@@ -84,7 +84,7 @@ export function ViewerToolbar({
   return (
     <div
       className="viewer-toolbar"
-      role="toolbar"
+      role="group"
       aria-label="PDF controls"
       aria-busy={exporting}
     >
@@ -163,7 +163,7 @@ export function ViewerToolbar({
         </button>
         <button
           ref={compressTriggerRef}
-          className="toolbar-button"
+          className="toolbar-button compress-button"
           type="button"
           disabled={exporting || pageCount === 0}
           onClick={onOpenCompress}
@@ -172,7 +172,7 @@ export function ViewerToolbar({
         </button>
         <button
           ref={ocrTriggerRef}
-          className="toolbar-button"
+          className="toolbar-button ocr-button"
           type="button"
           disabled={exporting || pageCount === 0}
           onClick={onOpenOcr}
