@@ -150,9 +150,10 @@ produce a fixed explanation instead of an operation.
 - The production verifier initially tried to load PDF.js from the deployed
   site. `scripts/verify-phase6a.mjs` now imports the installed Node PDF.js
   package and inspects downloaded bytes locally; this corrected verifier passed
-  against both the local editor and production. This verifier-only correction
-  and this checkpoint update are in follow-up PR #11; the shipped editor code
-  remains the code merged as `f3655be0041d49e469669723a9882d09d6bf5970`.
+  against both the local editor and production. The verifier-only correction
+  and this checkpoint update were merged in PR #11 as
+  `5df76b0636b37681f36d0b9d9feee19e92cf3f64`; the shipped editor code remains
+  the code merged as `f3655be0041d49e469669723a9882d09d6bf5970`.
 
 ### Release record
 
@@ -160,13 +161,22 @@ produce a fixed explanation instead of an operation.
   merged to `main` as `f3655be0041d49e469669723a9882d09d6bf5970`.
 - Exact-head Actions: run #92 passed on
   `fb91b5e3a2b80f7f72c02dcf862107563296bc9e`.
+- Final-main Actions: run #95 passed on
+  `5df76b0636b37681f36d0b9d9feee19e92cf3f64`, including quality, native and
+  container gates, existing PDF browser regressions, and the Phase 6A export
+  verifier.
 - Production: Vercel deployment
   `dpl_8M88cSyPPAJQK1uB5ji4wpgGUYAE` READY; production local-command editing,
   PDF export, privacy network checks, responsive layout, and keyboard behavior
   passed in the real browser.
-- Follow-up PR #11 contains only the production-verifier portability fix and
-  this updated checkpoint. Its exact-head CI and merge are the remaining
-  repository housekeeping; they do not change the deployed editor behavior.
+- Final-main deployment: Vercel deployment
+  `dpl_J8oHc4X8QzNqbgJ3DZUgybneBd7B` READY at
+  `5df76b0636b37681f36d0b9d9feee19e92cf3f64`. The production alias was
+  reverified against this deployment using the five-page workflow above; it
+  recorded zero non-GET requests and zero browser page errors. Artifacts are
+  under `C:\Users\athar\AppData\Local\Temp\kagaz-phase6a-final-main`.
+- Follow-up verifier/checkpoint PR: [#11](https://github.com/AtharvaisOp/Kagaz/pull/11),
+  merged. The phase is complete; the next planned work is Phase 6B.
 - No live remote model is configured or claimed. Enabling one requires an
   authenticated server-side provider path with usage quotas and spending
   controls, plus explicit remote-mode disclosure and verification.
