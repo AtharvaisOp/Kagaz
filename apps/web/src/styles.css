@@ -710,7 +710,13 @@ input:focus-visible + * {
 .thumbnail-action:focus-visible {
   color: #ffffff;
   background: #2f2f33;
-  outline: 0;
+}
+
+.thumbnail-action:focus-visible {
+  position: relative;
+  z-index: 1;
+  outline: 2px solid #06b6d4;
+  outline-offset: -2px;
 }
 
 .thumbnail-action:disabled {
@@ -868,6 +874,11 @@ input:focus-visible + * {
 
 .toolbar-button {
   padding: 0 14px;
+}
+
+.viewer-toolbar .pages-toggle-button,
+.thumbnail-rail .thumbnail-close {
+  display: none;
 }
 
 .icon-button {
@@ -1924,7 +1935,11 @@ input:focus-visible + * {
 .annotation-summary-toggle:focus-visible {
   border-color: #06b6d4;
   color: #ffffff;
-  outline: 0;
+}
+
+.annotation-summary-toggle:focus-visible {
+  outline: 2px solid #06b6d4;
+  outline-offset: 2px;
 }
 
 .annotation-summary-empty {
@@ -2300,6 +2315,11 @@ input:focus-visible + * {
     display: inline-flex;
   }
 
+  .viewer-toolbar .pages-toggle-button,
+  .thumbnail-rail .thumbnail-close {
+    display: inline-flex;
+  }
+
   .mobile-page-scrim {
     position: fixed;
     z-index: 55;
@@ -2332,6 +2352,13 @@ input:focus-visible + * {
     width: 38px;
     padding: 0;
     font-size: 0;
+  }
+
+  .toolbar-button.compress-button,
+  .toolbar-button.ocr-button {
+    width: auto;
+    padding: 0 10px;
+    font-size: 11px;
   }
 
   .download-button {
@@ -2385,6 +2412,20 @@ input:focus-visible + * {
     bottom: 14px;
     left: 14px;
     max-width: none;
+  }
+}
+
+@media (min-width: 721px) and (max-width: 900px) {
+  .viewer-toolbar {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 9px;
+    padding: 11px 14px;
+  }
+
+  .toolbar-actions {
+    flex-wrap: wrap;
+    justify-content: flex-start;
   }
 }
 
