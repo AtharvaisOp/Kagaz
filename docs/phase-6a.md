@@ -4,8 +4,9 @@
 
 Updated: 2026-10-17
 
-Status: implementation and real-browser verification pass locally. Pull request,
-exact-head CI, merge, and production verification remain pending.
+Status: PASS for the scoped browser-local assistant. The feature is merged and
+verified on production. Live remote model planning is NOT ENABLED because no
+provider, authenticated usage limits, or spending controls are configured.
 
 ### Starting state
 
@@ -20,6 +21,8 @@ exact-head CI, merge, and production verification remain pending.
   baseline is `acb79f6441e36557bc8680e5e232c561524f3431`. Work is based on the
   actual clean checkout and task-specified baseline.
 - Working branch: `codex/phase-6a-ai-assistant`.
+- Phase branch head: `fb91b5e3a2b80f7f72c02dcf862107563296bc9e`.
+- Phase code merged by PR #10 as `f3655be0041d49e469669723a9882d09d6bf5970`.
 
 ### Investigation and architecture decisions
 
@@ -117,8 +120,8 @@ produce a fixed explanation instead of an operation.
   native PDF inspector tests failed because the default `python3` resolves to
   the Microsoft Store execution alias and this host lacks CI's Python PDF
   packages/native tools. The output reported 102 API tests passing and 8
-  skipped. CI installs these Linux packages before running the suite. Exact-head
-  CI remains required before merge.
+  skipped. CI installs these Linux packages before running the suite; the
+  exact-head Linux CI run passed the full test job.
 - `scripts/verify-phase6a.mjs` passed in Chromium `151.0.7922.34` with a locally
   generated five-page PDF. It independently inspected downloaded PDF outputs
   using pdf-lib and PDF.js. Verified: preview without mutation; single rotation
@@ -129,16 +132,44 @@ produce a fixed explanation instead of an operation.
   reduced motion at mobile widths.
 - Browser artifacts and report are outside the repository under
   `C:\Users\athar\AppData\Local\Temp\kagaz-phase6a`.
+- GitHub Actions run #92 for exact phase head `fb91b5e3a2b80f7f72c02dcf862107563296bc9e`
+  passed both the quality job and the production-container/browser job. The
+  latter ran the native/container, existing PDF regression, and Phase 6A
+  approval/export checks.
+- Vercel deployment `dpl_8M88cSyPPAJQK1uB5ji4wpgGUYAE` reached READY for the
+  production alias `https://kagaz-personal.vercel.app` at merged SHA
+  `f3655be0041d49e469669723a9882d09d6bf5970`.
+- The production alias was exercised in Chromium `151.0.7922.34` with a
+  generated five-page PDF. Downloaded PDFs were independently inspected. The
+  run verified rotation with no preview mutation and only one mutation after
+  repeated Apply, page-5 navigation, watermark create/edit/remove plus Undo,
+  annotation placement, reorder, deletion confirmation and output, cancel,
+  stale-proposal rejection after Start Over, and 1440/768/390/360 px layouts
+  with keyboard focus and reduced motion. It recorded no page errors and no
+  non-GET requests.
+- The production verifier initially tried to load PDF.js from the deployed
+  site. `scripts/verify-phase6a.mjs` now imports the installed Node PDF.js
+  package and inspects downloaded bytes locally; this corrected verifier passed
+  against both the local editor and production. This verifier-only correction
+  and this checkpoint update are in follow-up PR #11; the shipped editor code
+  remains the code merged as `f3655be0041d49e469669723a9882d09d6bf5970`.
 
-### Remaining release work
+### Release record
 
-1. Review the complete diff and final docs.
-2. Commit and push this branch, then open a reviewable PR.
-3. Verify exact-head GitHub Actions, including native/container/browser gates.
-4. Merge only after all required checks pass and repository permissions allow.
-5. Verify final main SHA, Actions, Vercel READY deployment, and shipped
-   assistant. Confirm production local-command editing/export and lack of
-   unintended network uploads. No live remote model should be claimed.
+- Phase implementation PR: [#10](https://github.com/AtharvaisOp/Kagaz/pull/10),
+  merged to `main` as `f3655be0041d49e469669723a9882d09d6bf5970`.
+- Exact-head Actions: run #92 passed on
+  `fb91b5e3a2b80f7f72c02dcf862107563296bc9e`.
+- Production: Vercel deployment
+  `dpl_8M88cSyPPAJQK1uB5ji4wpgGUYAE` READY; production local-command editing,
+  PDF export, privacy network checks, responsive layout, and keyboard behavior
+  passed in the real browser.
+- Follow-up PR #11 contains only the production-verifier portability fix and
+  this updated checkpoint. Its exact-head CI and merge are the remaining
+  repository housekeeping; they do not change the deployed editor behavior.
+- No live remote model is configured or claimed. Enabling one requires an
+  authenticated server-side provider path with usage quotas and spending
+  controls, plus explicit remote-mode disclosure and verification.
 
 ### Phase 6B handoff
 
