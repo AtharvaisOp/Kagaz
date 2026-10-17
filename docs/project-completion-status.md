@@ -4,18 +4,20 @@ Updated: 2026-10-17
 
 ## Current engineering gate
 
-- Stage: C — ordinary image annotation and visual signature hardening; implementation locally verified, exact-head CI pending.
-- Branch: `codex/image-asset-hardening`
-- Base main SHA: `723ddfd9c0d198981f186cb74b15ac7fdb084df7`
-- Phase 5C scoped release: PASS. PR [#5](https://github.com/AtharvaisOp/Kagaz/pull/5) merged with history-preserving merge commit `723ddfd9c0d198981f186cb74b15ac7fdb084df7`.
-- Exact Phase 5C PR CI: [Run 75](https://github.com/AtharvaisOp/Kagaz/actions/runs/39005331370) passed at `6e8b4fb8292a7abe6624a89aabba4630ff9d78ea`.
-- Exact merged-main CI: [Run 76](https://github.com/AtharvaisOp/Kagaz/actions/runs/39006645272) passed at `723ddfd9c0d198981f186cb74b15ac7fdb084df7` (quality plus production-container and browser verifiers).
-- Stage C reproduction: the 71-byte valid-CRC 1×1 PNG fixture’s DEFLATE stream hangs synchronous pdf-lib embedding. A child process timed out and was terminated. Browser `Image()` accepted it as transparent 1×1 while `createImageBitmap` rejected it.
-- Stage C implementation: registry rejects empty/over-10-MiB files before JPEG metadata reads, bounds and canonicalizes browser imports before creating the annotation decoder URL, and aborts preparation on `destroyAll`/Start Over. Export snapshots independently enforce image byte/dimension/encoding bounds and validate PNG DEFLATE before pdf-lib embedding. Errors fail closed with image-specific messages; watermark and redaction rules are unchanged.
-- Stage C regression coverage: exact malformed fixture is rejected before decoder URL creation and before `embedPng`; an over-budget JPEG is rejected before metadata parsing/decoding; Start Over aborts in-flight preparation. Existing valid PNG/JPEG, signature, transparency-capable embedding, aspect geometry, image reuse, Undo/Redo and asset lifecycle tests remain in the web suite.
-- Local validation: web Vitest `77 files / 802 tests` passed; web TypeScript project build passed; ESLint passed for changed TypeScript files; Prettier check passed for changed files; workspace sampler `3/3` passed; `git diff --check` passed.
-- Deployment: Vercel commit status for merged Phase 5C SHA is `success`. Anonymous requests to `https://kagaz-personal.vercel.app` receive HTTP 429 Security Checkpoint; production PDF download remains unverified. Vercel API listing returned 403 and no Vercel CLI is installed.
-- Immediate next action: commit and push Stage C, then inspect exact-head CI before opening/updating its PR.
+- Stage: D — performance measurement and cleanup verification complete; exact-head CI pending.
+- Branch: `codex/phase-5d-performance`.
+- Base main SHA: `9457461cd05b56ddd5bfffcdd7df4b65bea177f4`.
+- Phase 5C scoped release: PASS. PR [#5](https://github.com/AtharvaisOp/Kagaz/pull/5) merged at `723ddfd9c0d198981f186cb74b15ac7fdb084df7`; exact PR CI Run 75 and merged-main CI Run 76 passed.
+- Stage C image hardening: PASS. Commit `d322ea31a9aee2fae36ed6acc54877cd4fb28e26`, PR [#6](https://github.com/AtharvaisOp/Kagaz/pull/6) merged at `9457461cd05b56ddd5bfffcdd7df4b65bea177f4`.
+- Stage C exact-head CI: [Run 77](https://github.com/AtharvaisOp/Kagaz/actions/runs/39009677632) passed; merged-main CI [Run 78](https://github.com/AtharvaisOp/Kagaz/actions/runs/39010060119) passed quality, production-container and Phase 4/5 browser verifiers.
+- Image issue reproduction: the 71-byte valid-CRC 1×1 PNG fixture’s DEFLATE stream hangs synchronous pdf-lib embedding; isolated child process was timed out and terminated. Browser `Image()` accepted it as transparent 1×1 while `createImageBitmap` rejected it. Regression tests prove rejection before decode/embed and cancellation on Start Over.
+- Local Stage C validation: web Vitest `77 files / 802 tests`, web TypeScript project build, changed-file ESLint and Prettier, workspace sampler `3/3`, and `git diff --check` passed.
+- Deployment: Vercel commit status for `9457461cd05b56ddd5bfffcdd7df4b65bea177f4` is `success`. Anonymous requests to `https://kagaz-personal.vercel.app` receive HTTP 429 Security Checkpoint; production PDF download remains unverified.
+- Stage D implementation: added `scripts/measure-phase5d.mjs` and [docs/phase-5d.md](phase-5d.md). Current synthetic 100-page and 300-page/three-source benchmarks, three repeated exports, production-preview startup, forced-GC heap, canvas dimensions, DOM counters, PDF.js worker counts and Start Over cleanup are recorded. Measurements showed no runtime bottleneck warranting a subsystem rewrite; all PDF.js workers and canvas backing dimensions cleared on Start Over.
+- Stage D browser checks: `scripts/verify-phase3g.mjs` passed in Chromium 153 on the Windows Vite dev server (100-page load 1,387 ms/export 326 ms; 80-page forms 1,482 ms/export 566 ms; 4 ready main pages/6 thumbnails). `scripts/measure-phase5d.mjs` passed against both dev server and local production preview. Three sources/300 pages loaded in 2,170 ms dev / 1,177 ms preview; three exports were 328–398 ms dev / 207–331 ms preview. Canvas elements: 903 total but only 14 with backing dimensions; three workers before Start Over, zero afterward. Heap figures and limitations are in the phase report.
+- Stage D local gates: `pnpm install --frozen-lockfile` passed under pnpm 12.3.4; `pnpm lint`, `pnpm typecheck`, `pnpm build`, `pnpm format:check`, `node --test scripts/workspace-sample.test.mjs` (3/3), and `git diff --check` passed. `pnpm test` ran 206 API tests with 102 pass, 96 fail, 8 skip; failures in Ghostscript/qpdf/LibreOffice-backed API suites are due to those binaries being absent on this Windows host (PDF safety subprocesses returned Windows code 9009). Web-only `pnpm --filter @kagaz/web test` passed 77 files / 802 tests. Production build succeeded with pre-existing ineffective dynamic-import and >700 kB chunk warnings.
+- Deployment: Vercel commit status for `9457461cd05b56ddd5bfffcdd7df4b65bea177f4` is `success`. Anonymous requests to `https://kagaz-personal.vercel.app` receive HTTP 429 Security Checkpoint; production PDF download remains unverified.
+- Immediate next action: commit and push Stage D benchmark/report, open a focused PR, and require exact-head Linux CI plus production-container/browser verifier success before merge.
 
 ## Remaining engineering stages
 
