@@ -16,8 +16,9 @@ Updated: 2026-10-17
 
 - Stage: F — final production-readiness audit and documentation accuracy; engineering/CI gates complete.
 - Branch: `codex/phase-5f-final-audit`, based on `af3b000cb8d7f37b37ad85891720ef5914cd2cfc`.
-- Changes in progress: corrected stale release statements and recorded audit findings in [phase-5f.md](phase-5f.md).
-- Immediate next action: commit and publish this documentation update; require exact-head PR CI, merge, then verify the resulting main SHA and deployment readiness.
+- Audit report commit: `b6af61480779308ddd7eb182f5ef52315409ce4f` (`docs: record final production readiness audit`).
+- Changes: corrected stale release statements and recorded audit findings in [phase-5f.md](phase-5f.md).
+- Immediate next action: push this branch, open the docs PR, require exact-head PR CI, merge, then verify the resulting main SHA and deployment readiness.
 
 ## Completed stages
 
