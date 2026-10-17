@@ -126,6 +126,10 @@ jobs:
           KAGAZ_ARTIFACT_DIR: ${{ runner.temp }}/phase4c-artifacts
           KAGAZ_REQUIRE_QPDF: '1'
         run: node scripts/verify-phase5c.mjs
+      - name: Verify approval-gated Phase 6A assistant actions and PDF outputs
+        env:
+          KAGAZ_ARTIFACT_DIR: ${{ runner.temp }}/phase4c-artifacts
+        run: node scripts/verify-phase6a.mjs
       - name: Retain frontend startup diagnostics
         if: always()
         env:

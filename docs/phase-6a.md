@@ -95,7 +95,8 @@ produce a fixed explanation instead of an operation.
 - Added assistant styling in `apps/web/src/styles.css` and dialog focus support
   in `PdfToolDialog`.
 - Added `scripts/verify-phase6a.mjs`, `docs/phase-6a.md`, and README scope/privacy
-  notes.
+  notes. The existing Linux browser/container CI job also runs the Phase 6A
+  verification script.
 
 ### Verification completed
 
