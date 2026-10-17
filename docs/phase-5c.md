@@ -2,15 +2,15 @@
 
 ## Phase status
 
-**PARTIAL relative to the full mission.** The implemented subset covers verified
-Latin, accented Latin, Greek and Cyrillic text. Hindi/Marathi Devanagari and RTL
-creation remain rejected because the investigated writer alternatives do not
-reliably preserve logical extraction across the product's PDF.js path. Phase 5C-R
-separates this unmet full target from a possible **scoped Unicode release** of the
-verified subset. That narrower release may be reviewed and merged only after its
-own final-SHA gates pass; it must never be described as universal Unicode or as
-completion of the original Devanagari target. See the
-[recovery decision and evidence](phase-5c-recovery.md).
+**Scoped release complete; original full mission PARTIAL.** The shipped subset
+covers verified Latin, accented Latin, Greek and Cyrillic text. Hindi/Marathi
+Devanagari and RTL creation remain rejected because the investigated writer
+alternatives do not reliably preserve logical extraction across the product's
+PDF.js path. PR #5 merged after exact-head and merged-main CI passed. The public
+deployment is confirmed, while anonymous PDF verification remains blocked by
+Vercel's access checkpoint; see the [current completion status](project-completion-status.md).
+This release must never be described as universal Unicode or as completion of
+the original Devanagari target. See the [recovery decision and evidence](phase-5c-recovery.md).
 
 No API, native processing, Render, persistence, account, analytics or upload
 architecture was added. Ordinary editing, font selection, Download and Extract

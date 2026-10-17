@@ -4,24 +4,31 @@ Updated: 2026-10-17
 
 ## Release checkpoint
 
-- `main` SHA: `a0072a9b4546851807955ec31e4bcdb86797318d`.
-- Phase 5C scoped Unicode release: PASS. PR [#5](https://github.com/AtharvaisOp/Kagaz/pull/5) merged at `723ddfd9c0d198981f186cb74b15ac7fdb084df7`; verified Latin, Greek, Cyrillic and NFC accents. Devanagari, RTL and other unverified complex scripts remain unsupported.
-- Image annotation/signature hardening: PASS. PR [#6](https://github.com/AtharvaisOp/Kagaz/pull/6) merged at `9457461cd05b56ddd5bfffcdd7df4b65bea177f4`; malformed PNG import/export validation is bounded and covered by adversarial regressions.
-- Phase 5D performance baseline: PASS. PR [#7](https://github.com/AtharvaisOp/Kagaz/pull/7) merged at `a0072a9b4546851807955ec31e4bcdb86797318d`. Measurements and limits are in [phase-5d.md](phase-5d.md); no runtime rewrite was justified by observed results.
-- Exact Stage D PR CI [Run 79](https://github.com/AtharvaisOp/Kagaz/actions/runs/39012604131) and merged-main CI [Run 80](https://github.com/AtharvaisOp/Kagaz/actions/runs/39014487313) passed at their exact heads. Run 80 passed quality, production-container, editor integration, redaction, watermark, Unicode and cleanup checks at the main SHA above.
-- Vercel production deployment for `a0072a9` is `READY` and includes alias `kagaz-personal.vercel.app`. Anonymous `HEAD https://kagaz-personal.vercel.app` returns HTTP 429 Security Checkpoint; production PDF download remains unverified.
+- `main` SHA: `af3b000cb8d7f37b37ad85891720ef5914cd2cfc`.
+- Phase 5C scoped Unicode release: PASS. PR [#5](https://github.com/AtharvaisOp/Kagaz/pull/5) shipped verified Latin, accented/Extended Latin, Greek, Cyrillic and NFC-composable accents. Devanagari, RTL and other unverified complex scripts remain unsupported.
+- Image annotation/signature hardening: PASS. PR [#6](https://github.com/AtharvaisOp/Kagaz/pull/6) added bounded malformed-image validation and adversarial regressions while preserving browser-local asset handling.
+- Phase 5D performance baseline: PASS. PR [#7](https://github.com/AtharvaisOp/Kagaz/pull/7); measurements and limits are in [phase-5d.md](phase-5d.md). No runtime rewrite was justified by measured results.
+- Phase 5E accessibility and responsive polish: PASS. PR [#8](https://github.com/AtharvaisOp/Kagaz/pull/8) merged at this SHA. Exact-head PR CI [Run 81](https://github.com/AtharvaisOp/Kagaz/actions/runs/39016780393) passed; local browser verification covered 1440, 768, 390 and 360 px at DPR 2 plus keyboard and mobile dialog focus behavior.
+- Merged-main CI [Run 82](https://github.com/AtharvaisOp/Kagaz/actions/runs/39018731659) at this SHA: quality and production-container jobs passed, including native tools, resource/cancellation/shutdown, editor/container integration, redaction, watermark and Unicode browser verifiers.
+- Vercel deployment for this SHA was `READY` with alias `kagaz-personal.vercel.app`. Anonymous `HEAD` received HTTP 429 and browser navigation reached Vercel login. The connected Vercel fetch integration was denied deployment access (403). Anonymous production PDF export is therefore unverified.
 
 ## Current work
 
-- Stage: E — focused accessibility and responsive polish; implementation and local browser checks complete, exact-head CI pending.
-- Branch: `codex/phase-5e-accessibility`.
-- Base SHA: `a0072a9b4546851807955ec31e4bcdb86797318d`.
-- Stage E implementation SHA: `ebe6d0b902d2f6dcfda0236add1c04d5b68d86dd` (`fix: improve responsive PDF controls and keyboard access`).
-- PR: [#8](https://github.com/AtharvaisOp/Kagaz/pull/8), draft; current branch head before this checkpoint: `00036a5f809687d21f57b6e7acd26de9cff220a0`.
-- Report: [phase-5e.md](phase-5e.md).
-- Local validation passed: frozen install (pnpm 12.3.4), lint, typecheck, web tests (77 files / 802 tests), build, format check, workspace sampler (3/3), Phase 3F, Phase 3G, Phase 3G lifecycle, Phase 5E browser matrix (1440/768/390/360 px, DPR 2), and `git diff --check`.
-- Immediate next action: push this status checkpoint, require exact-head Linux/native/container CI, then mark PR #8 ready and merge only when all checks pass.
+- Stage: F — final production-readiness audit and documentation accuracy; engineering/CI gates complete.
+- Branch: `codex/phase-5f-final-audit`, based on `af3b000cb8d7f37b37ad85891720ef5914cd2cfc`.
+- Changes in progress: corrected stale release statements and recorded audit findings in [phase-5f.md](phase-5f.md).
+- Immediate next action: commit and publish this documentation update; require exact-head PR CI, merge, then verify the resulting main SHA and deployment readiness.
 
-## Remaining stage
+## Completed stages
 
-- Stage F — audit implemented frontend, backend/native tools, security, reliability, docs, dependencies, CI and deployment. Verify anonymous production PDF handling if the public alias permits it. Do not add cloud persistence, accounts, collaboration or AI features.
+- Stage A — recovery: reports, branch/PR state and release evidence recovered. No Devanagari product work was restarted.
+- Stage B — Phase 5C scoped Unicode release: complete and merged.
+- Stage C — bounded image annotation/signature hardening: complete and merged.
+- Stage D — baseline measurements and targeted performance review: complete and merged; see [phase-5d.md](phase-5d.md).
+- Stage E — focused accessibility and responsive polish: complete and merged; see [phase-5e.md](phase-5e.md).
+
+## Remaining work
+
+- Complete Stage F exact-head PR CI, merge and verify resulting main SHA and deployment readiness.
+- Anonymous production PDF verification remains externally blocked by Vercel's access checkpoint; do not report it as passed without an unauthenticated successful export/download.
+- No authentication, cloud persistence, collaboration or AI features are in scope.

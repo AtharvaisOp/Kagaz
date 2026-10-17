@@ -158,12 +158,13 @@ new Unicode content on those pages also loses selectable text.
 The original full Phase 5C mission is **PARTIAL**: Hindi/Marathi Devanagari
 remains unsupported. Recovery research produced a promising standalone Type 3
 PDF, but PDF.js still loses joiners, and that writer is not integrated into
-Kagaz. The Latin/Greek/Cyrillic subset has separate verification and can be
-released only after final review, exact-SHA CI and production checks.
-See [Phase 5C engineering report](docs/phase-5c.md) and
-[Phase 5C-R release note](docs/phase-5c-recovery.md) for the supported matrix,
-evidence and release status; [font investigation](docs/phase5c-font-research.md)
-records the Devanagari experiments.
+Kagaz. The verified Latin/Greek/Cyrillic subset shipped in PR #5 after exact
+head CI and merged-main CI passed. Production deployment is confirmed, while
+anonymous PDF verification is blocked by Vercel's access checkpoint. See the
+[Phase 5C engineering report](docs/phase-5c.md) and
+[Phase 5C-R release note](docs/phase-5c-recovery.md) for the supported matrix
+and evidence; [font investigation](docs/phase5c-font-research.md) records the
+Devanagari experiments.
 
 ## Browser-local redaction
 
@@ -517,7 +518,10 @@ evidence, resource measurements and remaining isolation limits.
 - Phase 4D — [heavy-tool hardening and measured resource audit](docs/phase-4d.md) (complete)
 - Phase 5A — [true browser-local redaction](docs/phase-5a.md) (complete)
 - Phase 5B — [browser-local text and image watermarking](docs/phase-5b.md) (complete)
-- Phase 5C-R — [scoped Unicode release and Devanagari recovery](docs/phase-5c-recovery.md) (release verification pending)
+- Phase 5C-R — [scoped Unicode release and Devanagari recovery](docs/phase-5c-recovery.md) (verified Latin/Greek/Cyrillic release complete; Devanagari deferred)
+- Phase 5D — [performance baseline and measurements](docs/phase-5d.md) (complete)
+- Phase 5E — [responsive accessibility and interaction polish](docs/phase-5e.md) (complete)
+- Phase 5F — [final production-readiness audit](docs/phase-5f.md) (engineering and CI gates passed; anonymous live PDF verification blocked by deployment protection)
 
 The browser-local architecture remains the default for operations that can be
 performed safely on the device.
