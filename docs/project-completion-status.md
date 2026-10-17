@@ -17,9 +17,11 @@ Updated: 2026-10-17
 - Stage: F — final production-readiness audit and documentation accuracy; engineering/CI gates complete.
 - Branch: `codex/phase-5f-final-audit`, based on `af3b000cb8d7f37b37ad85891720ef5914cd2cfc`.
 - Audit report commit: `b6af61480779308ddd7eb182f5ef52315409ce4f` (`docs: record final production readiness audit`).
-- PR: [#9](https://github.com/AtharvaisOp/Kagaz/pull/9), draft, current head `0076d206fb7b7bca9c4d06b40b5b8d343c037ebc`.
+- PR: [#9](https://github.com/AtharvaisOp/Kagaz/pull/9), draft. Test scheduling fix commit: `dc71fdcfb5ecbeac5c47e4841ed83c8c985f9be9`.
 - Changes: corrected stale release statements and recorded audit findings in [phase-5f.md](phase-5f.md).
-- PR CI Run 85 failed only because `apps/web/src/lib/fonts/fontAssets.test.ts` exceeded its 5-second limit while 77 Vitest workers and API tests ran concurrently. Both package test scripts now cap Vitest concurrency at four workers; the local web suite passes 77 files / 802 tests with this cap. Local API-native integration is limited by unavailable Windows qpdf/Ghostscript/OCRmyPDF. Push the fix and require exact-head Linux CI before marking the PR ready or merging.
+- PR CI Run 85 failed only because `apps/web/src/lib/fonts/fontAssets.test.ts` exceeded its 5-second limit while web and API tests ran with excessive worker concurrency. Both package test scripts now cap Vitest concurrency at four workers; the local web suite passes 77 files / 802 tests with this cap. Local API-native integration is limited by unavailable Windows qpdf/Ghostscript/OCRmyPDF.
+- The worker cap passed exact-head PR CI [Run 86](https://github.com/AtharvaisOp/Kagaz/actions/runs/39020969158) at `dc71fdcfb5ecbeac5c47e4841ed83c8c985f9be9`, including quality and production-container jobs.
+- Immediate next action: publish this Run 86 checkpoint, require exact-head CI for the updated status record, then mark PR #9 ready and merge; verify merged-main CI and deployment at the resulting SHA.
 
 ## Completed stages
 
