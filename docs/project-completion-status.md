@@ -2,31 +2,27 @@
 
 Updated: 2026-10-17
 
-## Current release gate
+## Current engineering gate
 
-- Stage: B — scoped Phase 5C release
-- Branch: `codex/phase-5c-unicode-fonts`
-- PR: [#5](https://github.com/AtharvaisOp/Kagaz/pull/5), open draft
-- Current HEAD before the Phase 5B synchronization fix: `8543db897ffcf93f5e50e35f8d02e8c53ef52922`
-- Last verified main: `79c79c2736baddda3b391934a97e98c9bc5bc796`
-- CI run 73: quality passed; production-container failed at combined editor/container browser verification. The browser POST to `/tools/compress` received HTTP 403 with `This origin is not allowed.` The CI browser used `http://127.0.0.1:5173`, while the production API image defaulted to `http://localhost:5173`. This is a CI environment allowlist mismatch, not the earlier `ERR_NETWORK_CHANGED` transport failure.
-- Fixed and pushed: pass `CORS_ORIGINS=http://127.0.0.1:5173` to the constrained API container in `.github/workflows/ci.yml`. Run 74 confirmed the origin rejection is resolved; the combined container/browser and Phase 5A checks passed.
-- Run 74 then exposed a Phase 5B verifier synchronization race: after two PageDown events, it captured the first viewport-matching page before scrolling settled. The selected page advanced from 4 to 5 before Space opened the watermark dialog. The verifier now waits for three stable viewport/selection samples before capturing the expected target; this retains the current-page target assertion.
-- Completed: recovered and read repository instructions, design, README, Phase 5A/5B/5C reports, recovery ledger and font research; confirmed a clean starting tree, current PR head and Run 73 logs.
-- Outstanding: run focused checks; commit and push the CI fix; verify exact-head CI; ready PR #5; merge if gates and repository policy allow; verify merged-main CI, Vercel alias and anonymous production PDF export.
-- Verified commands at prior HEAD: PR #5 records lint, typecheck, build, format check, diff check, workspace sampler, 798 web tests and Phase 5A/5B/5C browser verifiers. Run 73 quality job passed. The Windows API suite's documented local OCRmyPDF limitation remains; Linux CI had passed it at a prior head.
-- Failed checks: Run 73 production-container / “Verify editor and real container together”, exact cause above. Run 74 production-container / Phase 5B failed at `scripts/verify-phase5b.mjs:2523` because the target snapshot was taken during keyboard-scroll settling. Logs: https://github.com/AtharvaisOp/Kagaz/actions/runs/39004231870/job/117313704918
-- Artifacts: Run 73 `phase4d-verification`, artifact ID `12057542736`.
-- Deployment: existing production alias `https://kagaz-personal.vercel.app`; no new production proof for this branch yet.
-- Immediate next action: run formatting and diff checks for the Phase 5B synchronization fix, commit and push, then verify the new exact-head CI.
+- Stage: C — ordinary image annotation and visual signature hardening; implementation locally verified, exact-head CI pending.
+- Branch: `codex/image-asset-hardening`
+- Base main SHA: `723ddfd9c0d198981f186cb74b15ac7fdb084df7`
+- Phase 5C scoped release: PASS. PR [#5](https://github.com/AtharvaisOp/Kagaz/pull/5) merged with history-preserving merge commit `723ddfd9c0d198981f186cb74b15ac7fdb084df7`.
+- Exact Phase 5C PR CI: [Run 75](https://github.com/AtharvaisOp/Kagaz/actions/runs/39005331370) passed at `6e8b4fb8292a7abe6624a89aabba4630ff9d78ea`.
+- Exact merged-main CI: [Run 76](https://github.com/AtharvaisOp/Kagaz/actions/runs/39006645272) passed at `723ddfd9c0d198981f186cb74b15ac7fdb084df7` (quality plus production-container and browser verifiers).
+- Stage C reproduction: the 71-byte valid-CRC 1×1 PNG fixture’s DEFLATE stream hangs synchronous pdf-lib embedding. A child process timed out and was terminated. Browser `Image()` accepted it as transparent 1×1 while `createImageBitmap` rejected it.
+- Stage C implementation: registry rejects empty/over-10-MiB files before JPEG metadata reads, bounds and canonicalizes browser imports before creating the annotation decoder URL, and aborts preparation on `destroyAll`/Start Over. Export snapshots independently enforce image byte/dimension/encoding bounds and validate PNG DEFLATE before pdf-lib embedding. Errors fail closed with image-specific messages; watermark and redaction rules are unchanged.
+- Stage C regression coverage: exact malformed fixture is rejected before decoder URL creation and before `embedPng`; an over-budget JPEG is rejected before metadata parsing/decoding; Start Over aborts in-flight preparation. Existing valid PNG/JPEG, signature, transparency-capable embedding, aspect geometry, image reuse, Undo/Redo and asset lifecycle tests remain in the web suite.
+- Local validation: web Vitest `77 files / 802 tests` passed; web TypeScript project build passed; ESLint passed for changed TypeScript files; Prettier check passed for changed files; workspace sampler `3/3` passed; `git diff --check` passed.
+- Deployment: Vercel commit status for merged Phase 5C SHA is `success`. Anonymous requests to `https://kagaz-personal.vercel.app` receive HTTP 429 Security Checkpoint; production PDF download remains unverified. Vercel API listing returned 403 and no Vercel CLI is installed.
+- Immediate next action: commit and push Stage C, then inspect exact-head CI before opening/updating its PR.
 
 ## Remaining engineering stages
 
-- Stage C — harden ordinary image annotations and visual signatures against malformed image data; reproduce the recorded malformed-PNG case, preserve bounded watermark validation, add adversarial regressions and verify valid PNG/JPEG exports.
-- Stage D — measure before optimizing; investigate large PDFs, multi-source workspaces, render/export latency, memory and resource cleanup, then implement only evidenced bottleneck fixes.
-- Stage E — focused accessibility and responsive polish following `design.md`; invoke gptTaste, verify browser at desktop/768/390/360 px, DPR 2, zoom and keyboard-only flows.
-- Stage F — audit the existing frontend/backend/security/reliability flows, README claims, CI, deployment and anonymous production exports; record verified versus deferred results.
+- Stage D — measure reproducible large-PDF and multi-source loading, render/export latency, memory and resource cleanup; optimize only demonstrated bottlenecks.
+- Stage E — focused accessibility/responsive polish following `design.md`; use gptTaste; verify desktop, 768, 390 and 360 px, DPR 2, zoom and keyboard-only flows in a real browser.
+- Stage F — audit implemented frontend/backend/security/reliability flows, README claims, CI, deployment and anonymous production exports; report verified, deferred and blocked results separately.
 
 ## Release boundary
 
-The scoped Phase 5C release covers verified Basic/Extended Latin, Greek, Cyrillic and NFC-composable accents. Devanagari, RTL and other unverified complex scripts remain visibly unsupported. The original full Phase 5C objective remains partial and Devanagari research stays documented as future work.
+The scoped Phase 5C release covers verified Basic/Extended Latin, Greek, Cyrillic and NFC-composable accents. Devanagari, RTL and other unverified complex scripts remain visibly unsupported. The original full Phase 5C objective remains partial; Devanagari research stays documented for a future dedicated task.

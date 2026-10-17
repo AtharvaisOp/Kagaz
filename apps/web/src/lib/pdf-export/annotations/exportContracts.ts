@@ -5,6 +5,7 @@ export type AnnotationExportErrorCode =
   | 'missing-signature-asset'
   | 'image-read-failed'
   | 'unsupported-image-format'
+  | 'image-invalid'
   | 'image-embed-failed';
 
 export interface AnnotationImageExportSource {

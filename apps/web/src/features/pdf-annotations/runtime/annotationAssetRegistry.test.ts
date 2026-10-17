@@ -7,7 +7,10 @@ import {
 import { annotationReducer } from '../model/reducer';
 import type { ImageAnnotation, PdfAnnotation } from '../model/types';
 import { collectReachableAnnotationAssetIds } from './assetReachability';
-import { createAnnotationAssetRegistry } from './annotationAssetRegistry';
+import {
+  createAnnotationAssetRegistry,
+  createBrowserAnnotationAssetRegistry,
+} from './annotationAssetRegistry';
 
 it('cancels one pending decode immediately while preserving other reachable assets', async () => {
   let finish!: (value: {
@@ -190,6 +193,67 @@ describe('annotation asset registry', () => {
     registry.reconcile(new Set());
     expect(registry.size).toBe(0);
     expect(revoked).toEqual(['blob:test-1']);
+  });
+
+  it('rejects the malformed PNG before creating a decoder URL or registry asset', async () => {
+    const malformedPng = Uint8Array.from(
+      atob(
+        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADklEQVR4nAQAAAAAAAAAAAAAANvPr/sAAAAASUVORK5CYII=',
+      ),
+      (character) => character.charCodeAt(0),
+    );
+    const createUrl = vi
+      .spyOn(URL, 'createObjectURL')
+      .mockReturnValue('blob:malformed');
+    const registry = createBrowserAnnotationAssetRegistry(() => 'bad-image');
+    await expect(
+      registry.register(new Blob([malformedPng], { type: 'image/png' })),
+    ).rejects.toThrow('could not be opened safely');
+    expect(createUrl).not.toHaveBeenCalled();
+    expect(registry.size).toBe(0);
+  });
+
+  it('rejects oversized encoded images before reading JPEG metadata or decoding', async () => {
+    const createObjectUrl = vi.fn();
+    const decode = vi.fn();
+    const registry = createAnnotationAssetRegistry({
+      createId: () => 'oversized',
+      createObjectUrl,
+      revokeObjectUrl: vi.fn(),
+      decode,
+    });
+    const oversized = new Blob([new Uint8Array(10 * 1024 * 1024 + 1)], {
+      type: 'image/jpeg',
+    });
+    await expect(registry.register(oversized)).rejects.toThrow('too large');
+    expect(createObjectUrl).not.toHaveBeenCalled();
+    expect(decode).not.toHaveBeenCalled();
+  });
+
+  it('aborts bounded preparation on Start Over without creating an object URL', async () => {
+    const createObjectUrl = vi.fn();
+    const registry = createAnnotationAssetRegistry({
+      createId: () => 'prepared',
+      createObjectUrl,
+      revokeObjectUrl: vi.fn(),
+      decode: vi.fn(),
+      prepare: (_blob, signal) =>
+        new Promise<Blob>((_resolve, reject) => {
+          signal?.addEventListener(
+            'abort',
+            () => reject(new DOMException('aborted', 'AbortError')),
+            { once: true },
+          );
+        }),
+    });
+    const pending = registry.register(new Blob(['png'], { type: 'image/png' }));
+    const rejected = expect(pending).rejects.toMatchObject({
+      name: 'AbortError',
+    });
+    registry.destroyAll();
+    await rejected;
+    expect(createObjectUrl).not.toHaveBeenCalled();
+    expect(registry.size).toBe(0);
   });
 });
 
