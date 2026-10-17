@@ -45,7 +45,7 @@ export interface PdfWatermarkController {
   readonly updateDraft: (config: WatermarkConfig) => void;
   readonly chooseImage: (file: File) => Promise<void>;
   readonly applyDraft: () => Promise<boolean>;
-  readonly remove: () => void;
+  readonly remove: () => boolean;
   readonly reset: () => void;
   readonly busy: boolean;
   readonly error: string | null;
@@ -385,13 +385,15 @@ export function usePdfWatermarks(
   const remove = useCallback(() => {
     const transactionId = createTransaction();
     const before = stateRef.current;
-    if (apply({ type: 'REMOVE', transactionId })) {
+    const removed = apply({ type: 'REMOVE', transactionId });
+    if (removed) {
       const removed = removedWatermarkTransactionIds(before, stateRef.current);
       if (removed.length) history?.prune(removed);
       history?.record([transactionId]);
       setAnnouncement('Watermark removed.');
     }
     cancel();
+    return removed;
   }, [apply, cancel, createTransaction, history]);
   const reset = useCallback(() => {
     cancel();

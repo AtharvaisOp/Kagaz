@@ -7,7 +7,7 @@ import type { WorkspacePage, WorkspacePageId } from '../model/types';
 interface WorkspaceNavigationOptions {
   readonly pages: readonly WorkspacePage[];
   readonly selectedPageId: WorkspacePageId | null;
-  readonly onSelectPage: (pageId: WorkspacePageId) => void;
+  readonly onSelectPage: (pageId: WorkspacePageId) => void | boolean;
 }
 
 export interface WorkspaceNavigation {
@@ -15,7 +15,7 @@ export interface WorkspaceNavigation {
     pageId: WorkspacePageId,
     element: HTMLElement | null,
   ) => void;
-  readonly scrollToPage: (pageId: WorkspacePageId) => void;
+  readonly scrollToPage: (pageId: WorkspacePageId) => boolean;
 }
 
 function prefersReducedMotion(): boolean {
@@ -67,13 +67,14 @@ export function useWorkspaceNavigation({
 
   const scrollToPage = useCallback(
     (pageId: WorkspacePageId) => {
+      if (onSelectPage(pageId) === false) return false;
       explicitSelectionRef.current = pageId;
       selectedPageIdRef.current = pageId;
-      onSelectPage(pageId);
       pageElementsRef.current.get(pageId)?.scrollIntoView({
         behavior: prefersReducedMotion() ? 'auto' : 'smooth',
         block: 'start',
       });
+      return true;
     },
     [onSelectPage],
   );

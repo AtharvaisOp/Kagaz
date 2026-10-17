@@ -1,4 +1,11 @@
-import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useReducer,
+  useRef,
+  useState,
+} from 'react';
 
 import {
   loadSourceBatch,
@@ -14,6 +21,7 @@ import type {
   PdfWorkspaceState,
   SourceDocumentId,
   WorkspacePageId,
+  WorkspaceAction,
 } from '../model/types';
 
 export interface WorkspaceLoadingState {
@@ -40,10 +48,14 @@ export interface PdfWorkspaceController {
     additionalUnsavedChanges?: boolean,
     beforeReset?: () => void,
   ) => boolean;
-  readonly selectPage: (pageId: WorkspacePageId) => void;
-  readonly movePage: (pageId: WorkspacePageId, toIndex: number) => void;
-  readonly deletePage: (pageId: WorkspacePageId) => void;
-  readonly rotatePage: (pageId: WorkspacePageId, delta?: number) => void;
+  readonly selectPage: (pageId: WorkspacePageId) => boolean;
+  readonly movePage: (pageId: WorkspacePageId, toIndex: number) => boolean;
+  readonly deletePage: (pageId: WorkspacePageId) => boolean;
+  readonly rotatePage: (pageId: WorkspacePageId, delta?: number) => boolean;
+  readonly rotatePages: (
+    pageIds: readonly WorkspacePageId[],
+    delta?: number,
+  ) => boolean;
 }
 
 const IDLE_LOADING: WorkspaceLoadingState = {
@@ -78,6 +90,18 @@ export function usePdfWorkspace(): PdfWorkspaceController {
     undefined,
     createEmptyWorkspaceState,
   );
+  const workspaceRef = useRef(workspace);
+  useLayoutEffect(() => {
+    workspaceRef.current = workspace;
+  }, [workspace]);
+  const dispatchWorkspace = useCallback((action: WorkspaceAction) => {
+    const current = workspaceRef.current;
+    const next = workspaceReducer(current, action);
+    if (next === current) return false;
+    workspaceRef.current = next;
+    dispatch(action);
+    return true;
+  }, []);
   const [registry] = useState(() => new SourceDocumentRegistry());
   const generationRef = useRef(0);
   const batchControllerRef = useRef<AbortController | null>(null);
@@ -113,7 +137,7 @@ export function usePdfWorkspace(): PdfWorkspaceController {
   const openInitialFiles = useCallback(
     (files: readonly File[], initialIssues: readonly FileLoadIssue[] = []) => {
       invalidateSession();
-      dispatch({ type: 'RESET_WORKSPACE' });
+      dispatchWorkspace({ type: 'RESET_WORKSPACE' });
       setIssues(initialIssues);
 
       if (files.length === 0) {
@@ -147,7 +171,7 @@ export function usePdfWorkspace(): PdfWorkspaceController {
           }
 
           if (!result.cancelled && result.pages.length > 0) {
-            dispatch({
+            dispatchWorkspace({
               type: 'INITIALIZE_WORKSPACE',
               sources: result.sources,
               sourceOrder: result.sourceOrder,
@@ -175,7 +199,7 @@ export function usePdfWorkspace(): PdfWorkspaceController {
           batchControllerRef.current = null;
         });
     },
-    [finishBatch, invalidateSession, registry],
+    [dispatchWorkspace, finishBatch, invalidateSession, registry],
   );
 
   const addFiles = useCallback(
@@ -213,16 +237,20 @@ export function usePdfWorkspace(): PdfWorkspaceController {
           }
         },
         onSourceRegistered: (source) => {
-          dispatch({ type: 'REGISTER_SOURCE', source });
+          dispatchWorkspace({ type: 'REGISTER_SOURCE', source });
         },
         onSourceReady: (sourceId, pageCount) => {
-          dispatch({ type: 'SOURCE_READY', sourceId, pageCount });
+          dispatchWorkspace({ type: 'SOURCE_READY', sourceId, pageCount });
         },
         onSourceFailed: (sourceId, message) => {
-          dispatch({ type: 'SOURCE_FAILED', sourceId, error: message });
+          dispatchWorkspace({
+            type: 'SOURCE_FAILED',
+            sourceId,
+            error: message,
+          });
         },
         onPagesReady: (pages) => {
-          dispatch({ type: 'APPEND_SOURCE_PAGES', pages });
+          dispatchWorkspace({ type: 'APPEND_SOURCE_PAGES', pages });
         },
       })
         .then((result) =>
@@ -247,7 +275,13 @@ export function usePdfWorkspace(): PdfWorkspaceController {
           batchControllerRef.current = null;
         });
     },
-    [finishBatch, loading.status, registry, workspace.sessionStatus],
+    [
+      dispatchWorkspace,
+      finishBatch,
+      loading.status,
+      registry,
+      workspace.sessionStatus,
+    ],
   );
 
   const startOver = useCallback(
@@ -261,29 +295,43 @@ export function usePdfWorkspace(): PdfWorkspaceController {
 
       beforeReset?.();
       invalidateSession();
-      dispatch({ type: 'RESET_WORKSPACE' });
+      dispatchWorkspace({ type: 'RESET_WORKSPACE' });
       setLoading(IDLE_LOADING);
       setIssues([]);
       return true;
     },
-    [invalidateSession, workspace.dirty],
+    [dispatchWorkspace, invalidateSession, workspace.dirty],
   );
 
-  const selectPage = useCallback((pageId: WorkspacePageId) => {
-    dispatch({ type: 'SELECT_PAGE', pageId });
-  }, []);
+  const selectPage = useCallback(
+    (pageId: WorkspacePageId) =>
+      dispatchWorkspace({ type: 'SELECT_PAGE', pageId }),
+    [dispatchWorkspace],
+  );
 
-  const movePage = useCallback((pageId: WorkspacePageId, toIndex: number) => {
-    dispatch({ type: 'MOVE_PAGE', pageId, toIndex });
-  }, []);
+  const movePage = useCallback(
+    (pageId: WorkspacePageId, toIndex: number) =>
+      dispatchWorkspace({ type: 'MOVE_PAGE', pageId, toIndex }),
+    [dispatchWorkspace],
+  );
 
-  const deletePage = useCallback((pageId: WorkspacePageId) => {
-    dispatch({ type: 'DELETE_PAGE', pageId });
-  }, []);
+  const deletePage = useCallback(
+    (pageId: WorkspacePageId) =>
+      dispatchWorkspace({ type: 'DELETE_PAGE', pageId }),
+    [dispatchWorkspace],
+  );
 
-  const rotatePage = useCallback((pageId: WorkspacePageId, delta?: number) => {
-    dispatch({ type: 'ROTATE_PAGE', pageId, delta });
-  }, []);
+  const rotatePage = useCallback(
+    (pageId: WorkspacePageId, delta = 90) =>
+      dispatchWorkspace({ type: 'ROTATE_PAGE', pageId, delta }),
+    [dispatchWorkspace],
+  );
+
+  const rotatePages = useCallback(
+    (pageIds: readonly WorkspacePageId[], delta = 90) =>
+      dispatchWorkspace({ type: 'ROTATE_PAGES', pageIds, delta }),
+    [dispatchWorkspace],
+  );
 
   useEffect(() => {
     const currentSourceIds = Object.keys(workspace.sources);
@@ -319,5 +367,6 @@ export function usePdfWorkspace(): PdfWorkspaceController {
     movePage,
     deletePage,
     rotatePage,
+    rotatePages,
   };
 }

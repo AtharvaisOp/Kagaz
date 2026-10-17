@@ -21,6 +21,7 @@ import type { PdfRedactionController } from '../pdf-redactions/hooks/usePdfRedac
 import { RedactionSummary } from '../pdf-redactions/components/RedactionSummary';
 import type { PdfWatermarkController } from '../pdf-watermarks/hooks/usePdfWatermarks';
 import { WatermarkDialog } from '../pdf-watermarks/components/WatermarkDialog';
+import { AssistantDialog } from '../pdf-assistant/AssistantDialog';
 import {
   watermarkAppliesToPage,
   targetWatermarkPageIds,
@@ -58,10 +59,14 @@ interface PdfViewerProps {
   ) => void;
   readonly onStartOver: () => void;
   readonly selectedPageId: WorkspacePageId | null;
-  readonly onSelectPage: (pageId: WorkspacePageId) => void;
-  readonly onMovePage: (pageId: WorkspacePageId, toIndex: number) => void;
-  readonly onDeletePage: (pageId: WorkspacePageId) => void;
-  readonly onRotatePage: (pageId: WorkspacePageId, delta?: number) => void;
+  readonly onSelectPage: (pageId: WorkspacePageId) => boolean;
+  readonly onMovePage: (pageId: WorkspacePageId, toIndex: number) => boolean;
+  readonly onDeletePage: (pageId: WorkspacePageId) => boolean;
+  readonly onRotatePage: (pageId: WorkspacePageId, delta?: number) => boolean;
+  readonly onRotatePages: (
+    pageIds: readonly WorkspacePageId[],
+    delta?: number,
+  ) => boolean;
   readonly onZoomIn: () => void;
   readonly onZoomOut: () => void;
   readonly exportState: PdfExportState;
@@ -112,6 +117,7 @@ export function PdfViewer({
   onMovePage,
   onDeletePage,
   onRotatePage,
+  onRotatePages,
   onZoomIn,
   onZoomOut,
   exportState,
@@ -142,6 +148,14 @@ export function PdfViewer({
     setRedactionActive,
   ]);
   const [mobilePageManagerOpen, setMobilePageManagerOpen] = useState(false);
+  const [assistantOpen, setAssistantOpen] = useState(false);
+  const assistantTriggerRef = useRef<HTMLButtonElement>(null);
+  const closeAssistant = useCallback(() => {
+    setAssistantOpen(false);
+    window.requestAnimationFrame(() =>
+      assistantTriggerRef.current?.focus({ preventScroll: true }),
+    );
+  }, []);
   const watermarkTriggerRef = useRef<HTMLButtonElement>(null);
   const watermarkOpenerRef = useRef<HTMLElement | null>(null);
   const { cancel: cancelWatermark } = watermarkController;
@@ -257,7 +271,23 @@ export function PdfViewer({
         onOpenCompress={() => setCompressOpen(true)}
         ocrTriggerRef={ocrTriggerRef}
         onOpenOcr={() => setOcrOpen(true)}
+        assistantTriggerRef={assistantTriggerRef}
+        onOpenAssistant={() => setAssistantOpen(true)}
       />
+      {assistantOpen ? (
+        <AssistantDialog
+          pages={pages}
+          selectedPageId={selectedPageId}
+          rotatePages={onRotatePages}
+          movePage={onMovePage}
+          deletePage={onDeletePage}
+          scrollToPage={navigation.scrollToPage}
+          annotationController={annotationController}
+          watermarkController={watermarkController}
+          registry={registry}
+          onClose={closeAssistant}
+        />
+      ) : null}
       {ocrOpen ? (
         <OcrDialog
           prepareWorkspace={prepareWorkspace}

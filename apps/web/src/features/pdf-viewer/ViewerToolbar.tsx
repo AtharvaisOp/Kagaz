@@ -41,6 +41,8 @@ interface ViewerToolbarProps {
   readonly onOpenCompress: () => void;
   readonly ocrTriggerRef: RefObject<HTMLButtonElement | null>;
   readonly onOpenOcr: () => void;
+  readonly assistantTriggerRef: RefObject<HTMLButtonElement | null>;
+  readonly onOpenAssistant: () => void;
 }
 
 export function ViewerToolbar({
@@ -68,6 +70,8 @@ export function ViewerToolbar({
   onOpenCompress,
   ocrTriggerRef,
   onOpenOcr,
+  assistantTriggerRef,
+  onOpenAssistant,
 }: ViewerToolbarProps) {
   const exporting = exportState.status === 'exporting';
   const exportStatus = exportState.progress
@@ -178,6 +182,14 @@ export function ViewerToolbar({
           onClick={onOpenOcr}
         >
           OCR PDF
+        </button>
+        <button
+          ref={assistantTriggerRef}
+          className="toolbar-button assistant-button"
+          type="button"
+          onClick={onOpenAssistant}
+        >
+          AI Assistant
         </button>
         <button
           className="toolbar-button start-over-button"

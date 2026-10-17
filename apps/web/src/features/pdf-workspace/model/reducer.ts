@@ -3,6 +3,7 @@ import {
   movePage,
   normalizeRotation,
   rotatePage,
+  rotatePages,
 } from './operations';
 
 import type {
@@ -297,6 +298,11 @@ export function workspaceReducer(
 
     case 'ROTATE_PAGE': {
       const pages = rotatePage(state.pages, action.pageId, action.delta);
+      return pages === state.pages ? state : withPages(state, pages);
+    }
+
+    case 'ROTATE_PAGES': {
+      const pages = rotatePages(state.pages, action.pageIds, action.delta);
       return pages === state.pages ? state : withPages(state, pages);
     }
 

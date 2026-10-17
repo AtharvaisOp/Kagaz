@@ -5,6 +5,7 @@ import {
   movePage,
   normalizeRotation,
   rotatePage,
+  rotatePages,
 } from './operations';
 
 import type { WorkspacePage } from './types';
@@ -95,5 +96,18 @@ describe('rotation', () => {
     expect(pages[0]?.rotationDelta).toBe(0);
     expect(rotatePage(pages, 'missing')).toBe(pages);
     expect(rotatePage(pages, 'page-a-0', 45)).toBe(pages);
+  });
+
+  it('rotates a validated set atomically while preserving stable page identities', () => {
+    const rotated = rotatePages(pages, ['page-a-0', 'page-b-0'], -90);
+
+    expect(rotated.map((page) => [page.id, page.rotationDelta])).toEqual([
+      ['page-a-0', 270],
+      ['page-a-1', 90],
+      ['page-b-0', 90],
+    ]);
+    expect(pages[0]?.rotationDelta).toBe(0);
+    expect(rotatePages(pages, ['page-a-0', 'missing'], 90)).toBe(pages);
+    expect(rotatePages(pages, ['page-a-0', 'page-a-0'], 90)).toBe(pages);
   });
 });
