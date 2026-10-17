@@ -2507,11 +2507,19 @@ try {
         return overlap / Math.max(rect.height, 1);
       };
       const selectedRatio = visibleRatio(shells[selectedIndex]);
-      return (
+      const selectionMatchesViewport =
         selectedRatio > 0 &&
         visibleRatio(shells[2]) === 0 &&
-        selectedRatio >= Math.max(...shells.map(visibleRatio)) - 0.001
-      );
+        selectedRatio >= Math.max(...shells.map(visibleRatio)) - 0.001;
+      const root = document.documentElement;
+      const sample = `${scrollY}:${selectedIndex}`;
+      const stableSamples =
+        root.dataset.phase5bKeyboardSelection === sample
+          ? Number(root.dataset.phase5bKeyboardSelectionCount ?? 0) + 1
+          : 1;
+      root.dataset.phase5bKeyboardSelection = sample;
+      root.dataset.phase5bKeyboardSelectionCount = String(stableSamples);
+      return selectionMatchesViewport && stableSamples >= 3;
     });
     const keyboardSelectedIndex = await page.evaluate(() =>
       Array.from(document.querySelectorAll('.thumbnail-select')).findIndex(
