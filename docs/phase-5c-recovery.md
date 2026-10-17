@@ -1,5 +1,9 @@
 # Phase 5C-R — Devanagari investigation and scoped Unicode release
 
+> This is the recovery investigation record. Its checkpoint tables describe the
+> state at the time of investigation and are superseded by the
+> [current completion status](project-completion-status.md).
+
 ## Decision and status
 
 **Original Phase 5C status: PARTIAL.** Correct Hindi/Marathi Devanagari creation
@@ -11,11 +15,10 @@ integrated with the editor. No Devanagari font, fontkit runtime shim or second
 PDF engine has been added to the product.
 
 **Release decision: a deliberately scoped Latin/Greek/Cyrillic release.** The
-existing branch's verified behavior is useful independently of complex-script
-support. PR #5 can become ready for review with that accurate scope after the
-recovery verification passes. Merge, final-main CI, Vercel promotion and
-anonymous production proof are separate gates. This document must not be read
-as evidence that any pending gate passed.
+verified subset shipped in PR #5 after exact-head and merged-main CI passed.
+Vercel deployment is confirmed. Anonymous production PDF proof remains blocked
+by the deployment access checkpoint; the connected Vercel integration also
+denied access to the deployment. Devanagari remains outside the released scope.
 
 The recovery began on `codex/phase-5c-unicode-fonts` at
 `8584d534d973b13b095827ec42ed058ffb29303f` with draft
