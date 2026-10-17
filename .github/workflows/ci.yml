@@ -106,7 +106,7 @@ jobs:
           pnpm --filter @kagaz/web dev --host 127.0.0.1 > /tmp/kagaz-web.log 2>&1 &
           for i in $(seq 1 30); do curl -fsS http://127.0.0.1:5173/ > /dev/null && break; sleep 1; done
           node scripts/verify-phase4b-container.mjs
-          docker run -d --name kagaz-browser-api --init --memory=512m --cpus=0.5 --read-only --tmpfs /tmp:rw,noexec,nosuid,size=256m --cap-drop=ALL --security-opt=no-new-privileges --pids-limit=64 -p 127.0.0.1:4000:4000 kagaz-api:verify
+          docker run -d --name kagaz-browser-api --init --memory=512m --cpus=0.5 --read-only --tmpfs /tmp:rw,noexec,nosuid,size=256m --cap-drop=ALL --security-opt=no-new-privileges --pids-limit=64 -e CORS_ORIGINS=http://127.0.0.1:5173 -p 127.0.0.1:4000:4000 kagaz-api:verify
           for i in $(seq 1 30); do curl -fsS http://localhost:4000/health > /dev/null && break; sleep 1; done
           node scripts/verify-phase4a.mjs
           node scripts/verify-phase4b.mjs
