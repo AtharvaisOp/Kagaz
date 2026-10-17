@@ -18,8 +18,9 @@ Updated: 2026-10-17
 - PR [#9](https://github.com/AtharvaisOp/Kagaz/pull/9) merged to `main` at `4bfe0cf02010cdc02880b3140121c7bd1e9fc3a6`.
 - Exact-head PR Run 87 passed at `5ec65d795e20e5f83e0d2bb625adb9d9465aff65`; merged-main Run 88 passed at the resulting SHA. Both passed quality and production-container jobs.
 - Run 85 exposed a worker scheduling timeout in `fontAssets.test.ts`; the test timeout was not extended. Both package test scripts now cap Vitest concurrency at four workers. The local web suite passed (77 files / 802 tests). Local Windows API-native checks lacked qpdf, Ghostscript and OCRmyPDF; Linux CI passed these native gates.
-- Audit findings and evidence are in [phase-5f.md](phase-5f.md). No engineering work remains in the scoped phases.
-- Immediate next action: none for repository engineering. Anonymous production PDF verification requires authorized deployment access or an alias that accepts anonymous requests.
+- Main Run 89 repeated that single 5-second font test timeout under concurrent API and web test tasks; 801 of 802 web tests passed. The root test command now runs workspace test tasks serially while each package retains its four-worker cap, reducing cross-suite CPU contention without changing test timeouts. The exact-head follow-up must pass before the final engineering checkpoint is considered green.
+- Audit findings and evidence are in [phase-5f.md](phase-5f.md). No product-feature work remains; final CI scheduling validation is pending.
+- Immediate next action: verify the exact-head follow-up CI and deployment, then confirm anonymous production PDF verification remains access-blocked unless Vercel access changes.
 
 ## Completed stages
 
