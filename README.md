@@ -29,6 +29,33 @@ while page order, deletion, rotation, and selection are logical workspace
 state. Start Over protects workspace, annotation, and meaningful in-progress
 editor work with one discard confirmation.
 
+## Phase 6A local PDF assistant
+
+Open **AI Assistant** from the active editor to request a supported change in
+plain language. Kagaz interprets these limited commands locally and shows the
+affected page or watermark before the user approves anything:
+
+- Select a numbered page
+- Rotate up to 10 numbered pages clockwise or counterclockwise
+- Move one page to a numbered position, the beginning, or the end
+- Delete one page after an additional confirmation
+- Set or edit a text watermark on every page, or remove the committed watermark
+- Add a centered text note to one page
+
+Every proposal is checked against the current stable page identities again at
+approval time. Page navigation, order, rotation, and deletion do not participate
+in the current Undo/Redo history. Watermarks and annotations use their existing
+shared history controllers. Assistant-generated text is currently limited to
+printable ASCII; use the editor's normal text tools for the supported Unicode
+subset.
+
+The command interpreter works offline; it is not a general-purpose LLM. Remote
+model planning is not enabled because this deployment has no authenticated
+provider, per-user usage limits, or spending controls. Prompts, PDF bytes, PDF
+text, filenames, and annotations are not sent to a model provider. No assistant
+action uploads a PDF or bypasses the existing export and submission consent
+flows.
+
 ## Phase 2 annotation capabilities
 
 - Create and edit text, highlight, freehand, rectangle, ellipse, line, and
@@ -522,6 +549,7 @@ evidence, resource measurements and remaining isolation limits.
 - Phase 5D — [performance baseline and measurements](docs/phase-5d.md) (complete)
 - Phase 5E — [responsive accessibility and interaction polish](docs/phase-5e.md) (complete)
 - Phase 5F — [final production-readiness audit](docs/phase-5f.md) (engineering and CI gates passed; anonymous live PDF verification blocked by deployment protection)
+- Phase 6A — [local command assistant](docs/phase-6a.md) (approval-gated editor actions; remote model planning disabled pending provider controls)
 
 The browser-local architecture remains the default for operations that can be
 performed safely on the device.

@@ -88,3 +88,34 @@ export function rotatePage(
   };
   return nextPages;
 }
+
+/** Rotate a validated page set in one workspace reducer action. */
+export function rotatePages(
+  pages: readonly WorkspacePage[],
+  pageIds: readonly WorkspacePageId[],
+  delta = ROTATION_STEP,
+): readonly WorkspacePage[] {
+  if (
+    pageIds.length === 0 ||
+    new Set(pageIds).size !== pageIds.length ||
+    !isValidRotationDegrees(delta)
+  ) {
+    return pages;
+  }
+
+  const indexes = pageIds.map((pageId) =>
+    pages.findIndex((page) => page.id === pageId),
+  );
+  if (indexes.some((index) => index < 0)) return pages;
+
+  const nextPages = [...pages];
+  for (const index of indexes) {
+    const page = nextPages[index];
+    if (!page) return pages;
+    nextPages[index] = {
+      ...page,
+      rotationDelta: normalizeRotation(page.rotationDelta + delta),
+    };
+  }
+  return nextPages;
+}

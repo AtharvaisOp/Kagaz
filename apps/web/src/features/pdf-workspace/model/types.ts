@@ -82,5 +82,10 @@ export type WorkspaceAction =
       readonly delta?: number;
     }
   | {
+      readonly type: 'ROTATE_PAGES';
+      readonly pageIds: readonly WorkspacePageId[];
+      readonly delta: number;
+    }
+  | {
       readonly type: 'RESET_WORKSPACE';
     };

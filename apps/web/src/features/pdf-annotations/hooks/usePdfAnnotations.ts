@@ -89,7 +89,7 @@ export interface PdfAnnotationController {
     annotationId: AnnotationId | null,
   ) => void;
   readonly commitAnnotation: (annotation: PdfAnnotation) => void;
-  readonly addAnnotation: (annotation: PdfAnnotation) => void;
+  readonly addAnnotation: (annotation: PdfAnnotation) => boolean;
   readonly undo: () => void;
   readonly redo: () => void;
   readonly resetAnnotations: () => void;
@@ -226,7 +226,7 @@ export function usePdfAnnotations(
   const dispatchTracked = useCallback(
     (action: AnnotationAction) => {
       const next = annotationReducer(stateRef.current, action);
-      if (next === stateRef.current) return;
+      if (next === stateRef.current) return false;
       dispatch(action);
       if (
         action.type !== 'UNDO' &&
@@ -238,6 +238,7 @@ export function usePdfAnnotations(
           history?.record([action.annotation.workspacePageId]);
         else if ('pageId' in action) history?.record([action.pageId]);
       }
+      return true;
     },
     [history],
   );
@@ -340,11 +341,13 @@ export function usePdfAnnotations(
 
   const addAnnotation = useCallback(
     (annotation: PdfAnnotation) => {
-      dispatchTracked({ type: 'ADD_ANNOTATION', annotation });
+      const added = dispatchTracked({ type: 'ADD_ANNOTATION', annotation });
+      if (!added) return false;
       setSelection({
         workspacePageId: annotation.workspacePageId,
         annotationId: annotation.id,
       });
+      return true;
     },
     [dispatchTracked],
   );

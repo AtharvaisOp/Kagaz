@@ -7,16 +7,21 @@ export function PdfToolDialog({
   title,
   onClose,
   children,
+  className,
 }: {
   readonly id: string;
   readonly title: string;
   readonly onClose: () => void;
   readonly children: ReactNode;
+  readonly className?: string;
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
   useEffect(() => {
     const element = dialog.current;
     element?.showModal();
+    element
+      ?.querySelector<HTMLElement>('[data-dialog-autofocus], [autofocus]')
+      ?.focus({ preventScroll: true });
     return () => element?.close();
   }, []);
   useEffect(() => {
@@ -30,7 +35,7 @@ export function PdfToolDialog({
       }
       if (event.key === 'Tab') {
         const controls = element?.querySelectorAll<HTMLElement>(
-          'button:not(:disabled), input:not(:disabled), [href], [tabindex="0"]',
+          'button:not(:disabled), input:not(:disabled), textarea:not(:disabled), select:not(:disabled), [href], [tabindex="0"]',
         );
         const first = controls?.[0],
           last = controls?.[controls.length - 1];
@@ -60,7 +65,7 @@ export function PdfToolDialog({
   return (
     <dialog
       ref={dialog}
-      className="extract-dialog compress-dialog"
+      className={className ?? 'extract-dialog compress-dialog'}
       aria-labelledby={`${id}-title`}
       aria-describedby={`${id}-privacy`}
       onKeyDown={(event) => event.stopPropagation()}

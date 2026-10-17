@@ -39,6 +39,7 @@ export function App() {
     movePage,
     deletePage,
     rotatePage,
+    rotatePages,
   } = usePdfWorkspace();
   const editorHistory = useEditorHistory();
   const annotationController = usePdfAnnotations(
@@ -116,7 +117,7 @@ export function App() {
   };
 
   const handleDeletePage = (pageId: string) => {
-    deletePage(pageId);
+    return deletePage(pageId);
   };
 
   return (
@@ -161,6 +162,7 @@ export function App() {
           onMovePage={movePage}
           onDeletePage={handleDeletePage}
           onRotatePage={rotatePage}
+          onRotatePages={rotatePages}
           onZoomIn={() =>
             setZoom((current) => Math.min(MAX_ZOOM, current + ZOOM_STEP))
           }

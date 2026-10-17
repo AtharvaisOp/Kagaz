@@ -309,6 +309,29 @@ describe('workspaceReducer', () => {
     expect(state.dirty).toBe(false);
   });
 
+  it('rotates multiple stable pages in one atomic action', () => {
+    const initial = initialize([pageA0, pageA1, pageB0]);
+    const rotated = workspaceReducer(initial, {
+      type: 'ROTATE_PAGES',
+      pageIds: ['page-a-1', 'page-b-0'],
+      delta: -90,
+    });
+
+    expect(rotated.pages.map((page) => [page.id, page.rotationDelta])).toEqual([
+      ['page-a-0', 0],
+      ['page-a-1', 270],
+      ['page-b-0', 270],
+    ]);
+    expect(rotated.dirty).toBe(true);
+    expect(
+      workspaceReducer(rotated, {
+        type: 'ROTATE_PAGES',
+        pageIds: ['page-a-0', 'missing'],
+        delta: 90,
+      }),
+    ).toBe(rotated);
+  });
+
   it('selects only existing pages and does not dirty the document', () => {
     const state = initialize([pageA0, pageA1]);
     const selected = workspaceReducer(state, {
