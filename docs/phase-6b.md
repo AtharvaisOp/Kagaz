@@ -2,13 +2,15 @@
 
 ## Phase status
 
-**IN PROGRESS — implementation and local verification.** The active
-branch is `codex/phase-6b-document-retrieval`, based on the verified starting
-`main` commit `b2e157b9ce6dab18a76ac2757786b1b0f64ee637`. No Phase 6B commit or
-pull request exists yet. Initial inspection found a clean starting checkout
-and no open pull request for this work. The package-manager command for this
-host is `npx --yes pnpm@12.3.4` because the installed global shim is pnpm
-11.25.0.
+**IN PROGRESS — PR review, Linux CI, and production verification remain.** The
+active branch is `codex/phase-6b-document-retrieval`, based on the verified
+starting `main` commit `b2e157b9ce6dab18a76ac2757786b1b0f64ee637`. The
+implementation commit is `9c6af6be37716c1ec924385af7c749afe36a8f79`; PR #13 is
+open at https://github.com/AtharvaisOp/Kagaz/pull/13. GitHub Actions run 98 is
+in progress for that exact head. The Vercel preview is building. Initial
+inspection found a clean starting checkout and no open pull request for this
+work. The package-manager command for this host is `npx --yes pnpm@12.3.4`
+because the installed global shim is pnpm 11.25.0.
 
 ## Current implementation
 
@@ -164,16 +166,17 @@ PASS until those checks finish and the production build is verified.
 
 - Branch: `codex/phase-6b-document-retrieval`
 - Starting SHA: `b2e157b9ce6dab18a76ac2757786b1b0f64ee637`
-- Phase 6B commit: pending
-- Pull request: pending
-- Exact-head CI: pending
+- Phase 6B implementation commit: `9c6af6be37716c1ec924385af7c749afe36a8f79`
+- Pull request: https://github.com/AtharvaisOp/Kagaz/pull/13
+- Exact-head GitHub Actions run 98: in progress for the implementation commit
 - Final `main` SHA: pending
 - Production deployment SHA: pending
 
 ## Next action
 
-Review the complete diff and rerun the final local checks after documentation
-updates. Commit the verified local changes, push the branch, create a reviewable
-PR, and wait for exact-head Linux CI before merging. Verify the resulting
-`main` SHA, production deployment, and assistant behavior on the production
-build. Update this checkpoint with exact Git/CI/deployment evidence.
+Wait for GitHub Actions run 98. Record its result, and if this checkpoint
+changes after the implementation commit, push that documentation-only update
+and wait for CI on the new exact PR head. Merge only after exact-head CI and
+repository policy allow. Verify the resulting `main` SHA, production
+deployment, and assistant behavior on the production build. Update this
+checkpoint with exact Git/CI/deployment evidence.
