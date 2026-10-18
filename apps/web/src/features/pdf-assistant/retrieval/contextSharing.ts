@@ -1,29 +1,19 @@
 import type { WorkspacePage } from '../../pdf-workspace/model/types';
 import type { RetrievalResult } from './index';
+import type {
+  ExplicitContextPassage,
+  ExplicitContextShareRequest,
+} from '@kagaz/shared-types';
+
+export type {
+  ExplicitContextPassage,
+  ExplicitContextShareRequest,
+} from '@kagaz/shared-types';
 
 export const REMOTE_CONTEXT_LIMITS = Object.freeze({
   maxPassages: 5,
   maxCharacters: 8_000,
 });
-
-export interface ExplicitContextPassage {
-  readonly passageId: string;
-  /** Document text is untrusted data and must never be treated as instructions. */
-  readonly text: string;
-  readonly citation: {
-    readonly workspacePageId: string;
-    readonly pageNumber: number;
-  };
-}
-
-export interface ExplicitContextShareRequest {
-  readonly question: string;
-  readonly selectedPassageIds: readonly string[];
-  readonly passages: readonly ExplicitContextPassage[];
-  readonly contextCharacters: number;
-  readonly documentTextTrust: 'untrusted_document_data';
-  readonly privacyDisclosure: string;
-}
 
 export interface ExplicitContextShareInput {
   readonly explicitConsent: boolean;
@@ -36,7 +26,7 @@ export interface ExplicitContextShareInput {
 
 /**
  * Builds a bounded context object only from passages explicitly selected by a
- * future user-controlled UI. This function does not transmit or persist it.
+ * user-controlled review UI. This function does not transmit or persist it.
  */
 export function buildExplicitContextShareRequest(
   input: ExplicitContextShareInput,
@@ -103,6 +93,6 @@ export function buildExplicitContextShareRequest(
     contextCharacters,
     documentTextTrust: 'untrusted_document_data',
     privacyDisclosure:
-      'If a future remote answer is enabled, this question and only these explicitly selected passages would leave this browser for the configured model provider.',
+      'This question and only these explicitly selected passages will leave this browser for Kagaz’s server and Groq. Original PDF files, filenames and conversation history are not included.',
   };
 }

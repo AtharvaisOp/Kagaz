@@ -9,10 +9,13 @@ import {
   CONVERSION_HEADERS,
   ToolService,
 } from './tools/service.js';
+import { registerAssistantRoutes } from './assistant/routes.js';
+import { createDefaultAssistantService } from './assistant/service.js';
 
 export function createApp(
   allowedOrigins: string[],
   tools = new ToolService(),
+  assistant = createDefaultAssistantService(),
 ): Express {
   const app = express();
 
@@ -68,6 +71,8 @@ export function createApp(
   app.post('/tools/convert-to-pdf', (request, response) =>
     tools.handle(request, response, 'convert-to-pdf'),
   );
+
+  registerAssistantRoutes(app, assistant);
 
   // Multipart tools own their parser and limits. Future JSON routes use this one.
   app.use(express.json({ limit: '100kb' }));

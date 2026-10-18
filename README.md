@@ -49,12 +49,9 @@ shared history controllers. Assistant-generated text is currently limited to
 printable ASCII; use the editor's normal text tools for the supported Unicode
 subset.
 
-The command interpreter works offline; it is not a general-purpose LLM. Remote
-model planning is not enabled because this deployment has no authenticated
-provider, per-user usage limits, or spending controls. Prompts, PDF bytes, PDF
-text, filenames, and annotations are not sent to a model provider. No assistant
-action uploads a PDF or bypasses the existing export and submission consent
-flows.
+The command interpreter works offline; it is not a general-purpose LLM. Editing
+commands never call a model provider. No assistant action uploads a PDF or
+bypasses the existing export and submission consent flows.
 
 ## Phase 6B local PDF retrieval
 
@@ -74,9 +71,45 @@ multi-column pages.
 
 The index is bounded and held only in session memory. PDF bytes, extracted
 text, form values, search queries, and results are not uploaded or persisted.
-Remote generative answering remains disabled; Ask PDF stays useful offline.
+Ask PDF stays useful offline regardless of account or remote-service availability.
 Implementation and validation details are recorded in
 [docs/phase-6b.md](docs/phase-6b.md).
+
+## Phase 6C Google sign-in and AI Chat
+
+**AI Assistant → AI Chat** adds Google-only Firebase authentication and grounded
+Groq answers without requiring an account for editing or local search. Remote
+generation is disabled until the owner configures and verifies the live security
+gates. Missing configuration is shown as unavailable, with no usable generation
+control. A server-returned usage count shows the five-attempt UTC daily allowance.
+
+Each generation requires selecting and reviewing the exact question and up to
+five passages (8,000 characters). **Share and Generate** approves that request
+only. Kagaz sends those excerpts to its Express API and Groq; it never sends
+original PDFs, filenames, the whole index, unselected passages or chat history.
+Pending-redaction pages and duplicate sources are excluded. Document changes,
+new retrieval, committed form changes and sign-out invalidate reviews and answers.
+Cancelling cannot retract text already transmitted or guarantee a free attempt.
+
+Firebase Admin verifies Google ID tokens on the API. Firestore transactions
+enforce five attempts per day, two per rolling minute, one active reservation per
+user and the configured application budget (at most the proposed $3/day). The
+fixed Groq model is `openai/gpt-oss-20b`; unknown billing is charged conservatively.
+Firestore holds operational metadata only, and browser access to its records is
+denied. Kagaz does not persist questions, passages, generated answers or transcripts.
+Groq's own data controls and monthly spending cap require separate owner review.
+
+Use [the Phase 6C report](docs/phase-6c.md) for the accounting lifecycle,
+environment setup, emulator tests, production blockers and release evidence.
+Routine tests use Firebase emulators and a deterministic provider mock:
+
+```bash
+pnpm exec firebase emulators:exec --only auth,firestore --project demo-kagaz-phase6c "node scripts/verify-phase6c-emulators.mjs"
+```
+
+Java 21 or newer and Playwright Chromium are required. This command must not
+receive paid provider credentials. Firebase's SDK may persist authentication
+session data; PDF and conversation contents stay out of browser storage.
 
 ## Phase 2 annotation capabilities
 
@@ -257,7 +290,8 @@ structure with qpdf and bounded pikepdf inspection, or checks OOXML before
 LibreOffice. It runs the selected native operation, validates the result and
 streams it back. Temporary files are
 deleted after processing/download, errors, disconnection and orderly shutdown.
-There is no permanent PDF storage, database persistence or content analytics.
+There is no permanent document storage or content analytics. AI usage records
+contain operational quota metadata only, with no document or conversation text.
 Logs contain error codes rather than PDF contents, filenames or native stderr.
 
 ```text
@@ -553,7 +587,8 @@ evidence, resource measurements and remaining isolation limits.
   supports the verified Latin, Latin Extended, Greek and Cyrillic subset;
   Devanagari, RTL and other unverified scripts remain visibly rejected. See the
   [Phase 5C support matrix](docs/phase-5c.md#script-support-matrix).
-- There are no accounts, cloud storage, or collaboration features.
+- Google accounts are used only for remote AI access; there is no document cloud
+  storage or collaboration feature.
 - Very large PDFs may create browser memory pressure.
 - The page-copy export workflow may not preserve every document-level feature,
   such as outlines or advanced interactive structures.
@@ -571,7 +606,9 @@ evidence, resource measurements and remaining isolation limits.
 - Phase 5D — [performance baseline and measurements](docs/phase-5d.md) (complete)
 - Phase 5E — [responsive accessibility and interaction polish](docs/phase-5e.md) (complete)
 - Phase 5F — [final production-readiness audit](docs/phase-5f.md) (engineering and CI gates passed; anonymous live PDF verification blocked by deployment protection)
-- Phase 6A — [local command assistant](docs/phase-6a.md) (approval-gated editor actions; remote model planning disabled pending provider controls)
+- Phase 6A — [local command assistant](docs/phase-6a.md) (approval-gated browser-local editor actions)
+- Phase 6B — [local PDF retrieval](docs/phase-6b.md) (complete)
+- Phase 6C — [Google authentication and Groq chat](docs/phase-6c.md) (engineering verification in progress; live generation disabled pending owner setup)
 
 The browser-local architecture remains the default for operations that can be
 performed safely on the device.

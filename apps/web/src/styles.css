@@ -2709,7 +2709,7 @@ input:focus-visible + * {
 
 .assistant-mode-switch {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 3px;
   padding: 3px;
   border: 1px solid #27272a;
@@ -2743,6 +2743,215 @@ input:focus-visible + * {
   border-color: #7c2d12;
   color: #fed7aa;
   background: #2a1912;
+}
+
+.assistant-chat {
+  min-width: 0;
+}
+
+.assistant-chat-gate,
+.assistant-chat-usage {
+  padding: 14px;
+  border: 1px solid #27272a;
+  margin-top: 16px;
+  background: #141414;
+}
+
+.assistant-chat-gate p,
+.assistant-chat-usage p,
+.assistant-auth-redirect,
+.assistant-context-data,
+.assistant-chat-account {
+  color: #a1a1aa;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.assistant-chat-gate > p,
+.assistant-chat-usage p {
+  margin: 0 0 10px;
+}
+
+.assistant-auth-redirect {
+  margin-top: 16px;
+}
+
+.assistant-auth-redirect summary,
+.assistant-context-data summary {
+  padding: 4px 0;
+  color: #a5f3fc;
+  cursor: pointer;
+}
+
+.assistant-auth-redirect summary:focus-visible,
+.assistant-context-data summary:focus-visible {
+  outline: 2px solid #06b6d4;
+  outline-offset: 2px;
+}
+
+.assistant-chat-account {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 0;
+  border-bottom: 1px solid #27272a;
+  margin-top: 8px;
+}
+
+.assistant-chat-account > div {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.assistant-chat-account strong,
+.assistant-chat-account span {
+  display: block;
+}
+
+.assistant-chat-account strong,
+.assistant-chat-usage strong {
+  color: #e4e4e7;
+  font-weight: 600;
+}
+
+.assistant-chat-account .text-button {
+  flex-shrink: 0;
+}
+
+.assistant-chat-form {
+  margin-top: 18px;
+}
+
+.assistant-chat-passages {
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  margin: 20px 0 0;
+}
+
+.assistant-chat-passages legend {
+  padding: 0;
+  color: #e4e4e7;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.assistant-chat-passages .assistant-result-list {
+  max-height: 320px;
+  margin-top: 12px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.assistant-chat .assistant-chat-passage-choice {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  min-height: 30px;
+  color: #e4e4e7;
+  font-size: 12px;
+  line-height: 1.6;
+  cursor: pointer;
+}
+
+.compress-dialog .assistant-chat-passage-choice input {
+  width: 18px;
+  min-width: 18px;
+  height: 18px;
+  min-height: 18px;
+  flex: 0 0 18px;
+  padding: 0;
+  margin: 1px 0 0;
+  accent-color: #f97316;
+}
+
+.assistant-chat-passage-choice input:focus-visible {
+  outline: 2px solid #06b6d4;
+  outline-offset: 3px;
+}
+
+.assistant-chat-passages:disabled {
+  opacity: 0.65;
+}
+
+.assistant-context-review h4,
+.assistant-chat-answer h4 {
+  margin: 0 0 10px;
+  color: #ffffff;
+  font-size: 15px;
+  line-height: 1.5;
+}
+
+.assistant-context-review h5 {
+  margin: 16px 0 6px;
+  color: #d4d4d8;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.assistant-chat-exact-question,
+.assistant-chat-answer-text {
+  margin: 8px 0 12px;
+  color: #e4e4e7;
+  font-size: 13px;
+  line-height: 1.7;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.assistant-context-review .assistant-result {
+  margin-top: 10px;
+}
+
+.assistant-context-review .assistant-result strong {
+  color: #a5f3fc;
+  font-size: 11px;
+}
+
+.assistant-context-data {
+  margin-top: 14px;
+}
+
+.assistant-context-data pre {
+  max-height: 260px;
+  padding: 10px;
+  border: 1px solid #27272a;
+  overflow: auto;
+  background: #111111;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 10px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.assistant-chat-citations {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+@media (max-width: 480px) {
+  .assistant-mode-switch button {
+    min-height: 44px;
+    padding-inline: 6px;
+  }
+
+  .assistant-chat-form textarea {
+    font-size: 16px;
+  }
+
+  .assistant-chat .text-button,
+  .assistant-chat .primary-button,
+  .assistant-chat-citations button {
+    min-height: 44px;
+  }
+
+  .assistant-chat-usage,
+  .assistant-chat-gate {
+    padding: 12px;
+  }
 }
 
 .assistant-mode-switch button:focus-visible,

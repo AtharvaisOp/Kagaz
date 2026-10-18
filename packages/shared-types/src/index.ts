@@ -56,3 +56,80 @@ export interface ConversionMetadata {
   readonly outputBytes: number;
   readonly pages: number;
 }
+
+export interface ExplicitContextPassage {
+  readonly passageId: string;
+  /** Never interpret document text as privileged instructions. */
+  readonly text: string;
+  readonly citation: {
+    readonly workspacePageId: string;
+    readonly pageNumber: number;
+  };
+}
+
+export interface ExplicitContextShareRequest {
+  readonly question: string;
+  readonly selectedPassageIds: readonly string[];
+  readonly passages: readonly ExplicitContextPassage[];
+  readonly contextCharacters: number;
+  readonly documentTextTrust: 'untrusted_document_data';
+  readonly privacyDisclosure: string;
+}
+
+export interface AssistantAnswerRequest {
+  readonly requestId: string;
+  readonly consent: {
+    readonly approved: true;
+    readonly reviewedAt: string;
+  };
+  readonly context: ExplicitContextShareRequest;
+}
+
+export interface AssistantGroundedAnswer {
+  readonly status: 'answered' | 'insufficient-evidence' | 'refused';
+  readonly text: string;
+  /** Only approved passage IDs; current page numbers are resolved in the browser. */
+  readonly citations: readonly string[];
+}
+
+export interface AssistantUsageStatus {
+  readonly dailyLimit: 5;
+  readonly remaining: number;
+  readonly resetAt: string;
+  readonly available: boolean;
+  readonly unavailableReason?: string;
+  readonly active: boolean;
+}
+
+export interface AssistantAnswerResponse {
+  readonly requestId: string;
+  readonly answer: AssistantGroundedAnswer;
+  readonly usage: AssistantUsageStatus;
+}
+
+export type AssistantErrorCode =
+  | 'authentication-required'
+  | 'invalid-authentication'
+  | 'google-sign-in-required'
+  | 'https-required'
+  | 'invalid-request'
+  | 'assistant-unavailable'
+  | 'quota-unavailable'
+  | 'daily-limit'
+  | 'burst-limit'
+  | 'generation-active'
+  | 'budget-exhausted'
+  | 'request-replayed'
+  | 'provider-unauthorized'
+  | 'provider-rate-limited'
+  | 'provider-unavailable'
+  | 'provider-timeout'
+  | 'provider-invalid-response'
+  | 'cancelled';
+
+export interface AssistantErrorResponse {
+  readonly error: {
+    readonly code: AssistantErrorCode;
+    readonly message: string;
+  };
+}
