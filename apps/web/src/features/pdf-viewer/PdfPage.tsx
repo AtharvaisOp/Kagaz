@@ -19,7 +19,7 @@ import type {
   PendingSignaturePlacement,
 } from '../pdf-annotations/hooks/usePdfAnnotations';
 import { normalizeRotation } from '../pdf-workspace/model/operations';
-import { adoptResolvedPdfPage } from '../pdf-workspace/runtime/pdfPageLifecycle';
+import { acquirePdfPage } from '../pdf-workspace/runtime/pdfPageLifecycle';
 import { FormWidgetLayer } from '../pdf-forms/rendering/FormWidgetLayer';
 import type {
   FormFieldDefinition,
@@ -39,12 +39,7 @@ import type {
   WorkspacePage,
   WorkspacePageId,
 } from '../pdf-workspace/model/types';
-import type {
-  PageViewport,
-  PDFDocumentProxy,
-  PDFPageProxy,
-  RenderTask,
-} from 'pdfjs-dist';
+import type { PageViewport, PDFDocumentProxy, RenderTask } from 'pdfjs-dist';
 
 interface PdfPageProps {
   readonly page: WorkspacePage;
@@ -176,7 +171,6 @@ export function PdfPage({
     }
 
     let active = true;
-    let loadedPage: PDFPageProxy | null = null;
     let renderTask: RenderTask | null = null;
     const canvas = canvasRef.current;
 
@@ -187,15 +181,10 @@ export function PdfPage({
     setStatus('loading');
     setRenderedViewport(null);
 
-    void document
-      .getPage(page.sourcePageIndex + 1)
-      .then((nextPage) => {
-        const ownedPage = adoptResolvedPdfPage(nextPage, active);
-        if (!ownedPage) {
-          return;
-        }
-
-        loadedPage = ownedPage;
+    const pageLease = acquirePdfPage(document, page.sourcePageIndex + 1);
+    void pageLease.page
+      .then((ownedPage) => {
+        if (!active) return;
         const totalRotation = normalizeRotation(
           ownedPage.rotate + page.rotationDelta,
         );
@@ -266,8 +255,16 @@ export function PdfPage({
 
     return () => {
       active = false;
-      renderTask?.cancel();
-      loadedPage?.cleanup();
+      const activeRenderTask = renderTask;
+      activeRenderTask?.cancel();
+      if (activeRenderTask) {
+        void activeRenderTask.promise.then(
+          () => pageLease.release(true),
+          () => pageLease.release(true),
+        );
+      } else {
+        pageLease.release(true);
+      }
       canvas.width = 0;
       canvas.height = 0;
     };

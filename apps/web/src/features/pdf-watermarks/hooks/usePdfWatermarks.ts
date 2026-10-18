@@ -16,6 +16,7 @@ import {
   type AnnotationAssetRegistry,
 } from '../../pdf-annotations/runtime/annotationAssetRegistry';
 import { createBrowserIdFactory } from '../../pdf-workspace/runtime/ids';
+import { acquirePdfPage } from '../../pdf-workspace/runtime/pdfPageLifecycle';
 import type { WorkspacePage } from '../../pdf-workspace/model/types';
 import type { SourceDocumentRegistry } from '../../pdf-workspace/runtime/sourceDocumentRegistry';
 import { snapshotAnnotationImageAssets } from '../../../lib/pdf-export/annotations/imageAssets';
@@ -317,15 +318,19 @@ export function usePdfWatermarks(
         const source = registry.getDocument(workspacePage.sourceDocumentId);
         if (!source)
           throw new Error('A selected watermark page is no longer available.');
-        const page = await source.getPage(workspacePage.sourcePageIndex + 1);
+        const pageLease = acquirePdfPage(
+          source,
+          workspacePage.sourcePageIndex + 1,
+        );
         try {
+          const page = await pageLease.page;
           validateGeometry({
             viewBox: [...page.view],
             userUnit: page.userUnit,
             rotation: (page.rotate + workspacePage.rotationDelta) % 360,
           });
         } finally {
-          page.cleanup();
+          pageLease.release(true);
         }
       }
       if (

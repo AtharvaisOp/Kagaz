@@ -3,7 +3,7 @@ import type { PdfFormsController } from '../../pdf-forms/hooks/usePdfForms';
 import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { normalizeRotation } from '../model/operations';
-import { adoptResolvedPdfPage } from '../runtime/pdfPageLifecycle';
+import { acquirePdfPage } from '../runtime/pdfPageLifecycle';
 import {
   drawThumbnailAnnotations,
   projectThumbnailAnnotations,
@@ -13,12 +13,7 @@ import type { AnnotationAssetRegistry } from '../../pdf-annotations/runtime/anno
 import type { PdfAnnotation } from '../../pdf-annotations/model/types';
 
 import type { WorkspacePage } from '../model/types';
-import type {
-  PDFDocumentProxy,
-  PDFPageProxy,
-  PageViewport,
-  RenderTask,
-} from 'pdfjs-dist';
+import type { PDFDocumentProxy, PageViewport, RenderTask } from 'pdfjs-dist';
 
 const THUMBNAIL_WIDTH = 112;
 
@@ -100,7 +95,6 @@ export function ThumbnailCanvas({
     if (!isNearRail || !document) return;
 
     let active = true;
-    let loadedPage: PDFPageProxy | null = null;
     let renderTask: RenderTask | null = null;
     const canvas = canvasRef.current;
     const annotationCanvas = annotationCanvasRef.current;
@@ -109,12 +103,10 @@ export function ThumbnailCanvas({
     setStatus('loading');
     setViewport(null);
     setSurfaceSize(null);
-    void document
-      .getPage(page.sourcePageIndex + 1)
-      .then((pdfPage) => {
-        const ownedPage = adoptResolvedPdfPage(pdfPage, active);
-        if (!ownedPage) return;
-        loadedPage = ownedPage;
+    const pageLease = acquirePdfPage(document, page.sourcePageIndex + 1);
+    void pageLease.page
+      .then((ownedPage) => {
+        if (!active) return;
         const rotation = normalizeRotation(
           ownedPage.rotate + page.rotationDelta,
         );
@@ -156,8 +148,16 @@ export function ThumbnailCanvas({
 
     return () => {
       active = false;
-      renderTask?.cancel();
-      loadedPage?.cleanup();
+      const activeRenderTask = renderTask;
+      activeRenderTask?.cancel();
+      if (activeRenderTask) {
+        void activeRenderTask.promise.then(
+          () => pageLease.release(true),
+          () => pageLease.release(true),
+        );
+      } else {
+        pageLease.release(true);
+      }
       canvas.width = 0;
       canvas.height = 0;
       if (annotationCanvas) {

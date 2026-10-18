@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useState } from 'react';
-import type { PDFDocumentProxy, PDFPageProxy } from 'pdfjs-dist';
+import type { PDFDocumentProxy } from 'pdfjs-dist';
 import { PdfToolDialog } from '../../pdf-heavy-tools/PdfToolDialog';
 import type { WorkspacePage } from '../../pdf-workspace/model/types';
 import type { SourceDocumentRegistry } from '../../pdf-workspace/runtime/sourceDocumentRegistry';
+import { acquirePdfPage } from '../../pdf-workspace/runtime/pdfPageLifecycle';
 import type { PdfWatermarkController } from '../hooks/usePdfWatermarks';
 import type {
   WatermarkBase,
@@ -123,20 +124,18 @@ export function WatermarkDialog({
   }, []);
   useEffect(() => {
     let active = true;
-    let loadedPage: PDFPageProxy | null = null;
     const workspacePage = pages.find((page) => page.id === previewPageId);
     const document: PDFDocumentProxy | null | undefined = workspacePage
       ? registry.getDocument(workspacePage.sourceDocumentId)
       : undefined;
-    if (workspacePage && document)
-      void document
-        .getPage(workspacePage.sourcePageIndex + 1)
+    const pageLease =
+      workspacePage && document
+        ? acquirePdfPage(document, workspacePage.sourcePageIndex + 1)
+        : null;
+    if (workspacePage && pageLease)
+      void pageLease.page
         .then((page) => {
-          loadedPage = page;
-          if (!active) {
-            page.cleanup();
-            return;
-          }
+          if (!active) return;
           setGeometryFailure(null);
           setGeometryState({
             key: geometryKey,
@@ -156,7 +155,7 @@ export function WatermarkDialog({
         });
     return () => {
       active = false;
-      loadedPage?.cleanup();
+      pageLease?.release(true);
     };
   }, [geometryKey, pages, previewPageId, registry]);
   if (!draft) return null;

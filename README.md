@@ -56,6 +56,28 @@ text, filenames, and annotations are not sent to a model provider. No assistant
 action uploads a PDF or bypasses the existing export and submission consent
 flows.
 
+## Phase 6B local PDF retrieval
+
+In **AI Assistant → Ask PDF**, search selectable text from the currently opened
+workspace. Kagaz extracts text from its existing PDF.js documents in the
+browser, ranks matching passages locally, and links each result to its current
+workspace page. Exact quoted phrases, names, numbers, keywords, and a single
+current page filter are supported. Results quote the matched source passage;
+the assistant does not generate broader summaries or conclusions.
+
+Committed supported form values can also be searched and are labeled with
+their field name. Uncommitted drafts, password values, annotations, watermarks,
+and filenames are excluded. Every page with a pending redaction is excluded
+from retrieval, including its form values. Scanned or image-only pages are not
+OCR’d. Text extraction can have imperfect reading order for tables and complex
+multi-column pages.
+
+The index is bounded and held only in session memory. PDF bytes, extracted
+text, form values, search queries, and results are not uploaded or persisted.
+Remote generative answering remains disabled; Ask PDF stays useful offline.
+Implementation and validation details are recorded in
+[docs/phase-6b.md](docs/phase-6b.md).
+
 ## Phase 2 annotation capabilities
 
 - Create and edit text, highlight, freehand, rectangle, ellipse, line, and

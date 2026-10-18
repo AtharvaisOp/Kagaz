@@ -18,8 +18,9 @@ import {
   normalizeRawRect,
 } from '../geometry/formWidgetGeometry';
 import { detectXfa } from './xfaDetection';
+import { acquirePdfPage } from '../../pdf-workspace/runtime/pdfPageLifecycle';
 
-import type { PDFDocumentProxy, PDFPageProxy } from 'pdfjs-dist';
+import type { PDFDocumentProxy } from 'pdfjs-dist';
 
 interface UnknownRecord {
   readonly [key: string]: unknown;
@@ -419,9 +420,9 @@ export async function discoverPdfForms(
     sourcePageIndex += 1
   ) {
     throwIfAborted(options.signal);
-    let page: PDFPageProxy | null = null;
+    const pageLease = acquirePdfPage(document, sourcePageIndex + 1);
     try {
-      page = await document.getPage(sourcePageIndex + 1);
+      const page = await pageLease.page;
       throwIfAborted(options.signal);
       const annotations = await page.getAnnotations({ intent: 'display' });
       throwIfAborted(options.signal);
@@ -445,7 +446,7 @@ export async function discoverPdfForms(
         );
       }
     } finally {
-      page?.cleanup();
+      pageLease.release(true);
     }
   }
 

@@ -4,6 +4,7 @@ import {
   SourceDocumentRegistry,
   type PdfLoader,
 } from './sourceDocumentRegistry';
+import { acquirePdfPage } from './pdfPageLifecycle';
 
 import type { PDFDocumentLoadingTask, PDFDocumentProxy } from 'pdfjs-dist';
 import type { LoadedPdf } from '../../../lib/pdf';
@@ -95,6 +96,38 @@ describe('SourceDocumentRegistry', () => {
 
     expect(firstTask.destroy).toHaveBeenCalledOnce();
     expect(secondTask.destroy).toHaveBeenCalledOnce();
+    expect(registry.size).toBe(0);
+  });
+
+  it('defers worker destruction until shared page consumers have released the proxy', async () => {
+    const registry = new SourceDocumentRegistry();
+    const task = createLoadingTask();
+    const pageCleanup = vi.fn();
+    const document = {
+      ...createDocument(),
+      getPage: vi.fn(() => Promise.resolve({ cleanup: pageCleanup })),
+    } as unknown as PDFDocumentProxy;
+    const loader: PdfLoader = vi.fn().mockResolvedValue({
+      document,
+      loadingTask: task.task,
+    });
+    registry.register('source-a', createFile());
+    await registry.load('source-a', loader);
+    const pageLease = acquirePdfPage(document, 1);
+    await pageLease.page;
+
+    let destroyed = false;
+    const destroying = registry.destroyAll().then(() => {
+      destroyed = true;
+    });
+    await Promise.resolve();
+    expect(destroyed).toBe(false);
+    expect(task.destroy).not.toHaveBeenCalled();
+
+    pageLease.release(true);
+    await destroying;
+    expect(pageCleanup).toHaveBeenCalledOnce();
+    expect(task.destroy).toHaveBeenCalledOnce();
     expect(registry.size).toBe(0);
   });
 });

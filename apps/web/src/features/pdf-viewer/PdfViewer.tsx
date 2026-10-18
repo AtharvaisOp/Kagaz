@@ -150,6 +150,11 @@ export function PdfViewer({
   const [mobilePageManagerOpen, setMobilePageManagerOpen] = useState(false);
   const [assistantOpen, setAssistantOpen] = useState(false);
   const assistantTriggerRef = useRef<HTMLButtonElement>(null);
+  const retrievalResetRef = useRef<(() => void) | null>(null);
+  const startOver = useCallback(() => {
+    retrievalResetRef.current?.();
+    onStartOver();
+  }, [onStartOver]);
   const closeAssistant = useCallback(() => {
     setAssistantOpen(false);
     window.requestAnimationFrame(() =>
@@ -255,7 +260,7 @@ export function PdfViewer({
         minZoom={minZoom}
         maxZoom={maxZoom}
         onAddFiles={onAddFiles}
-        onStartOver={onStartOver}
+        onStartOver={startOver}
         onOpenPages={openPageManager}
         mobilePageManagerOpen={mobilePageManagerOpen}
         onZoomIn={onZoomIn}
@@ -285,6 +290,9 @@ export function PdfViewer({
           annotationController={annotationController}
           watermarkController={watermarkController}
           registry={registry}
+          forms={formController}
+          redactions={redactionController.state.present}
+          retrievalResetRef={retrievalResetRef}
           onClose={closeAssistant}
         />
       ) : null}
