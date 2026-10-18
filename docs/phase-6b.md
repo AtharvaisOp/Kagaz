@@ -2,21 +2,25 @@
 
 ## Phase status
 
-**IN PROGRESS — PR review, Linux CI, and production verification remain.** The
-active branch is `codex/phase-6b-document-retrieval`, based on the verified
-starting `main` commit `b2e157b9ce6dab18a76ac2757786b1b0f64ee637`. The
-implementation commit is `9c6af6be37716c1ec924385af7c749afe36a8f79`; PR #13 is
-open at https://github.com/AtharvaisOp/Kagaz/pull/13. The Vercel preview check
-is green. Exact-head GitHub Actions run 100 passed its quality job and existing
-Phase 4/5/6A container/browser regressions, then timed out in the Phase 6B
-verifier while waiting for page 4's redaction control. The log shows that
-workspace selection completed before the lazy PDF.js page render had registered
-geometry. The verifier now uses reduced motion and waits for page 4's ready
-canvas, its selected-page label, and the specific enabled redaction control.
-The updated full local browser matrix passes; a follow-up commit and exact-head
-CI rerun are pending. Initial inspection found a clean starting checkout and no
-open pull request for this work. The package-manager command for this host is
-`npx --yes pnpm@12.3.4` because the installed global shim is pnpm 11.25.0.
+**PASS — merged, CI green, and production verified.** Work started from
+`main` commit `b2e157b9ce6dab18a76ac2757786b1b0f64ee637` on branch
+`codex/phase-6b-document-retrieval`. PR #13 was merged with squash commit
+`742b5e1dab480f3861e4985bea5346bc8c8ae096`; the final code commit on the PR
+branch was `e9313d223b2b0b88c7b3e7cc5c032c4c5a315176`. Exact-head CI run 101
+passed on the branch and main push run 102 passed on the merge commit. Vercel
+production deployment `dpl_CJghD68CxVY4yg796UkiXub6xqP5` is READY from the same
+main SHA and owns the `kagaz-personal.vercel.app` alias. The production
+Chromium verifier passed all 19 scenarios.
+
+Runs 99 and 100 exposed the same test readiness race: selecting page 4 updated
+workspace selection before PDF.js finished rendering its lazy preview and
+registering redaction geometry. The final verifier uses reduced motion, waits
+for page 4's ready canvas, verifies its selected-page label, and waits for the
+specific enabled redaction control. The updated verifier passed locally, on
+exact branch-head run 101, on main run 102, and in the production browser.
+Initial inspection found a clean starting checkout and no open pull request for
+this work. Use `npx --yes pnpm@12.3.4` on this host; its global pnpm shim is
+11.25.0.
 
 ## Current implementation
 
@@ -104,6 +108,16 @@ for that page are removed. Start Over clears the index before the replacement
 workspace is used. A finalized sanitized PDF opened as a new document receives
 its own ordinary extraction.
 
+## Design and accessibility
+
+`design.md` remains the visual authority. Ask PDF extends the existing assistant
+dialog and retains Kagaz's dark surfaces, orange primary action, cyan focus
+state, and existing typography. The gptTaste skill was applied to interaction
+polish without changing the product's visual system. The dialog remains
+keyboard-operable, restores focus to its trigger on close, announces search
+progress and results, and respects `prefers-reduced-motion`. Browser checks
+passed at 390 px and 360 px; production screenshots are listed below.
+
 ## Validation checkpoint
 
 The standalone verifier is `scripts/verify-phase6b.mjs`. It generates
@@ -133,6 +147,17 @@ Latest completed checks:
   replacement, Start Over, and 390/360 px layouts. The run reported zero
   browser errors, zero cross-origin requests, zero document-content requests,
   unchanged browser storage snapshots, and remote generation disabled.
+- Exact-head Linux CI run 101 passed on branch commit
+  `e9313d223b2b0b88c7b3e7cc5c032c4c5a315176`; main push run 102 passed on
+  `742b5e1dab480f3861e4985bea5346bc8c8ae096`. Each run passed 850 web tests
+  across 82 files, 206 API tests across 11 files, and 3 workspace sampler
+  tests, followed by all Phase 4/5/6A/6B native, container, and browser checks.
+  Run 102: https://github.com/AtharvaisOp/Kagaz/actions/runs/39104213099
+- The production run of the same verifier passed all 19 scenarios on
+  `https://kagaz-personal.vercel.app`. It observed zero browser errors, zero
+  cross-origin requests, zero requests containing document content, unchanged
+  browser storage, and disabled remote generation. The fixture PDFs were
+  supplied through local file inputs; search did not upload them.
 
 Measured synthetic browser results from this host:
 
@@ -153,46 +178,51 @@ measurements are the bounded character and chunk counts above. Timings include
 PDF.js loading and local extraction/search; the synthetic PDFs are small text
 fixtures rather than representative large production files.
 
+The production Chromium run on this host measured 36 ms for 5-page cold
+index/search and 37 ms warm; 119 ms cold and 41 ms warm for 100 pages; and
+322 ms cold and 62 ms warm for 300 pages. The duplicate-source fixture took
+43 ms. Its `performance.memory` reading was 21,700,000 bytes after both the
+100- and 300-page runs; this is a coarse browser heap value, not an isolated
+index-memory measurement. The 300-page fixture produced 12,084 indexed
+characters and 300 chunks. These synthetic PDFs do not represent scanned or
+complex-layout documents.
+
 The complete Windows `pnpm test` command failed in API native suites: **96
 failed, 102 passed, 8 skipped out of 206 API tests**. The exact-head Linux
 quality job subsequently passed the API suite (**206 passed**), web suite
 (**850 passed**), workspace sampler (**3 passed**), lint, typecheck, build,
 format check, and diff check. The host has no
 `qpdf`, Ghostscript, `ocrmypdf`, Tesseract, LibreOffice/`soffice`, or Docker
-binary; several native-tool invocations return Windows command-not-found code 9009. Exact-head Linux CI must pass the updated Phase 6B browser verifier before
-merge eligibility.
+binary; several native-tool invocations return Windows command-not-found code 9009. The authoritative Linux runs passed the API suite and every native,
+container, and browser regression.
 
-The 390- and 360-pixel screenshots after scrolling to citations are saved
-outside the repository in
-`C:\temp\KagazPhase6B\phase6b\phase6b-assistant-mobile-390-results.png` and
-`C:\temp\KagazPhase6B\phase6b\phase6b-assistant-mobile-360-results.png`. The
-mobile scroll-into-view assertion passed at both widths. The exact-head Linux
-job also passed the previous Phase 4–6A native/container and browser steps;
-the Phase 6B Linux browser step must pass after the test-readiness correction.
-Merge, final `main` SHA, and production deployment verification remain
-pending. Do not mark this phase PASS until those checks finish and the
-production build is verified.
+The 390-, 360-pixel, and desktop production screenshots after navigating to
+citations are saved outside the repository in
+`C:\temp\KagazPhase6B\phase6b\phase6b-assistant-mobile-390-results.png`,
+`C:\temp\KagazPhase6B\phase6b\phase6b-assistant-mobile-360-results.png`, and
+`C:\temp\KagazPhase6B\phase6b\phase6b-assistant-desktop.png`. Citation
+scrolling and keyboard search passed at both mobile widths.
 
 ## Git and release checkpoint
 
 - Branch: `codex/phase-6b-document-retrieval`
 - Starting SHA: `b2e157b9ce6dab18a76ac2757786b1b0f64ee637`
 - Phase 6B implementation commit: `9c6af6be37716c1ec924385af7c749afe36a8f79`
-- Pull request: https://github.com/AtharvaisOp/Kagaz/pull/13
-- Latest exact-head GitHub Actions run 100 on
-  `fe69254e22ecf21a604fe4e1c9426d793f933e81`: quality and Phase 4–6A checks
-  passed; Phase 6B verifier timed out at the page-4 redaction readiness gate
-- Updated verifier waits for the page canvas and exact enabled control, with
-  reduced-motion navigation; local 19-scenario browser run passed with zero
-  browser errors, cross-origin requests, or document-content requests
-- New commit, push, and exact-head CI rerun: pending
-- Final `main` SHA: pending
-- Production deployment SHA: pending
+- Pull request: https://github.com/AtharvaisOp/Kagaz/pull/13 (merged)
+- Final PR branch head: `e9313d223b2b0b88c7b3e7cc5c032c4c5a315176`
+- Merged `main` SHA: `742b5e1dab480f3861e4985bea5346bc8c8ae096`
+- CI: run 101 passed on the exact PR head; run 102 passed on merged `main`
+- Production deployment: `dpl_CJghD68CxVY4yg796UkiXub6xqP5`, READY from the
+  merged `main` SHA; alias `https://kagaz-personal.vercel.app`
+- Production browser verification: 19 scenarios passed; no document-content
+  requests or cross-origin requests
+- Phase 6C handoff: authenticated, explicitly consented grounded generation
+  with quotas, spending controls, context review, and prompt-injection defenses
 
 ## Next action
 
-Commit and push the canvas-readiness verifier fix with this checkpoint, then
-wait for CI on the new exact PR head. Merge only after exact-head CI and
-repository policy allow. Verify the resulting `main` SHA, production
-deployment, and assistant behavior on the production build. Update this
-checkpoint with exact Git/CI/deployment evidence.
+Phase 6B is complete. Phase 6C should reuse the typed passage IDs and citations
+while separately implementing authenticated model access, explicit context
+consent, usage and spending limits, grounded answers, and prompt-injection
+resilience. The retrieval-only path must remain useful when no model is
+configured.
