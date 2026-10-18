@@ -10,6 +10,7 @@ import {
 import type { TextWatermarkConfig } from '../pdf-watermarks/model/types';
 import type { PdfWorkspaceController } from '../pdf-workspace/hooks/usePdfWorkspace';
 import type { SourceDocumentRegistry } from '../pdf-workspace/runtime/sourceDocumentRegistry';
+import { acquirePdfPage } from '../pdf-workspace/runtime/pdfPageLifecycle';
 import type { WorkspacePage } from '../pdf-workspace/model/types';
 import { validateAssistantOperation } from './validation';
 
@@ -132,9 +133,9 @@ async function addTextAnnotation(
   const document = ports.registry.getDocument(page.sourceDocumentId);
   if (!document) return rejected('The selected page is no longer available.');
 
-  let pdfPage: Awaited<ReturnType<typeof document.getPage>> | null = null;
+  const pageLease = acquirePdfPage(document, page.sourcePageIndex + 1);
   try {
-    pdfPage = await document.getPage(page.sourcePageIndex + 1);
+    const pdfPage = await pageLease.page;
     if (signal.aborted) return cancelled();
     if (!currentSnapshotMatches(snapshotRevision, getSnapshot)) {
       return rejected(
@@ -199,7 +200,7 @@ async function addTextAnnotation(
       ? cancelled()
       : rejected('Kagaz could not prepare the note geometry for this page.');
   } finally {
-    pdfPage?.cleanup();
+    pageLease.release(true);
   }
 }
 

@@ -1,4 +1,5 @@
 import { loadPdf } from '../../../lib/pdf';
+import { retirePdfDocument, waitForPdfDocumentIdle } from './pdfPageLifecycle';
 
 import type { LoadedPdf } from '../../../lib/pdf';
 import type { PDFDocumentLoadingTask, PDFDocumentProxy } from 'pdfjs-dist';
@@ -133,17 +134,21 @@ export class SourceDocumentRegistry {
     runtime.abortController?.abort();
     this.runtimes.delete(id);
 
+    const document = runtime.document;
+    runtime.document = null;
+    if (document) {
+      retirePdfDocument(document);
+      await waitForPdfDocumentIdle(document);
+    }
+
     if (runtime.loadingTask) {
       const loadingTask = runtime.loadingTask;
       runtime.loadingTask = null;
-      runtime.document = null;
       await destroyLoadingTask(loadingTask);
       return;
     }
 
-    if (runtime.document) {
-      const document = runtime.document;
-      runtime.document = null;
+    if (document) {
       await cleanupDocument(document);
     }
   }
