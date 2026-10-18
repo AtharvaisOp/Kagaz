@@ -53,6 +53,27 @@ const context = await browser.newContext({
   viewport: { width: 1440, height: 1000 },
   reducedMotion: 'reduce',
 });
+// Firebase's emulator helper loads cosmetic CDN assets before registering its
+// inline click handlers. Keep this local authentication test independent of CDN
+// availability; its real helper, SDK, iframe relay and token requests are intact.
+await context.route(
+  /^https:\/\/(?:unpkg\.com\/material-components-web@10\/dist\/material-components-web\.min\.(?:js|css)|fonts\.googleapis\.com\/|fonts\.gstatic\.com\/)/u,
+  async (route) => {
+    const request = route.request();
+    if (new URL(request.frame().url()).origin !== 'http://127.0.0.1:9099') {
+      await route.continue();
+      return;
+    }
+    await route.fulfill({
+      status: 200,
+      contentType:
+        request.resourceType() === 'script'
+          ? 'application/javascript'
+          : 'text/css',
+      body: '',
+    });
+  },
+);
 const page = await context.newPage();
 page.setDefaultTimeout(20_000);
 page.on('pageerror', (error) => errors.push(error.message));
@@ -290,6 +311,14 @@ try {
   const popupPromise = page.waitForEvent('popup');
   await button('Sign in with Google').click();
   const popup = await popupPromise;
+  popup.on('pageerror', (error) => errors.push(error.message));
+  await popup.waitForLoadState('domcontentloaded');
+  await popup.waitForFunction(
+    () =>
+      document.readyState !== 'loading' &&
+      typeof window.toggleForm === 'function' &&
+      typeof window.validateForm === 'function',
+  );
   await popup
     .getByRole('button', { name: 'Add new account', exact: true })
     .click();

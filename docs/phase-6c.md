@@ -275,6 +275,20 @@ sign-out, Start Over and redaction never restore an old answer or protected text
 Network and browser-storage checks detect PDF bytes, unselected content and
 transcript persistence. These are emulator/mock results, not live Groq evidence.
 
+Linux run 105 passed the entire quality job: **341 API tests**, **881 web tests**
+and **3 sampler tests**, plus install, lint, typecheck, build, formatting and diff
+checks. Its Firebase job passed all **12 real emulator tests**, then exposed a
+popup harness readiness race: Firebase's emulator renders its Add Account button
+before its blocking cosmetic Material CDN script finishes and its inline event
+handlers register. The harness now waits for actual handler readiness and serves
+empty cosmetic CDN assets only to the loopback emulator widget. Firebase SDK,
+auth helpers, iframe messaging, token issuance and server verification remain
+real. The application code is unchanged. A final Linux run is still required.
+The corrected full `emulators:exec` runner passed locally with 12 emulator tests,
+17 browser scenarios and zero errors; artifacts are under
+`C:\temp\KagazPhase6CPopupFix\phase6c`. Its emulators and test servers shut down
+cleanly after the run.
+
 The unchanged Phase 6A browser verifier passed 12 recorded checks and the unchanged
 Phase 6B verifier passed 19 scenarios against an isolated no-Firebase Vite server.
 Both reported zero page errors and document/non-GET requests; Phase 6B additionally
@@ -337,6 +351,11 @@ project before testing. Neither incident is represented as a passing run.
   optional Linux `re2` build needed an explicit pnpm policy. It is now explicitly
   disabled: it is a hosting accelerator unused by these emulators. No application
   check ran in that failed job. The next run must verify the final policy/head.
+- Follow-up commit: `85c7982113dab9176a23b3f90efac61d4fd3a379`
+  (`fix: declare optional Firebase CLI build policy`). Linux run 105 passed its
+  quality gate and all emulator unit tests; popup verification required the
+  scripts-only readiness fix described above. Container regressions were still
+  running when that fix was prepared.
 - Merge and production deployment: not performed. Live activation depends on the
   explicit production checks above; missing Firebase access is not bypassed.
 - No credentials are tracked or put into the Vite bundle. The supplied key is
