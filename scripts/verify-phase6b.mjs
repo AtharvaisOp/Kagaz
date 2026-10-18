@@ -706,6 +706,12 @@ async function run() {
     .waitFor();
   await page.getByLabel('Redactions on page').selectOption({ label: 'Page 4' });
   await expectCurrentPage(4);
+  await page.waitForFunction(() => {
+    const addRegion = document.querySelector(
+      '.redaction-summary .annotation-summary-action',
+    );
+    return addRegion instanceof HTMLButtonElement && !addRegion.disabled;
+  });
   await page
     .getByRole('button', { name: 'Add redaction region', exact: true })
     .click();
