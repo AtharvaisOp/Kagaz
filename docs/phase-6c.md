@@ -330,7 +330,13 @@ project before testing. Neither incident is represented as a passing run.
 
 - Branch: `codex/phase-6c-firebase-groq-chat`.
 - Base: `f252998ff2ffce209d28b8073b19b633bbac0e48`.
-- Implementation commit, PR, exact-head CI: pending final local verification.
+- Implementation commit: `9c0f6703f1dfaf4efca570e78209e86f744d9471`
+  (`feat: add Firebase-gated Groq PDF chat`), pushed to origin.
+- Draft PR: [#14](https://github.com/AtharvaisOp/Kagaz/pull/14), attached to this chat.
+- Initial Linux CI run 104 failed at dependency installation because the CLI's
+  optional Linux `re2` build needed an explicit pnpm policy. It is now explicitly
+  disabled: it is a hosting accelerator unused by these emulators. No application
+  check ran in that failed job. The next run must verify the final policy/head.
 - Merge and production deployment: not performed. Live activation depends on the
   explicit production checks above; missing Firebase access is not bypassed.
 - No credentials are tracked or put into the Vite bundle. The supplied key is
