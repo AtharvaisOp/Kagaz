@@ -187,6 +187,7 @@ const context = await browser.newContext({
   viewport: { width: 1440, height: 1000 },
   deviceScaleFactor: 1,
   acceptDownloads: true,
+  reducedMotion: 'reduce',
 });
 const page = await context.newPage();
 page.setDefaultTimeout(20_000);
@@ -706,11 +707,25 @@ async function run() {
     .waitFor();
   await page.getByLabel('Redactions on page').selectOption({ label: 'Page 4' });
   await expectCurrentPage(4);
+  // Selection updates before the lazy PDF.js render finishes. Wait for the
+  // actual page preview before checking that its redaction geometry is ready.
+  await page
+    .locator(
+      '.pdf-page-shell[aria-label="Page 4"] .pdf-canvas[data-ready="true"]',
+    )
+    .waitFor();
   await page.waitForFunction(() => {
-    const addRegion = document.querySelector(
-      '.redaction-summary .annotation-summary-action',
+    const summary = document.querySelector('.redaction-summary');
+    const addRegion = [...(summary?.querySelectorAll('button') ?? [])].find(
+      (button) => button.textContent?.trim() === 'Add redaction region',
     );
-    return addRegion instanceof HTMLButtonElement && !addRegion.disabled;
+    const selectedPage =
+      summary?.querySelector('select')?.selectedOptions[0]?.textContent;
+    return (
+      selectedPage?.trim() === 'Page 4' &&
+      addRegion instanceof HTMLButtonElement &&
+      !addRegion.disabled
+    );
   });
   await page
     .getByRole('button', { name: 'Add redaction region', exact: true })

@@ -7,15 +7,16 @@ active branch is `codex/phase-6b-document-retrieval`, based on the verified
 starting `main` commit `b2e157b9ce6dab18a76ac2757786b1b0f64ee637`. The
 implementation commit is `9c6af6be37716c1ec924385af7c749afe36a8f79`; PR #13 is
 open at https://github.com/AtharvaisOp/Kagaz/pull/13. The Vercel preview check
-is green. Exact-head GitHub Actions run 99 passed its quality job and existing
-Phase 4/5/6A container/browser regressions, then failed in the Phase 6B browser
-verifier: after selecting page 4, the test clicked “Add redaction region” before
-the page preview had made the action available. The verifier now explicitly
-waits for that action to become enabled; the full local browser matrix passes
-with the wait. A follow-up commit is pending. Initial inspection found a clean
-starting checkout and no open pull request for this work. The package-manager
-command for this host is `npx --yes pnpm@12.3.4` because the installed global
-shim is pnpm 11.25.0.
+is green. Exact-head GitHub Actions run 100 passed its quality job and existing
+Phase 4/5/6A container/browser regressions, then timed out in the Phase 6B
+verifier while waiting for page 4's redaction control. The log shows that
+workspace selection completed before the lazy PDF.js page render had registered
+geometry. The verifier now uses reduced motion and waits for page 4's ready
+canvas, its selected-page label, and the specific enabled redaction control.
+The updated full local browser matrix passes; a follow-up commit and exact-head
+CI rerun are pending. Initial inspection found a clean starting checkout and no
+open pull request for this work. The package-manager command for this host is
+`npx --yes pnpm@12.3.4` because the installed global shim is pnpm 11.25.0.
 
 ## Current implementation
 
@@ -137,15 +138,15 @@ Measured synthetic browser results from this host:
 
 | Fixture                                   | Cold index and search | Warm search |       Indexed pages | Text characters | Chunks |
 | ----------------------------------------- | --------------------: | ----------: | ------------------: | --------------: | -----: |
-| 5-page mixed text/image PDF               |                 54 ms |      108 ms |        4 searchable |             863 |      7 |
-| 100-page text PDF                         |                933 ms |       84 ms |                 100 |           3,884 |    100 |
-| 300-page text PDF                         |              2,027 ms |      128 ms |                 300 |          12,084 |    300 |
-| Two source PDFs with a duplicate addition |                137 ms |         n/a | 5 unique searchable |             726 |      8 |
+| 5-page mixed text/image PDF               |                 39 ms |       33 ms |        4 searchable |             863 |      7 |
+| 100-page text PDF                         |                233 ms |       36 ms |                 100 |           3,884 |    100 |
+| 300-page text PDF                         |                476 ms |       64 ms |                 300 |          12,084 |    300 |
+| Two source PDFs with a duplicate addition |                 45 ms |         n/a | 5 unique searchable |             726 |      8 |
 
 The 5-page fixture also indexed one committed form passage. Start Over during
 an active 300-page index left the replacement session with zero indexed source
 pages, form passages, characters, or chunks. Chromium’s
-`performance.memory.usedJSHeapSize` exposed the same coarse 68,000,000-byte
+`performance.memory.usedJSHeapSize` exposed the same coarse 76,600,000-byte
 reading after the 100- and 300-page runs; this API did not isolate index memory
 and is not treated as a per-index measurement. The reliable index-size
 measurements are the bounded character and chunk counts above. Timings include
@@ -158,8 +159,8 @@ quality job subsequently passed the API suite (**206 passed**), web suite
 (**850 passed**), workspace sampler (**3 passed**), lint, typecheck, build,
 format check, and diff check. The host has no
 `qpdf`, Ghostscript, `ocrmypdf`, Tesseract, LibreOffice/`soffice`, or Docker
-binary; several native-tool invocations return Windows command-not-found code 9009. Exact-head Linux CI remains required for the Phase 6B browser verifier
-after the readiness-wait fix and merge eligibility.
+binary; several native-tool invocations return Windows command-not-found code 9009. Exact-head Linux CI must pass the updated Phase 6B browser verifier before
+merge eligibility.
 
 The 390- and 360-pixel screenshots after scrolling to citations are saved
 outside the repository in
@@ -178,17 +179,20 @@ production build is verified.
 - Starting SHA: `b2e157b9ce6dab18a76ac2757786b1b0f64ee637`
 - Phase 6B implementation commit: `9c6af6be37716c1ec924385af7c749afe36a8f79`
 - Pull request: https://github.com/AtharvaisOp/Kagaz/pull/13
-- Latest exact-head GitHub Actions run 99: quality and Phase 4–6A checks passed;
-  Phase 6B verifier exposed the page-preview readiness race described above
-- Follow-up verifier fix: local 19-scenario browser run passed; push and CI
-  rerun pending
+- Latest exact-head GitHub Actions run 100 on
+  `fe69254e22ecf21a604fe4e1c9426d793f933e81`: quality and Phase 4–6A checks
+  passed; Phase 6B verifier timed out at the page-4 redaction readiness gate
+- Updated verifier waits for the page canvas and exact enabled control, with
+  reduced-motion navigation; local 19-scenario browser run passed with zero
+  browser errors, cross-origin requests, or document-content requests
+- New commit, push, and exact-head CI rerun: pending
 - Final `main` SHA: pending
 - Production deployment SHA: pending
 
 ## Next action
 
-Commit and push the verifier readiness fix with this checkpoint, then wait for
-CI on the new exact PR head. Merge only after exact-head CI and repository
-policy allow. Verify the resulting `main` SHA, production deployment, and
-assistant behavior on the production build. Update this checkpoint with exact
-Git/CI/deployment evidence.
+Commit and push the canvas-readiness verifier fix with this checkpoint, then
+wait for CI on the new exact PR head. Merge only after exact-head CI and
+repository policy allow. Verify the resulting `main` SHA, production
+deployment, and assistant behavior on the production build. Update this
+checkpoint with exact Git/CI/deployment evidence.
