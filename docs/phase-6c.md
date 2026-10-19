@@ -2,11 +2,11 @@
 
 ## Durable checkpoint
 
-Updated: 2026-10-19 (Asia/Kolkata). Status: **PARTIAL — Run 109 passed on tested head `c1222f2`; production AI stays disabled pending final release gates. This documentation checkpoint follows that run.**
+Updated: 2026-10-19 (Asia/Kolkata). Status: **PARTIAL — Run 110 passed on exact tested head `f4ff676`; live AI remains disabled. The current Render deployment still runs baseline `main`, so the Phase 6C Admin/Firestore runtime check is outstanding.**
 
 - Started from clean `main` / `origin/main` at
   `f252998ff2ffce209d28b8073b19b633bbac0e48`.
-- Working branch: `codex/phase-6c-firebase-groq-chat`.
+- Working branch: `codex/phase-6c-firebase-groq-chat`; latest implementation/documentation head before this checkpoint: `f4ff676e19f4ae53670bf8078bfee6fbeabe27df`.
 - Existing PR [#14](https://github.com/AtharvaisOp/Kagaz/pull/14) is open and draft.
 - Read repository instructions, visual specification, README and Phase 6A/6B
   reports; retained existing retrieval and the sole approval-gated editor executor.
@@ -20,24 +20,24 @@ Updated: 2026-10-19 (Asia/Kolkata). Status: **PARTIAL — Run 109 passed on test
 - The default Firestore database is Standard Native in `asia-south1` and currently
   reports free-tier status. Firebase reports billing is not enabled. Deployed
   Firestore rules deny all client reads and writes; the local reviewed rules match.
-- The last successful Vercel inspection found production Firebase Web App values
-  matching the registered app and `VITE_API_URL=https://kagaz-api.onrender.com`.
-  This continuation's Vercel project/environment read returned 404 and deployment
-  listing returned 403, so those settings could not be refreshed. The latest
-  previously verified production frontend is baseline `main`; Phase 6C sign-in
-  is not live.
-- Render was configured with `FIREBASE_PROJECT_ID=kagaz-b4bf7`,
-  `ASSISTANT_ENABLED=false`, `ASSISTANT_BUDGET_CONFIRMED=false`, and
-  `ASSISTANT_DAILY_BUDGET_USD=0`. The current live deployment is
-  `dep-dbarpluq1p3s73crnchg` on baseline `main`; `/health` returned HTTP 200.
-  Render's connected read API does not expose environment entries. The owner
-  previously reported the replacement Groq key is configured there, but its
-  presence and the Firebase Admin credential cannot be independently verified.
-- The latest owner status fields for model access, monthly spending limit and data
-  controls were left as alternatives rather than selected values. They remain
-  unverified. Project IAM inspection returned HTTP 500. No paid provider request
-  was made. Live generation remains disabled pending verified Admin credentials,
-  provider controls and explicit owner approval to activate spending.
+- The last successful Vercel environment inspection found the production Firebase
+  Web App values and `VITE_API_URL=https://kagaz-api.onrender.com` correctly set.
+  This continuation could list the `kagaz` Vercel project, but project/environment
+  reads returned 404 and deployment listing returned 403. No Vercel settings were
+  changed; current production deployment state could not be refreshed.
+- Render accepted a merge-only environment update for
+  `FIREBASE_PROJECT_ID=kagaz-b4bf7`,
+  `GOOGLE_APPLICATION_CREDENTIALS=/etc/secrets/kagaz-b4bf7-firebase-adminsdk-fbsvc-d559585578.json`,
+  both assistant activation flags set to `false`, and
+  `ASSISTANT_DAILY_BUDGET_USD=0`. The Secret File basename was supplied by the
+  owner; its contents were never read. Deployment `dep-dbatngajnfac7393ugtg`
+  is live on baseline `main` (`f252998...`) and `/health` returned HTTP 200.
+  This deployment does not contain Phase 6C, so Firebase Admin authentication and
+  Firestore ledger access have not been exercised through the backend.
+- The owner reports the replacement Groq key is configured securely on Render
+  and confirms the fixed `openai/gpt-oss-20b` model is allowed. No provider request
+  was made. Groq data controls and provider-side monthly spending limits remain
+  unverified. The application budget is zero and live generation is disabled.
 
 ## Architecture decisions
 
@@ -230,34 +230,32 @@ only a return-to-AI-tab marker is stored, never PDF content or a question.
 
 ## Deployment configuration and exact remaining steps
 
-The approved Firebase project and the existing hosting targets were inspected on
-2026-10-19. Firebase has one active Web App, Google is the only enabled sign-in
-provider, and the production domain is authorized. Its default Firestore database
-is Standard Native in `asia-south1`, reports free-tier status, and has deny-all
-client rules deployed. Firebase reports Cloud Billing is not enabled. An IAM
-policy read failed with HTTP 500, so the Render service account's actual project
-roles remain unverified.
+The approved Firebase project and hosting targets were inspected on 2026-10-19.
+Firebase has one active Web App, Google was the only enabled sign-in provider in
+the previous Auth inspection, and the production domain was authorized. Its
+default Firestore database is Standard Native in `asia-south1`, reports free-tier
+status, and has deny-all client rules deployed. Firebase reports Cloud Billing is
+not enabled. An IAM policy read failed with HTTP 500, so the Render service
+account's actual project roles remain unverified.
 
-The last successful inspection of Vercel's `kagaz` production environment found
-all four `VITE_FIREBASE_*` values matching the registered Web App and preserved
-`VITE_API_URL=https://kagaz-api.onrender.com`. No Vercel setting was changed.
-Previously verified production was READY on baseline `main`
-(`f252998ff2ffce209d28b8073b19b633bbac0e48`); the branch preview at
-`31696c9747a848c77caa7fbd0fdff3a2503b649d` was READY but was not production.
-The current Vercel connector returned 404 for project/environment reads and 403
-for deployment listing, so no newer Vercel state could be verified. The Phase 6C
-UI has not been confirmed on production.
+The last successful Vercel environment inspection found all four
+`VITE_FIREBASE_*` values matching the registered Web App and preserved
+`VITE_API_URL=https://kagaz-api.onrender.com`. This continuation listed the
+`kagaz` project but project/environment reads returned 404 and deployment listing
+returned 403. No Vercel setting was changed, and the current deployment remains
+unverified. The Phase 6C UI has not been confirmed on production.
 
 Render's existing `kagaz-api` Docker service remains in Singapore, using
-`apps/api/Dockerfile` and `/health`. A secure environment update set
-`FIREBASE_PROJECT_ID`, both assistant flags to disabled, and a zero daily budget
-through the Render environment API. Current deployment
-`dep-dbarpluq1p3s73crnchg` is live on baseline `main`
+`apps/api/Dockerfile` and `/health`. A merge-only environment update set
+`FIREBASE_PROJECT_ID=kagaz-b4bf7`,
+`GOOGLE_APPLICATION_CREDENTIALS` to the owner-supplied `/etc/secrets/` path,
+both assistant flags to disabled, and the daily budget to zero. Deployment
+`dep-dbatngajnfac7393ugtg` is live on baseline `main`
 (`f252998ff2ffce209d28b8073b19b633bbac0e48`); `/health` returned HTTP 200 at
-2026-10-19 06:48 UTC. The connected Render API does not expose environment entries.
-The owner reports a replacement `GROQ_API_KEY` was configured in Render, but its
-presence cannot be verified through this interface. No secret value was read or
-changed here.
+2026-10-19 08:59 UTC. The connected Render API does not expose environment entries.
+The owner reports a replacement `GROQ_API_KEY` is configured securely in Render;
+its value was never read or changed here. The current baseline deployment does
+not initialize the Phase 6C Firebase Admin service.
 
 Owner-dependent sequence:
 
@@ -420,8 +418,12 @@ project before testing. Neither incident is represented as a passing run.
   (`docs: refresh Phase 6C production checkpoint`), verified successfully across
   all three jobs. This documentation-only checkpoint records its result; PR #14
   remains open, draft and mergeable.
-- Merge and production deployment: not performed. Live activation depends on the
-  explicit production checks above; missing Firebase access is not bypassed.
+- Run 110 verified exact branch head `f4ff676e19f4ae53670bf8078bfee6fbeabe27df`
+  successfully across Quality, Production-container and Firebase-assistant.
+  The working tree was clean before this continuation's documentation update.
+- Merge and Phase 6C production deployment: not performed. The existing Render
+  deployment is healthy but still runs baseline `main`; the Admin credential path
+  is configured, while an authenticated Admin/Firestore runtime check remains.
 - No credentials are tracked or put into the Vite bundle. The compromised local
   Groq key entry has been cleared; the owner reports a replacement key is set on
   Render, but its presence cannot be verified through the connected API. Both
@@ -432,17 +434,23 @@ project before testing. Neither incident is represented as a passing run.
 - Firebase access now reaches the approved project, and Google-only provider,
   production/local authorized domains, Web App, default Firestore, and deployed
   deny-client rules are verified. Firebase reports billing disabled and Firestore
-  free tier. Project IAM inspection returned HTTP 500.
+  free tier. Project IAM inspection returned HTTP 500. The owner-supplied Render
+  Secret File path is configured, but the Phase 6C runtime has not consumed it yet.
 - The owner directed that live spending stay disabled. Render now has
   `ASSISTANT_ENABLED=false`, `ASSISTANT_BUDGET_CONFIRMED=false`, and
   `ASSISTANT_DAILY_BUDGET_USD=0`. The proposed $3/day amount is not active.
-- The owner reports the compromised Groq key was replaced directly in Render.
-  Render's connected API does not expose environment entries, so the replacement
-  key and the Firebase Admin credential cannot be independently verified here.
-  No paid request was made.
-- Production Google sign-in, Render Admin/IAM access, provider account limits/data
-  controls, owner approval to activate paid use, and one bounded live smoke request
-  remain outstanding. The branch code is not yet deployed to production.
+- The owner reports the compromised Groq key was replaced directly in Render and
+  confirms the fixed model is allowed. Render's connected API does not expose
+  environment entries. The Secret File basename was provided by the owner and its
+  path was configured; its contents were never read. No paid request was made.
+- The Render deployment is still baseline `main`, so production Google
+  ID-token verification and Firestore usage-ledger access are unverified. After
+  Phase 6C is deployed, a signed-in Google session can exercise
+  `GET /assistant/usage` without contacting Groq. Project IAM permissions, Groq
+  account data controls and provider-side spending limits remain unverified.
+- Current Vercel project listing works, but project/environment reads return 404
+  and deployment listing returns 403. Previously inspected production Firebase
+  settings are unchanged by this continuation; current Vercel readiness is unknown.
 - Structured citations and adversarial mocks do not prove live semantic accuracy.
 - Remote cancellation is best-effort. Unknown billing retains the attempt,
   reserves/charges conservatively and holds the active lease until expiry.
@@ -488,11 +496,13 @@ project before testing. Neither incident is represented as a passing run.
 - [x] Emulator/mock verification script and Linux CI integration without paid keys.
 - [x] Final expanded emulator and automated browser suite green.
 - [x] Final formatting and exact-head authoritative Linux CI green, retaining all
-      Phase 4, 5, 6A and 6B regressions (GitHub Actions runs 106 through 109).
+      Phase 4, 5, 6A and 6B regressions (GitHub Actions runs 106 through 110).
 - [x] Approved Firebase project, Web App, Google-only provider, authorized domains,
       Firestore database, billing state and deployed deny-client rules inspected.
+- [x] `GOOGLE_APPLICATION_CREDENTIALS` points to the owner-supplied Render Secret
+      File path; the service is still on baseline code, so runtime use is pending.
 - [ ] Render service-account identity and least-privilege project IAM verified
-      (IAM read returned HTTP 500; Render environment entries are not exposed).
+      (Firebase IAM read returned HTTP 500; no role changes were made).
 - [x] Production Vercel Firebase configuration matches the approved Web App and
       preserves the API origin.
 - [x] Render project ID is set to the approved project; live flags are false and
@@ -501,17 +511,22 @@ project before testing. Neither incident is represented as a passing run.
 - [ ] Real production Google sign-in, ID-token verification and quota controls.
 - [ ] Groq account model/rate/data controls/monthly cap verified.
 - [ ] One bounded authenticated live request with actual per-request passage approval.
-- [ ] Exact-final-main CI green and Vercel/Render production deployments verified.
+- [ ] Authenticated production `GET /assistant/usage` confirms Firebase Admin
+      token verification and Firestore access without a Groq request.
+- [ ] Exact-final-main CI green and Vercel/Render Phase 6C deployments verified.
 
 ## Next release gate
 
 The reviewed implementation remains on the phase branch and PR #14 stays draft.
 Firebase access is active for `kagaz-b4bf7`; no further authentication retry is
-needed. The remaining owner-controlled check is to verify the Render Firebase
-Admin credential and its least-privilege roles in the secure dashboard. The owner
-reports the replacement Groq key is already configured there; verify model access,
-data controls and provider-side limits in the Groq account dashboard. Do not paste
-credentials into chat.
+needed. Render now points `GOOGLE_APPLICATION_CREDENTIALS` at the Secret File path
+provided by the owner, but only the baseline service is deployed. To verify Admin
+token verification and Firestore access without spend, deploy the disabled Phase
+6C code and sign in with Google once so the UI can request `/assistant/usage`.
+That owner-authenticated action requires no Groq call; do not paste a token or
+credential into chat. Do not add IAM roles unless a concrete permission failure
+is observed. The owner reports model access is allowed; provider-side data controls
+and spending limits remain to be checked in Groq's dashboard.
 
 Keep the Render budget at zero and both activation flags false. The owner must
 explicitly approve paid activation of the proposed $3/day budget after the
