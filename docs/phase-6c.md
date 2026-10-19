@@ -2,11 +2,11 @@
 
 ## Durable checkpoint
 
-Updated: 2026-10-19 (Asia/Kolkata). Status: **PARTIAL — Groq Free Plan mode is explicitly gated with a $0 application budget. Exact-head Run 112 passed all three CI jobs on code commit `70b41963dc703b016b60112781d61324d0791c62`. Live AI remains disabled pending owner verification of the Groq organization plan and production Firebase runtime checks.**
+Updated: 2026-10-19 (Asia/Kolkata). Status: **PARTIAL — the Groq Free Plan-only implementation has a $0 application budget and passed exact-head Run 113 at `6a5df954be3a81c6781ea5f0f3f1065612f2b67`. The owner verified in Groq Console that the organization is on the Free Plan, developer billing is off, `openai/gpt-oss-20b` is allowed, and Inference APIs Zero Data Retention is enabled. Live AI remains disabled until production Firebase authentication and Firestore access are verified; no Groq request has been made.**
 
 - Started from clean `main` / `origin/main` at
   `f252998ff2ffce209d28b8073b19b633bbac0e48`.
-- Working branch: `codex/phase-6c-firebase-groq-chat`; this Free Plan change is not yet committed.
+- Working branch: `codex/phase-6c-firebase-groq-chat`; the Free Plan implementation is committed and the latest checkpoint is documentation-only.
 - Existing PR [#14](https://github.com/AtharvaisOp/Kagaz/pull/14) is open and draft.
 - Read repository instructions, visual specification, README and Phase 6A/6B
   reports; retained existing retrieval and the sole approval-gated editor executor.
@@ -34,27 +34,33 @@ Updated: 2026-10-19 (Asia/Kolkata). Status: **PARTIAL — Groq Free Plan mode is
   is live on baseline `main` (`f252998...`) and `/health` returned HTTP 200.
   This deployment does not contain Phase 6C, so Firebase Admin authentication and
   Firestore ledger access have not been exercised through the backend.
-- The owner reports the replacement Groq key is configured securely on Render
-  and confirms the fixed `openai/gpt-oss-20b` model is allowed. No provider request
-  was made. Groq data controls and account Free Plan status remain
-  unverified. The application budget is zero and live generation is disabled.
+- The owner confirms directly in Groq Console that the organization is on the
+  Free Plan at $0, developer billing is not activated, `openai/gpt-oss-20b` is
+  allowed, and Inference APIs Zero Data Retention is enabled. The owner also
+  reports that a replacement Groq key is configured securely on Render; its
+  value was never read. No provider request was made, and live generation stays
+  disabled pending production Firebase checks.
 
 ## Current product and spending policy
 
 The owner has changed the product requirement: **Kagaz AI Chat is Groq Free Plan
 only, and the maximum acceptable provider spend is $0.** The earlier proposed
 $3/day paid budget is cancelled. Do not treat it as approved or enable paid
-inference. Keep `ASSISTANT_ENABLED=false`, `ASSISTANT_BUDGET_CONFIRMED=false`,
-`ASSISTANT_DAILY_BUDGET_USD=0`, and `ASSISTANT_FREE_PLAN_CONFIRMED=false` until
-the owner verifies the Groq organization is still on the Free Plan and separately
-authorizes activation. An API key does not identify an organization tier.
+inference. The owner has verified the organization is currently on the Free Plan,
+with developer billing off and a $0 spending maximum. Keep
+`ASSISTANT_ENABLED=false`, `ASSISTANT_BUDGET_CONFIRMED=false`, and
+`ASSISTANT_DAILY_BUDGET_USD=0`. Keep production generation disabled until
+Firebase authentication, Admin credentials, Firestore access, quotas and privacy
+controls pass. An API key does not identify an organization tier.
 
 The current Free Plan mode requires explicit `ASSISTANT_PROVIDER_MODE=groq-free`
 and `ASSISTANT_FREE_PLAN_CONFIRMED=true`, a zero-dollar budget, and all existing
-Firebase/provider checks. If Groq plan status cannot be confirmed, leave
-generation disabled. Any organization plan change requires clearing the
-confirmation before another deployment. Paid mode remains only as a separately
-guarded future configuration path; it is not part of Kagaz's product policy.
+Firebase/provider checks. The owner's current Free Plan confirmation is recorded
+here; the runtime confirmation and generation switches remain disabled pending
+production Firebase verification and separate activation approval. If Groq plan
+status cannot be confirmed after a plan change, leave generation disabled. Paid
+mode remains only as a separately guarded future configuration path; it is not
+part of Kagaz's product policy.
 
 Groq's published [Free Plan rate table](https://console.groq.com/docs/rate-limits)
 lists `openai/gpt-oss-20b` at 30 requests/minute, 1,000 requests/day, 8,000
@@ -97,9 +103,12 @@ The fixed model remains `openai/gpt-oss-20b`; actual grounding quality still
 requires an explicitly bounded live evaluation.
 
 [Groq's spending limits](https://console.groq.com/docs/spend-limits) are not used
-to authorize Kagaz Free Plan calls. The organization's current plan has not been
-verified in Groq Console; Free Plan mode remains disabled until the owner confirms
-it. Kagaz does not enable billing, upgrade a plan, or add a payment method.
+to authorize Kagaz Free Plan calls. The owner verified the organization's current
+Free Plan in Groq Console, confirmed developer billing is off and the maximum
+provider spend is $0. The owner also confirmed model access and enabled Inference
+APIs Zero Data Retention. These are owner-reported Console checks; no Groq API
+request or independent account inspection was performed. Kagaz does not enable
+billing, upgrade a plan, or add a payment method.
 
 | Production model      | Listed approximate output rate | Strict schema | Decision                                                |
 | --------------------- | ------------------------------ | ------------- | ------------------------------------------------------- |
@@ -108,8 +117,8 @@ it. Kagaz does not enable billing, upgrade a plan, or add a payment method.
 
 Both models have more context capacity than this feature needs. The published
 [rate limits](https://console.groq.com/docs/rate-limits) are a generic reference;
-the owner must verify the actual account's Free Plan and limits in Console. The browser has
-no model selector. The minimal backend `fetch` integration uses Groq's documented
+the owner has verified the account's Free Plan and model access in Console. The
+browser has no model selector. The minimal backend `fetch` integration uses Groq's documented
 OpenAI-compatible completions endpoint, strict JSON schema and no tools/streaming.
 This avoids another SDK and its automatic retry behavior. Each approved request
 makes at most one provider call, with a 25-second deadline and 1,024 output tokens.
@@ -219,10 +228,12 @@ retract shared excerpts or guarantee Groq stops remotely. The finite lease bound
 stuck local work, rather than proving provider-side computation has stopped.
 
 The production target is **Free Plan only with `ASSISTANT_DAILY_BUDGET_USD=0`**.
-Activation requires `ASSISTANT_PROVIDER_MODE=groq-free`, explicit owner-set
+Activation requires `ASSISTANT_PROVIDER_MODE=groq-free`, explicit
 `ASSISTANT_FREE_PLAN_CONFIRMED=true`, and `ASSISTANT_ENABLED=true`; paid budget
-confirmation must remain false. The owner has not yet confirmed the current
-organization tier in Groq Console, so production generation remains disabled.
+confirmation must remain false. The owner verified the current Free Plan and
+model access in Groq Console, but production generation remains disabled until
+Firebase authentication, Admin credentials, Firestore quotas and privacy checks
+pass, and the owner separately authorizes activation.
 The guarded `groq-paid` path preserves the existing positive-budget/reservation
 safeguards for a hypothetical future deployment, but is not authorized for this
 product. Free Plan eligibility is an external account setting; clear the
@@ -255,11 +266,12 @@ not establish live model answer quality. Valid citation IDs alone do not prove
 semantic truth, and answers explicitly cover only the approved excerpts.
 
 Kagaz persists no transcript. Firebase may persist authentication session state.
-[Groq's data policy](https://console.groq.com/docs/your-data) describes temporary
-reliability/abuse logging and optional zero-data-retention controls. The owner's
-provider data controls have not been inspected; no claim is made that Groq never
-retains approved text. Model and provider console settings require review before
-public activation.
+[Groq's data policy](https://console.groq.com/docs/your-data) describes provider
+data controls. The owner verified in Groq Console that Inference APIs Zero Data
+Retention is enabled. This records the owner's Console verification; the setting
+was not independently inspected through a connector, and no Groq request was
+made. The backend still sends only explicitly approved excerpts and does not
+persist document or conversation content.
 
 The UI follows `design.md` and uses the required gptTaste guidance for focus,
 feedback and restrained motion. It uses semantic fieldsets and labels, explicit
@@ -275,8 +287,10 @@ Firebase has one active Web App, Google was the only enabled sign-in provider in
 the previous Auth inspection, and the production domain was authorized. Its
 default Firestore database is Standard Native in `asia-south1`, reports free-tier
 status, and has deny-all client rules deployed. Firebase reports Cloud Billing is
-not enabled. An IAM policy read failed with HTTP 500, so the Render service
-account's actual project roles remain unverified.
+not enabled. The current Google Cloud Console account cannot list service accounts
+in this project; the console reports missing `iam.serviceAccounts.list` and
+`resourcemanager.projects.get`. No IAM roles were changed. The previous Firebase
+Admin key's revocation cannot be independently confirmed from this account.
 
 The last successful Vercel environment inspection found all four
 `VITE_FIREBASE_*` values matching the registered Web App and preserved
@@ -286,44 +300,45 @@ returned 403. No Vercel setting was changed, and the current deployment remains
 unverified. The Phase 6C UI has not been confirmed on production.
 
 Render's existing `kagaz-api` Docker service remains in Singapore, using
-`apps/api/Dockerfile` and `/health`. A merge-only environment update set
-`FIREBASE_PROJECT_ID=kagaz-b4bf7`,
-`GOOGLE_APPLICATION_CREDENTIALS` to the owner-supplied `/etc/secrets/` path,
-both assistant flags to disabled, and the daily budget to zero. Deployment
-`dep-dbatngajnfac7393ugtg` is live on baseline `main`
-(`f252998ff2ffce209d28b8073b19b633bbac0e48`); `/health` returned HTTP 200 at
-2026-10-19 08:59 UTC. The connected Render API does not expose environment entries.
-The owner reports a replacement `GROQ_API_KEY` is configured securely in Render;
-its value was never read or changed here. The current baseline deployment does
-not initialize the Phase 6C Firebase Admin service.
+`apps/api/Dockerfile`, `/health`, and auto-deploy from `main`. Render now shows
+the Firebase Admin Secret File basename
+`kagaz-b4bf7-firebase-adminsdk-fbsvc-d559585578.json`; its contents were not
+opened. `GOOGLE_APPLICATION_CREDENTIALS` matches its runtime path
+`/etc/secrets/kagaz-b4bf7-firebase-adminsdk-fbsvc-d559585578.json`, and
+`FIREBASE_PROJECT_ID=kagaz-b4bf7`. The dashboard confirms
+`ASSISTANT_ENABLED=false`, `ASSISTANT_PROVIDER_MODE=disabled`,
+`ASSISTANT_FREE_PLAN_CONFIRMED=false`, `ASSISTANT_BUDGET_CONFIRMED=false`, and
+`ASSISTANT_DAILY_BUDGET_USD=0`. The `GROQ_API_KEY` environment entry and Secret
+File are present; neither value nor file contents were opened. The new baseline
+deployment `dep-dbb35m3bc2fs73dc0lsg` is live on
+`f252998ff2ffce209d28b8073b19b633bbac0e48`, and `/health` returned HTTP 200 at
+2026-10-19 15:12 UTC. This baseline does not initialize the Phase 6C Firebase
+Admin service.
 
-Owner-dependent sequence:
+Release sequence:
 
-1. In Render's secure dashboard, verify the Firebase Admin credential is configured
-   as `FIREBASE_SERVICE_ACCOUNT_JSON` or supported ADC and has only the required
-   Auth-verification/Firestore permissions. Do not paste the credential in chat.
-   The connector cannot inspect this entry and the project IAM read returned HTTP 500.
-2. The registered Web App and production Vercel Firebase values already match;
-   the production API origin is correct. Confirm the owner-controlled settings
-   remain in place through the next production build.
-3. The owner reports a replacement `GROQ_API_KEY` is set directly in Render. In
-   Groq Console, confirm the organization remains on the Free Plan,
-   `openai/gpt-oss-20b` is available within that plan, and review the provider
-   data controls. Do not use the compromised key, configure payment or upgrade.
-   An API key does not prove the account tier.
-4. Keep `ASSISTANT_ENABLED=false`,
-   `ASSISTANT_PROVIDER_MODE=disabled`,
-   `ASSISTANT_FREE_PLAN_CONFIRMED=false`,
+1. The owner has confirmed the Groq organization is on the Free Plan, developer
+   billing is not activated, `openai/gpt-oss-20b` is allowed, Inference APIs Zero
+   Data Retention is enabled, and maximum provider spend is $0. Do not use the
+   compromised key, configure payment, or upgrade the organization.
+2. The Render dashboard confirms the configured Secret File basename and matching
+   `GOOGLE_APPLICATION_CREDENTIALS` runtime path without opening file contents.
+   The Google Cloud Console account lacks service-account list access, so the
+   previously exposed key's revocation is not independently verified. Do not add
+   IAM roles unless an observed service permission failure requires them.
+3. Deploy the Phase 6C release with `ASSISTANT_ENABLED=false`,
    `ASSISTANT_BUDGET_CONFIRMED=false`, and
-   `ASSISTANT_DAILY_BUDGET_USD=0` until the owner confirms Free Plan status and
-   Firebase, credential, quota and privacy gates pass. Firestore operating cost
-   is separate from provider spend.
-5. Do not make a live Groq request until the owner confirms the organization is
-   still Free and separately authorizes one bounded synthetic-passage test. Then
-   verify citation grounding, Firestore quota counters, no PDF upload or transcript
-   persistence, sign-out, and anonymous editing/search.
-6. Require green exact-head/main CI and verified production deployment before
-   declaring live Phase 6C complete. Keep live disabled if any gate fails.
+   `ASSISTANT_DAILY_BUDGET_USD=0`. Keep the provider mode non-generating until
+   production Firebase authentication and Firestore security checks pass.
+4. Using a real signed-in Google account, verify Firebase ID-token validation and
+   authenticated `GET /assistant/usage`; this path must not call Groq. Then check
+   anonymous editing, local Ask PDF, logout, unauthorized API rejection, and PDF
+   export. Do not paste tokens or credentials into chat.
+5. No live Groq request is authorized. A synthetic-passage call requires separate
+   explicit owner approval even after these checks pass. If any release gate
+   fails, keep generation disabled and record the concrete failure.
+6. Require green exact-head CI and verified Phase 6C deployments before marking
+   the disabled release complete. Exact-main CI is recorded after merge.
 
 ## Validation performed
 
@@ -350,6 +365,10 @@ executable. The latter's directory must precede the global shim on PATH for Turb
 | `git diff --check`                                   | PASS                                                                                                                                                        |
 | Exact-head GitHub Actions run 111 (`7ebfaf4`)        | PASS: quality, production-container, Firebase-assistant                                                                                                     |
 | Exact-head GitHub Actions run 112 (`70b4196`)        | PASS: quality, production-container, Firebase-assistant on the Free Plan code head                                                                          |
+| Exact-head GitHub Actions run 113 (`6a5df95`)        | PASS: quality, production-container, Firebase-assistant on the documentation checkpoint                                                                     |
+| Render disabled environment check                    | PASS: assistant false, provider mode disabled, Free Plan/paid confirmations false, $0 budget; Secret File name and ADC path match                           |
+| Render baseline redeploy                             | PASS: `dep-dbb35m3bc2fs73dc0lsg` live on baseline `f252998`; `/health` HTTP 200                                                                             |
+| Google Cloud service-account key metadata            | BLOCKED: current console account lacks `iam.serviceAccounts.list` and `resourcemanager.projects.get`; no role changes made                                  |
 | Exact-head GitHub Actions run 108 (`31696c9`)        | PASS: quality, production-container, Firebase-assistant                                                                                                     |
 | Exact-head GitHub Actions run 109 (`c1222f2`)        | PASS: quality, production-container, Firebase-assistant                                                                                                     |
 | Live Groq / production Google sign-in                | NOT RUN; production UI is still baseline and all provider requests remain disabled                                                                          |
@@ -476,6 +495,9 @@ project before testing. Neither incident is represented as a passing run.
   (`feat: enforce Groq Free Plan quotas`) passed exact-head GitHub Actions run
   **112** across Quality, Production-container and Firebase-assistant; see
   [GitHub Actions run 112](https://github.com/AtharvaisOp/Kagaz/actions/runs/39231574092).
+- Documentation checkpoint `6a5df954be3a81c6781ea5f0f3f1065612f2b67` passed
+  exact-head GitHub Actions run **113** across Quality, Production-container and
+  Firebase-assistant; see [GitHub Actions run 113](https://github.com/AtharvaisOp/Kagaz/actions/runs/39235529450).
 - Merge and Phase 6C production deployment: not performed. The existing Render
   deployment is healthy but still runs baseline `main`; the Admin credential path
   is configured, while an authenticated Admin/Firestore runtime check remains.
@@ -497,12 +519,18 @@ project before testing. Neither incident is represented as a passing run.
 - The owner reports the compromised Groq key was replaced directly in Render and
   confirms the fixed model is allowed. Render's connected API does not expose
   environment entries. The Secret File basename was provided by the owner and its
-  path was configured; its contents were never read. No provider request was made.
+  path was configured; its contents were never read. The owner now confirms the
+  organization is on the Free Plan, developer billing is off, provider spend is
+  $0 only, and Inference APIs Zero Data Retention is enabled. No provider request
+  was made.
 - The Render deployment is still baseline `main`, so production Google
   ID-token verification and Firestore usage-ledger access are unverified. After
   Phase 6C is deployed, a signed-in Google session can exercise
   `GET /assistant/usage` without contacting Groq. Project IAM permissions, Groq
-  account Free Plan status and data controls remain unverified.
+  runtime connectivity and revocation of the previously exposed Firebase Admin
+  key remain unverified; Groq Free Plan and ZDR settings are owner-confirmed in
+  Console. The Render Secret File name and ADC path match, and the environment is
+  confirmed disabled.
 - Current Vercel project listing works, but project/environment reads return 404
   and deployment listing returns 403. Previously inspected production Firebase
   settings are unchanged by this continuation; current Vercel readiness is unknown.
@@ -553,51 +581,59 @@ project before testing. Neither incident is represented as a passing run.
 - [x] Server usage display, UTC/local reset, unavailable/loading/cancel/error states.
 - [x] Emulator/mock verification script and Linux CI integration without paid keys.
 - [x] Final expanded emulator and automated browser suite green.
-- [ ] Final formatting and exact-head authoritative Linux CI green for this Free
-      Plan change (previous Phase 6C checks passed through Run 111 on `7ebfaf4`).
+- [x] Final formatting and exact-head authoritative Linux CI green for this Free
+      Plan change (Run 113 passed all three jobs on `6a5df95`).
 - [x] Groq Free Plan mode requires explicit owner confirmation and a $0
       application budget; the model remains fixed and has no paid fallback.
 - [x] Approved Firebase project, Web App, Google-only provider, authorized domains,
       Firestore database, billing state and deployed deny-client rules inspected.
 - [x] `GOOGLE_APPLICATION_CREDENTIALS` points to the owner-supplied Render Secret
-      File path; the service is still on baseline code, so runtime use is pending.
+      File path whose basename matches the configured Secret File; its content and
+      previous-key revocation are not independently verifiable here.
 - [ ] Render service-account identity and least-privilege project IAM verified
-      (Firebase IAM read returned HTTP 500; no role changes were made).
+      (Google Cloud Console denies service-account listing; no role changes made).
 - [x] Production Vercel Firebase configuration matches the approved Web App and
       preserves the API origin.
 - [x] Render project ID is set to the approved project; assistant enable and paid
-      budget flags are false and the configured dollar budget is zero.
-- [ ] Owner confirms the Groq organization remains on the Free Plan in Console;
-      activation remains disabled without that account-tier check.
+      budget flags are false, provider mode is disabled, Free Plan confirmation
+      is false, and the configured dollar budget is zero.
+- [x] Owner confirms the Groq organization is on the Free Plan, developer billing
+      is off, `openai/gpt-oss-20b` is allowed, ZDR is enabled, and maximum provider
+      spend is $0; no Groq request has been made.
 - [x] Shared application caps are below Groq's published Free Plan limits:
       5 RPM/100 RPD/6,000 TPM/20,000 TPD with 6,000 reserved tokens/request.
 - [ ] Real production Google sign-in, ID-token verification and quota controls.
-- [ ] Groq Free Plan account tier and data controls confirmed by the owner.
-- [ ] One synthetic-passage live request only after separate owner authorization.
+- [ ] Revocation of the previously exposed Firebase Admin key is independently
+      confirmed; do not expose or paste any key material.
+- [x] Groq Free Plan account tier, model access and Inference APIs Zero Data
+      Retention are confirmed by the owner.
+- [ ] One synthetic-passage live request only after separate owner authorization;
+      no such request is authorized now.
 - [ ] Authenticated production `GET /assistant/usage` confirms Firebase Admin
       token verification and Firestore access without a Groq request.
 - [ ] Exact-final-main CI green and Vercel/Render Phase 6C deployments verified.
 
 ## Next release gate
 
-The reviewed implementation remains on the phase branch and PR #14 stays draft.
-Firebase access is active for `kagaz-b4bf7`; no further authentication retry is
-needed. Render now points `GOOGLE_APPLICATION_CREDENTIALS` at the Secret File path
-provided by the owner, but only the baseline service is deployed. To verify Admin
-token verification and Firestore access without spend, deploy the disabled Phase
-6C code and sign in with Google once so the UI can request `/assistant/usage`.
-That owner-authenticated action requires no Groq call; do not paste a token or
-credential into chat. Do not add IAM roles unless a concrete permission failure
-is observed. The owner reports `openai/gpt-oss-20b` is allowed, but has not yet
-confirmed the Groq organization remains on the Free Plan or reviewed its data
-controls in Console. The live service is still on baseline `main`; the new Free
-Plan environment mode has not been configured or deployed.
+Exact-head Run 113 passed all three required jobs. PR #14 remains open and draft;
+the Render service still runs baseline `main`, so production ID-token verification
+and Firestore ledger access have not yet been exercised. The owner has confirmed
+the Groq Free Plan, $0 provider-spend maximum, fixed-model access, disabled
+developer billing and enabled Inference APIs Zero Data Retention. These checks do
+not authorize a provider request.
 
-Keep `ASSISTANT_ENABLED=false`, `ASSISTANT_PROVIDER_MODE=disabled`,
-`ASSISTANT_FREE_PLAN_CONFIRMED=false`, `ASSISTANT_BUDGET_CONFIRMED=false`, and
-`ASSISTANT_DAILY_BUDGET_USD=0` until the account tier is verified and the Firebase,
-quota and privacy checks pass. No live Groq request is authorized yet. No payment
-method, paid plan, or Phase 6D work is included.
+The next release action is to deploy the disabled Phase 6C code, then use a real
+Google session to request `/assistant/usage`. This verifies Admin ID-token checks
+and Firestore access without contacting Groq. Do not paste a token or credential
+into chat. Do not add IAM roles unless a concrete permission failure is observed.
+The Render workspace has been confirmed for read-only inspection and the disabled
+deployment; keep all generation switches off and the dollar budget at zero.
+
+Keep `ASSISTANT_ENABLED=false`, `ASSISTANT_BUDGET_CONFIRMED=false`, and
+`ASSISTANT_DAILY_BUDGET_USD=0` throughout this disabled release. Leave the runtime
+generation mode non-generating until production Firebase, quota and privacy
+checks pass. No live Groq request is authorized. No payment method, paid plan, or
+Phase 6D work is included.
 
 Keep Phase 6A's executor as the sole assistant mutation path. The chat answer type
 cannot carry commands. Preserve the context-sharing contract, session epoch and
