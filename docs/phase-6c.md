@@ -2,7 +2,7 @@
 
 ## Durable checkpoint
 
-Updated: 2026-10-19 (Asia/Kolkata). Status: **PARTIAL — engineering and CI are green on prior heads; production AI stays disabled pending final release gates.**
+Updated: 2026-10-19 (Asia/Kolkata). Status: **PARTIAL — Run 109 passed on tested head `c1222f2`; production AI stays disabled pending final release gates. This documentation checkpoint follows that run.**
 
 - Started from clean `main` / `origin/main` at
   `f252998ff2ffce209d28b8073b19b633bbac0e48`.
@@ -15,22 +15,29 @@ Updated: 2026-10-19 (Asia/Kolkata). Status: **PARTIAL — engineering and CI are
   `1:522665274370:web:54fb91a58ee9de2b924b1b`. Google is the only enabled
   sign-in provider. Authorized domains include `localhost`,
   `kagaz-b4bf7.firebaseapp.com`, `kagaz-b4bf7.web.app`, and
-  `kagaz-personal.vercel.app`.
+  `kagaz-personal.vercel.app` from the previous Auth inspection; the current
+  Firebase connector does not expose an Auth-provider/domain read operation.
 - The default Firestore database is Standard Native in `asia-south1` and currently
   reports free-tier status. Firebase reports billing is not enabled. Deployed
   Firestore rules deny all client reads and writes; the local reviewed rules match.
-- Vercel production Firebase Web App values were compared with the registered app
-  and match; `VITE_API_URL` remains `https://kagaz-api.onrender.com`. The deployed
-  production frontend is still baseline `main`, so Phase 6C sign-in is not live.
+- The last successful Vercel inspection found production Firebase Web App values
+  matching the registered app and `VITE_API_URL=https://kagaz-api.onrender.com`.
+  This continuation's Vercel project/environment read returned 404 and deployment
+  listing returned 403, so those settings could not be refreshed. The latest
+  previously verified production frontend is baseline `main`; Phase 6C sign-in
+  is not live.
 - Render was configured with `FIREBASE_PROJECT_ID=kagaz-b4bf7`,
   `ASSISTANT_ENABLED=false`, `ASSISTANT_BUDGET_CONFIRMED=false`, and
-  `ASSISTANT_DAILY_BUDGET_USD=0`. The resulting live deployment still runs baseline
-  `main`. Render's connected read API does not expose environment entries; the
-  owner reports the replacement Groq key is configured there, but neither that
-  key's presence nor the Firebase Admin credential can be verified through it.
-- Project IAM inspection returned HTTP 500. No paid provider request was made.
-  Live generation remains disabled pending verified Render Admin credentials,
-  owner approval to activate spending, provider controls, and production testing.
+  `ASSISTANT_DAILY_BUDGET_USD=0`. The current live deployment is
+  `dep-dbarpluq1p3s73crnchg` on baseline `main`; `/health` returned HTTP 200.
+  Render's connected read API does not expose environment entries. The owner
+  previously reported the replacement Groq key is configured there, but its
+  presence and the Firebase Admin credential cannot be independently verified.
+- The latest owner status fields for model access, monthly spending limit and data
+  controls were left as alternatives rather than selected values. They remain
+  unverified. Project IAM inspection returned HTTP 500. No paid provider request
+  was made. Live generation remains disabled pending verified Admin credentials,
+  provider controls and explicit owner approval to activate spending.
 
 ## Architecture decisions
 
@@ -231,20 +238,23 @@ client rules deployed. Firebase reports Cloud Billing is not enabled. An IAM
 policy read failed with HTTP 500, so the Render service account's actual project
 roles remain unverified.
 
-The Vercel `kagaz` project's production environment contains all four
-`VITE_FIREBASE_*` values matching the registered Web App and preserves
+The last successful inspection of Vercel's `kagaz` production environment found
+all four `VITE_FIREBASE_*` values matching the registered Web App and preserved
 `VITE_API_URL=https://kagaz-api.onrender.com`. No Vercel setting was changed.
-Its latest production deployment is READY on baseline `main`
+Previously verified production was READY on baseline `main`
 (`f252998ff2ffce209d28b8073b19b633bbac0e48`); the branch preview at
-`31696c9747a848c77caa7fbd0fdff3a2503b649d` is READY but is not production.
-The Phase 6C UI therefore has not been deployed to production.
+`31696c9747a848c77caa7fbd0fdff3a2503b649d` was READY but was not production.
+The current Vercel connector returned 404 for project/environment reads and 403
+for deployment listing, so no newer Vercel state could be verified. The Phase 6C
+UI has not been confirmed on production.
 
 Render's existing `kagaz-api` Docker service remains in Singapore, using
 `apps/api/Dockerfile` and `/health`. A secure environment update set
 `FIREBASE_PROJECT_ID`, both assistant flags to disabled, and a zero daily budget
-through the Render environment API. Render deployed the environment change to
-baseline `main` (`f252998ff2ffce209d28b8073b19b633bbac0e48`); `/health` returned
-HTTP 200. The connected Render API does not expose environment variable entries.
+through the Render environment API. Current deployment
+`dep-dbarpluq1p3s73crnchg` is live on baseline `main`
+(`f252998ff2ffce209d28b8073b19b633bbac0e48`); `/health` returned HTTP 200 at
+2026-10-19 06:48 UTC. The connected Render API does not expose environment entries.
 The owner reports a replacement `GROQ_API_KEY` was configured in Render, but its
 presence cannot be verified through this interface. No secret value was read or
 changed here.
@@ -295,7 +305,8 @@ executable. The latter's directory must precede the global shim on PATH for Turb
 | `pnpm format:check`                             | PASS                                                                                                                                                        |
 | `git diff --check`                              | PASS                                                                                                                                                        |
 | Exact-head GitHub Actions run 107 (`d9ade01`)   | PASS: quality, production-container, Firebase-assistant                                                                                                     |
-| GitHub Actions run 108 (`31696c9`)              | At checkpoint: quality and Firebase-assistant passed; production-container still in progress                                                                |
+| Exact-head GitHub Actions run 108 (`31696c9`)   | PASS: quality, production-container, Firebase-assistant                                                                                                     |
+| Exact-head GitHub Actions run 109 (`c1222f2`)   | PASS: quality, production-container, Firebase-assistant                                                                                                     |
 | Live Groq / production Google sign-in           | NOT RUN; production UI is still baseline and paid requests remain disabled                                                                                  |
 
 The final emulator/browser runner passed twice, including after a mobile checkbox
@@ -321,10 +332,13 @@ The later documentation checkpoint at branch head
 `d9ade0187aee2d563f9247fedea758284144664b` was also verified by exact-head Linux
 run **107**; quality, production-container and Firebase-assistant all passed. Its
 three job records are available at [GitHub Actions run 107](https://github.com/AtharvaisOp/Kagaz/actions/runs/39203428122).
-Run 108 on exact branch head `31696c9747a848c77caa7fbd0fdff3a2503b649d` had
-quality and Firebase-assistant complete successfully when last checked; its
-production-container job was still running. Its status can be checked at
+Run 108 on exact branch head `31696c9747a848c77caa7fbd0fdff3a2503b649d` later
+completed successfully across all three jobs; see
 [GitHub Actions run 108](https://github.com/AtharvaisOp/Kagaz/actions/runs/39207672059).
+Run 109 completed successfully across quality, Firebase-assistant and
+production-container on exact branch head
+`c1222f2c77e30406e8668caa168196d2ed84b565`. Its job records are available at
+[GitHub Actions run 109](https://github.com/AtharvaisOp/Kagaz/actions/runs/39209631388).
 The corrected local `emulators:exec` runner also passed with 12 emulator tests,
 17 browser scenarios and zero errors; artifacts are under
 `C:\temp\KagazPhase6CPopupFix\phase6c`. Its emulators and test servers shut down
@@ -402,11 +416,16 @@ project before testing. Neither incident is represented as a passing run.
   (`docs: record Phase 6C CI and release blockers`), verified by successful
   exact-head run 107. This checkpoint records the current unresolved production
   access and credential-rotation gates.
+- Run 109's exact tested branch head: `c1222f2c77e30406e8668caa168196d2ed84b565`
+  (`docs: refresh Phase 6C production checkpoint`), verified successfully across
+  all three jobs. This documentation-only checkpoint records its result; PR #14
+  remains open, draft and mergeable.
 - Merge and production deployment: not performed. Live activation depends on the
   explicit production checks above; missing Firebase access is not bypassed.
 - No credentials are tracked or put into the Vite bundle. The compromised local
-  Groq key entry has been cleared; no replacement is available to the application.
-  Both activation flags are false and the daily budget remains zero.
+  Groq key entry has been cleared; the owner reports a replacement key is set on
+  Render, but its presence cannot be verified through the connected API. Both
+  activation flags are false and the daily budget remains zero.
 
 ## Deviations and known limitations
 
@@ -469,7 +488,7 @@ project before testing. Neither incident is represented as a passing run.
 - [x] Emulator/mock verification script and Linux CI integration without paid keys.
 - [x] Final expanded emulator and automated browser suite green.
 - [x] Final formatting and exact-head authoritative Linux CI green, retaining all
-      Phase 4, 5, 6A and 6B regressions (GitHub Actions runs 106 and 107).
+      Phase 4, 5, 6A and 6B regressions (GitHub Actions runs 106 through 109).
 - [x] Approved Firebase project, Web App, Google-only provider, authorized domains,
       Firestore database, billing state and deployed deny-client rules inspected.
 - [ ] Render service-account identity and least-privilege project IAM verified
