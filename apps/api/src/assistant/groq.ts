@@ -336,6 +336,15 @@ export class GroqProvider implements AssistantProvider {
     );
   }
 
+  reservationTokenCeiling(context: ExplicitContextShareRequest): number {
+    const body = requestBody(context);
+    const ceiling =
+      Buffer.byteLength(body, 'utf8') +
+      FRAMING_TOKEN_ALLOWANCE +
+      GROQ_MAX_OUTPUT_TOKENS;
+    return ceiling;
+  }
+
   async generate(
     context: ExplicitContextShareRequest,
     signal: AbortSignal,

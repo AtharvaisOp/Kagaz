@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { AssistantAnswerRequest } from '@kagaz/shared-types';
 import {
+  AssistantClientError,
   fetchAssistantUsage,
   generateAssistantAnswer,
   readAnswer,
@@ -44,6 +45,15 @@ afterEach(() => {
 });
 
 describe('authenticated AI network boundary', () => {
+  it('explains shared Free Plan exhaustion without suggesting a paid fallback', () => {
+    const error = new AssistantClientError('provider-rate-limited');
+    expect(error.message).toContain('shared Groq Free Plan allowance');
+    expect(error.message).toContain('will not switch to a paid service');
+    expect(new AssistantClientError('free-limit-exhausted').message).toContain(
+      'Local editing and Ask PDF remain available',
+    );
+  });
+
   it('transmits exactly the approved JSON without PDF bytes, history, filenames, cookies or a client UID', async () => {
     vi.stubGlobal('window', { location: { origin: 'http://127.0.0.1:5173' } });
     const fetchMock = vi

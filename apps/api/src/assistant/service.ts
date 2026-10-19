@@ -21,6 +21,7 @@ import {
   groqCostMicroUsd,
 } from './groq.js';
 import { AssistantLedger, FirestoreLedgerStore } from './ledger.js';
+import { GROQ_FREE_PLAN_LIMITS } from './freePlan.js';
 import { ProviderError } from './provider.js';
 import type { AssistantProvider } from './provider.js';
 import { validateAnswerRequest } from './validation.js';
@@ -33,6 +34,7 @@ export interface AssistantServiceOptions {
   readonly unavailableReason: string;
   readonly allowLocalHttp?: boolean;
   readonly renderProxy?: boolean;
+  readonly freePlanMode?: boolean;
   readonly now?: () => number;
   readonly deadlineMs?: number;
 }
@@ -104,7 +106,20 @@ export class AssistantService {
         this.options.unavailableReason || 'AI Chat is unavailable.',
       );
     if (!ledger) throw quotaUnavailable();
-    const reservation = await ledger.reserve(uid, request.requestId);
+    let tokenCeiling: number | undefined;
+    if (this.options.freePlanMode) {
+      if (!provider.reservationTokenCeiling)
+        throw new AssistantError(
+          'assistant-unavailable',
+          503,
+          'Groq Free Plan token limits could not be enforced. AI Chat remains disabled.',
+        );
+      tokenCeiling = provider.reservationTokenCeiling(request.context);
+    }
+    const reservation =
+      tokenCeiling === undefined
+        ? await ledger.reserve(uid, request.requestId)
+        : await ledger.reserve(uid, request.requestId, tokenCeiling);
     let dispatched = false;
     let settled = false;
     const controller = new AbortController();
@@ -135,8 +150,11 @@ export class AssistantService {
       const billing = result.usage
         ? {
             billing: 'known' as const,
-            // Keep the same 25% pricing safety margin after actual-use reconciliation.
-            costMicroUsd: Math.ceil(groqCostMicroUsd(result.usage) * 1.25),
+            // Dollar accounting remains active only in the hypothetical paid mode.
+            costMicroUsd: this.options.freePlanMode
+              ? 0
+              : Math.ceil(groqCostMicroUsd(result.usage) * 1.25),
+            tokenCount: result.usage.inputTokens + result.usage.outputTokens,
           }
         : { billing: 'uncertain' as const };
       const current = await ledger.settle(reservation, billing);
@@ -209,6 +227,7 @@ export function createDefaultAssistantService(
     unavailableReason: config.unavailableReason,
     allowLocalHttp: config.allowLocalHttp,
     renderProxy: config.renderProxy,
+    freePlanMode: config.providerMode === 'groq-free',
   };
   if (
     !config.projectId ||
@@ -251,7 +270,9 @@ export function createDefaultAssistantService(
       ledger: new AssistantLedger(
         new FirestoreLedgerStore(getFirestore(app)),
         config.dailyBudgetMicroUsd,
-        GROQ_RESERVATION_MICRO_USD,
+        config.providerMode === 'groq-free' ? 0 : GROQ_RESERVATION_MICRO_USD,
+        Date.now,
+        config.providerMode === 'groq-free' ? GROQ_FREE_PLAN_LIMITS : undefined,
       ),
       ...(config.enabled
         ? {

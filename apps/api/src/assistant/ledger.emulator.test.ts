@@ -10,12 +10,21 @@ import {
 } from './ledger.js';
 import { FirebaseGoogleAuthenticator } from './auth.js';
 import { AssistantService } from './service.js';
+import { GROQ_FREE_PLAN_LIMITS } from './freePlan.js';
 
 const enabled = Boolean(
   process.env.FIRESTORE_EMULATOR_HOST &&
   process.env.FIREBASE_AUTH_EMULATOR_HOST,
 );
 const suite = describe.skipIf(!enabled);
+function hasErrorCode(value: unknown, code: string): boolean {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'code' in value &&
+    value.code === code
+  );
+}
 
 suite(
   'actual Firebase emulators: shared transaction authority and Google identity',
@@ -112,7 +121,7 @@ suite(
         remaining: 4,
         active: true,
       });
-    });
+    }, 20_000);
 
     it('keeps exactly five daily attempts across restarts and separate user limits', async () => {
       const { uid, store, now, advance } = fixture();
@@ -153,6 +162,43 @@ suite(
         results.filter((result) => result.status === 'rejected'),
       ).toHaveLength(6);
     });
+
+    it('enforces a shared $0 Free Plan request cap across Firestore-backed instances', async () => {
+      const { uid, store, now } = fixture(0);
+      const firstInstance = new AssistantLedger(
+        store,
+        0,
+        0,
+        now,
+        GROQ_FREE_PLAN_LIMITS,
+      );
+      const secondInstance = new AssistantLedger(
+        store,
+        0,
+        0,
+        now,
+        GROQ_FREE_PLAN_LIMITS,
+      );
+      const results = await Promise.allSettled(
+        Array.from({ length: 8 }, (_, index) =>
+          (index % 2 ? firstInstance : secondInstance).reserve(
+            `${uid}-${index}`,
+            randomUUID(),
+            500,
+          ),
+        ),
+      );
+      expect(
+        results.filter((result) => result.status === 'fulfilled'),
+      ).toHaveLength(GROQ_FREE_PLAN_LIMITS.requestsPerMinute);
+      expect(
+        results.filter(
+          (result) =>
+            result.status === 'rejected' &&
+            hasErrorCode(result.reason, 'free-limit-exhausted'),
+        ),
+      ).toHaveLength(3);
+    }, 20_000);
 
     it('enforces the rolling two-per-minute limit in Firestore', async () => {
       const { uid, ledger, advance } = fixture();

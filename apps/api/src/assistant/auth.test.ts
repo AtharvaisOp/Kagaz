@@ -93,6 +93,7 @@ describe('Google-only server authentication', () => {
 describe('fail-closed live configuration', () => {
   const enabled = {
     ASSISTANT_ENABLED: 'true',
+    ASSISTANT_PROVIDER_MODE: 'groq-paid',
     ASSISTANT_BUDGET_CONFIRMED: 'true',
     ASSISTANT_DAILY_BUDGET_USD: '3',
     FIREBASE_PROJECT_ID: PROJECT,
@@ -117,6 +118,43 @@ describe('fail-closed live configuration', () => {
       ).toBe(false);
     },
   );
+  it('allows only an explicitly confirmed, zero-dollar Groq Free Plan mode', () => {
+    const free = {
+      ...enabled,
+      ASSISTANT_PROVIDER_MODE: 'groq-free',
+      ASSISTANT_BUDGET_CONFIRMED: 'false',
+      ASSISTANT_DAILY_BUDGET_USD: '0',
+      ASSISTANT_FREE_PLAN_CONFIRMED: 'true',
+    };
+    expect(readAssistantConfig(free)).toMatchObject({
+      enabled: true,
+      providerMode: 'groq-free',
+      dailyBudgetMicroUsd: 0,
+      freePlanLimits: {
+        requestsPerMinute: 5,
+        requestsPerDay: 100,
+        tokensPerMinute: 6_000,
+        tokensPerDay: 20_000,
+        maxTokensPerRequest: 6_000,
+      },
+    });
+    for (const overrides of [
+      { ASSISTANT_FREE_PLAN_CONFIRMED: 'false' },
+      { ASSISTANT_PROVIDER_MODE: undefined },
+      { ASSISTANT_DAILY_BUDGET_USD: undefined },
+      { ASSISTANT_DAILY_BUDGET_USD: '0.01' },
+      { ASSISTANT_BUDGET_CONFIRMED: 'true' },
+    ])
+      expect(readAssistantConfig({ ...free, ...overrides }).enabled).toBe(
+        false,
+      );
+  });
+  it('does not enable any provider mode implicitly', () => {
+    expect(
+      readAssistantConfig({ ...enabled, ASSISTANT_PROVIDER_MODE: undefined })
+        .enabled,
+    ).toBe(false);
+  });
   it('rejects emulator credentials and local HTTP in production', () => {
     expect(
       readAssistantConfig({

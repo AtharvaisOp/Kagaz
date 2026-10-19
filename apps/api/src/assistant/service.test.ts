@@ -9,6 +9,7 @@ import { AssistantError } from './errors.js';
 import { ProviderError } from './provider.js';
 import type { AssistantProvider } from './provider.js';
 import type { AssistantAnswerRequest } from '@kagaz/shared-types';
+import { GROQ_FREE_PLAN_LIMITS } from './freePlan.js';
 
 const NOW = Date.parse('2026-10-18T12:00:00Z');
 function body(): AssistantAnswerRequest {
@@ -34,6 +35,7 @@ function body(): AssistantAnswerRequest {
 function fixture(
   options: {
     enabled?: boolean;
+    freePlanMode?: boolean;
     localHttp?: boolean;
     renderProxy?: boolean;
   } = {},
@@ -70,11 +72,15 @@ function fixture(
   const service = new AssistantService({
     auth: { authenticate },
     ledger,
-    provider: { generate },
+    provider: {
+      generate,
+      ...(options.freePlanMode ? { reservationTokenCeiling: () => 1_234 } : {}),
+    },
     enabled: options.enabled ?? true,
     unavailableReason: 'Live AI is disabled.',
     allowLocalHttp: options.localHttp ?? true,
     renderProxy: options.renderProxy,
+    freePlanMode: options.freePlanMode,
     now: () => NOW,
   });
   return {
@@ -135,6 +141,7 @@ describe('billable generation admission and settlement', () => {
     expect(settle).toHaveBeenCalledWith(expect.anything(), {
       billing: 'known',
       costMicroUsd: 132,
+      tokenCount: 1_100,
     });
     expect(result).toMatchObject({
       requestId: request.requestId,
@@ -147,6 +154,7 @@ describe('billable generation admission and settlement', () => {
     'burst-limit',
     'generation-active',
     'budget-exhausted',
+    'free-limit-exhausted',
     'request-replayed',
     'quota-unavailable',
   ] as const)(
@@ -183,6 +191,58 @@ describe('billable generation admission and settlement', () => {
       billing: 'uncertain',
     });
     expect(generate).toHaveBeenCalledTimes(1);
+  });
+  it('reserves Free Plan tokens and never retries or falls back after provider 429', async () => {
+    const { service, reserve, generate, settle } = fixture({
+      freePlanMode: true,
+    });
+    generate.mockRejectedValue(
+      new ProviderError(
+        'provider-rate-limited',
+        'The AI provider is busy. Try again later.',
+      ),
+    );
+    await expect(
+      service.answer('uid', body(), new AbortController().signal),
+    ).rejects.toMatchObject({ code: 'provider-rate-limited', status: 429 });
+    expect(reserve).toHaveBeenCalledWith('uid', expect.any(String), 1_234);
+    expect(generate).toHaveBeenCalledTimes(1);
+    expect(settle).toHaveBeenCalledWith(expect.anything(), {
+      billing: 'uncertain',
+    });
+  });
+  it('settles Free Plan usage in tokens with an explicit zero-dollar amount', async () => {
+    const { service, settle } = fixture({ freePlanMode: true });
+    await service.answer('uid', body(), new AbortController().signal);
+    expect(settle).toHaveBeenCalledWith(expect.anything(), {
+      billing: 'known',
+      costMicroUsd: 0,
+      tokenCount: 1_100,
+    });
+  });
+  it('fails closed if Free Plan token reservations cannot be estimated', async () => {
+    const ledger = new AssistantLedger(
+      {
+        transaction: () => Promise.reject(new Error('Unexpected store access')),
+      },
+      0,
+      0,
+      Date.now,
+      GROQ_FREE_PLAN_LIMITS,
+    );
+    const generate = vi.fn<AssistantProvider['generate']>();
+    const service = new AssistantService({
+      ledger,
+      provider: { generate },
+      enabled: true,
+      unavailableReason: '',
+      freePlanMode: true,
+      now: () => NOW,
+    });
+    await expect(
+      service.answer('uid', body(), new AbortController().signal),
+    ).rejects.toMatchObject({ code: 'assistant-unavailable' });
+    expect(generate).not.toHaveBeenCalled();
   });
   it('refunds a known unbilled provider rejection and a cancellation before dispatch', async () => {
     const { service, generate, settle } = fixture();

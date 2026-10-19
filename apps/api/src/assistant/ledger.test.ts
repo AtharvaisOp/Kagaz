@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import { AssistantLedger } from './ledger.js';
 import type { LedgerStore, LedgerTransaction } from './ledger.js';
+import { GROQ_FREE_PLAN_LIMITS } from './freePlan.js';
 
 /** Serial copy-on-commit fake is only a unit-test seam; emulator tests exercise Firestore. */
 class TestStore implements LedgerStore {
@@ -35,10 +36,39 @@ class TestStore implements LedgerStore {
   }
 }
 
+function hasErrorCode(value: unknown, code: string): boolean {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'code' in value &&
+    value.code === code
+  );
+}
+
 function fixture(budget = 3_000_000) {
   const store = new TestStore();
   let clock = Date.parse('2026-10-18T12:00:00Z');
   const ledger = new AssistantLedger(store, budget, 6_530, () => clock);
+  return {
+    store,
+    ledger,
+    advance: (ms: number) => {
+      clock += ms;
+    },
+    now: () => clock,
+  };
+}
+
+function freeFixture(start = '2026-10-18T12:00:00Z') {
+  const store = new TestStore();
+  let clock = Date.parse(start);
+  const ledger = new AssistantLedger(
+    store,
+    0,
+    0,
+    () => clock,
+    GROQ_FREE_PLAN_LIMITS,
+  );
   return {
     store,
     ledger,
@@ -277,5 +307,139 @@ describe('shared assistant accounting lifecycle', () => {
     expect(() => new AssistantLedger(store, 3_000_001, 6_530)).toThrow(
       'Invalid assistant budget',
     );
+  });
+});
+
+describe('shared Groq Free Plan limits', () => {
+  it('shares the request-per-minute cap atomically across users and instances at $0', async () => {
+    const { store, ledger, now } = freeFixture();
+    const secondInstance = new AssistantLedger(
+      store,
+      0,
+      0,
+      now,
+      GROQ_FREE_PLAN_LIMITS,
+    );
+    const results = await Promise.allSettled(
+      Array.from({ length: 8 }, (_, index) =>
+        (index % 2 ? ledger : secondInstance).reserve(
+          `user-${index}`,
+          randomUUID(),
+          500,
+        ),
+      ),
+    );
+    expect(
+      results.filter((result) => result.status === 'fulfilled'),
+    ).toHaveLength(GROQ_FREE_PLAN_LIMITS.requestsPerMinute);
+    expect(
+      results.filter(
+        (result) =>
+          result.status === 'rejected' &&
+          hasErrorCode(result.reason, 'free-limit-exhausted'),
+      ),
+    ).toHaveLength(3);
+    expect(store.documents.get('assistantBudgets/2026-10-18')).toEqual({
+      reservedMicroUsd: 0,
+      spentMicroUsd: 0,
+    });
+    const usage = await secondInstance.usage('new-google-user');
+    expect(usage.available).toBe(false);
+    expect(usage.unavailableReason).toContain('Free Plan allowance');
+  });
+
+  it('enforces shared TPM with conservative token reservations and reconciles actual use', async () => {
+    const { ledger } = freeFixture();
+    const first = await ledger.reserve('one', randomUUID(), 2_500);
+    const second = await ledger.reserve('two', randomUUID(), 2_500);
+    await expect(
+      ledger.reserve('three', randomUUID(), 2_000),
+    ).rejects.toMatchObject({ code: 'free-limit-exhausted' });
+    await ledger.markDispatched(first);
+    await ledger.settle(first, {
+      billing: 'known',
+      costMicroUsd: 0,
+      tokenCount: 100,
+    });
+    await expect(
+      ledger.reserve('three', randomUUID(), 3_000),
+    ).resolves.toBeDefined();
+    await ledger.markDispatched(second);
+    await ledger.settle(second, { billing: 'uncertain' });
+  });
+
+  it('enforces the shared daily token limit and does not refund dispatched 429-style uncertainty', async () => {
+    const { ledger, advance } = freeFixture();
+    for (let index = 0; index < 4; index += 1) {
+      const reservation = await ledger.reserve(
+        `user-${index}`,
+        randomUUID(),
+        5_000,
+      );
+      await ledger.markDispatched(reservation);
+      await ledger.settle(reservation, { billing: 'uncertain' });
+      advance(60_000);
+    }
+    await expect(ledger.reserve('next', randomUUID(), 1)).rejects.toMatchObject(
+      { code: 'free-limit-exhausted' },
+    );
+  });
+
+  it('enforces the shared daily request cap across rolling-minute windows', async () => {
+    const { ledger, advance } = freeFixture();
+    for (
+      let index = 0;
+      index < GROQ_FREE_PLAN_LIMITS.requestsPerDay;
+      index += 1
+    ) {
+      if (index > 0 && index % GROQ_FREE_PLAN_LIMITS.requestsPerMinute === 0)
+        advance(60_000);
+      const reservation = await ledger.reserve(
+        `user-${index}`,
+        randomUUID(),
+        100,
+      );
+      await ledger.markDispatched(reservation);
+      await ledger.settle(reservation, {
+        billing: 'known',
+        costMicroUsd: 0,
+        tokenCount: 100,
+      });
+    }
+    await expect(
+      ledger.reserve('one-more', randomUUID(), 100),
+    ).rejects.toMatchObject({ code: 'free-limit-exhausted' });
+  });
+
+  it('keeps the shared rolling-minute limit across the UTC daily reset', async () => {
+    const { ledger, advance } = freeFixture('2026-10-18T23:59:59Z');
+    for (
+      let index = 0;
+      index < GROQ_FREE_PLAN_LIMITS.requestsPerMinute;
+      index += 1
+    )
+      await ledger.reserve(`before-midnight-${index}`, randomUUID(), 100);
+    advance(1_000);
+    await expect(
+      ledger.reserve('after-midnight', randomUUID(), 100),
+    ).rejects.toMatchObject({ code: 'free-limit-exhausted' });
+  });
+
+  it('rolls back a reserved but undispatched request without opening a paid budget', async () => {
+    const { ledger, store } = freeFixture();
+    const reservation = await ledger.reserve('cancelled', randomUUID(), 1_000);
+    await ledger.settle(reservation, { billing: 'none' });
+    await expect(
+      ledger.reserve('next', randomUUID(), 1_000),
+    ).resolves.toBeDefined();
+    expect(store.documents.get('assistantFreeUsage/2026-10-18')).toMatchObject({
+      requests: 1,
+      reservedTokens: 1_000,
+      usedTokens: 0,
+    });
+    expect(store.documents.get('assistantBudgets/2026-10-18')).toEqual({
+      reservedMicroUsd: 0,
+      spentMicroUsd: 0,
+    });
   });
 });

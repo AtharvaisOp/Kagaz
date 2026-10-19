@@ -22,12 +22,14 @@ const ERROR_MESSAGES: Readonly<Record<string, string>> = {
     'A generation is already active for your account. Wait for it to finish.',
   'budget-exhausted':
     'Kagaz’s daily AI budget is exhausted. Try again after midnight UTC.',
+  'free-limit-exhausted':
+    'Kagaz’s shared Groq Free Plan allowance is temporarily exhausted. Try again after it resets. Local editing and Ask PDF remain available.',
   'request-replayed':
     'This request has already been handled. Review the passages again for a new request.',
   'provider-unauthorized':
     'The AI provider is unavailable. The owner must check its configuration.',
   'provider-rate-limited':
-    'Groq is busy. Review and try again later; a generation attempt may have been counted.',
+    'Kagaz’s shared Groq Free Plan allowance has been reached for now. Try again later; Kagaz will not switch to a paid service or another model.',
   'provider-unavailable':
     'Groq could not complete the answer. A generation attempt may have been counted.',
   'provider-timeout':

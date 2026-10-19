@@ -119,6 +119,7 @@ export type AssistantErrorCode =
   | 'burst-limit'
   | 'generation-active'
   | 'budget-exhausted'
+  | 'free-limit-exhausted'
   | 'request-replayed'
   | 'provider-unauthorized'
   | 'provider-rate-limited'

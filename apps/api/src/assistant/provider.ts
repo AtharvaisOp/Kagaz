@@ -14,6 +14,8 @@ export interface ProviderGeneration {
 }
 
 export interface AssistantProvider {
+  /** Conservative upper bound used by the shared Free Plan token ledger. */
+  reservationTokenCeiling?(context: ExplicitContextShareRequest): number;
   generate(
     context: ExplicitContextShareRequest,
     signal: AbortSignal,

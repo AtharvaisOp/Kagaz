@@ -2,11 +2,11 @@
 
 ## Durable checkpoint
 
-Updated: 2026-10-19 (Asia/Kolkata). Status: **PARTIAL — Run 110 passed on exact tested head `f4ff676`; live AI remains disabled. The current Render deployment still runs baseline `main`, so the Phase 6C Admin/Firestore runtime check is outstanding.**
+Updated: 2026-10-19 (Asia/Kolkata). Status: **PARTIAL — Groq Free Plan mode is now explicitly gated with a $0 application budget. Focused tests pass locally; exact-head CI and the production-container job are pending. Live AI remains disabled pending owner verification of the Groq organization plan and production Firebase runtime checks.**
 
 - Started from clean `main` / `origin/main` at
   `f252998ff2ffce209d28b8073b19b633bbac0e48`.
-- Working branch: `codex/phase-6c-firebase-groq-chat`; latest implementation/documentation head before this checkpoint: `f4ff676e19f4ae53670bf8078bfee6fbeabe27df`.
+- Working branch: `codex/phase-6c-firebase-groq-chat`; this Free Plan change is not yet committed.
 - Existing PR [#14](https://github.com/AtharvaisOp/Kagaz/pull/14) is open and draft.
 - Read repository instructions, visual specification, README and Phase 6A/6B
   reports; retained existing retrieval and the sole approval-gated editor executor.
@@ -36,8 +36,35 @@ Updated: 2026-10-19 (Asia/Kolkata). Status: **PARTIAL — Run 110 passed on exac
   Firestore ledger access have not been exercised through the backend.
 - The owner reports the replacement Groq key is configured securely on Render
   and confirms the fixed `openai/gpt-oss-20b` model is allowed. No provider request
-  was made. Groq data controls and provider-side monthly spending limits remain
+  was made. Groq data controls and account Free Plan status remain
   unverified. The application budget is zero and live generation is disabled.
+
+## Current product and spending policy
+
+The owner has changed the product requirement: **Kagaz AI Chat is Groq Free Plan
+only, and the maximum acceptable provider spend is $0.** The earlier proposed
+$3/day paid budget is cancelled. Do not treat it as approved or enable paid
+inference. Keep `ASSISTANT_ENABLED=false`, `ASSISTANT_BUDGET_CONFIRMED=false`,
+`ASSISTANT_DAILY_BUDGET_USD=0`, and `ASSISTANT_FREE_PLAN_CONFIRMED=false` until
+the owner verifies the Groq organization is still on the Free Plan and separately
+authorizes activation. An API key does not identify an organization tier.
+
+The current Free Plan mode requires explicit `ASSISTANT_PROVIDER_MODE=groq-free`
+and `ASSISTANT_FREE_PLAN_CONFIRMED=true`, a zero-dollar budget, and all existing
+Firebase/provider checks. If Groq plan status cannot be confirmed, leave
+generation disabled. Any organization plan change requires clearing the
+confirmation before another deployment. Paid mode remains only as a separately
+guarded future configuration path; it is not part of Kagaz's product policy.
+
+Groq's published [Free Plan rate table](https://console.groq.com/docs/rate-limits)
+lists `openai/gpt-oss-20b` at 30 requests/minute, 1,000 requests/day, 8,000
+tokens/minute and 200,000 tokens/day. Kagaz applies shared Firestore caps well
+below those limits: 5 requests/minute, 100 requests/day, 6,000 tokens/minute and
+20,000 tokens/day, with a 6,000-token maximum reservation per request. Actual
+organization limits can differ; verify them in Groq Console. Free mode never
+switches models, uses a paid fallback, upgrades a subscription, or enables
+payment. Provider 429 responses stop the request and show that the shared Free
+Plan allowance is temporarily unavailable.
 
 ## Architecture decisions
 
@@ -46,11 +73,11 @@ existing assistant dialog and requires verified Firebase Google authentication.
 Every answer is a separate reviewed question plus at most five selected passages
 and 8,000 passage characters. No automatic chat-history replay is planned.
 
-Firestore transactions, rather than process-local counters, will reserve each
-attempt and its maximum cost before Groq is called. Questions, passages, answers,
-PDF bytes and filenames must never enter the ledger or logs. UTC day keys govern
-five daily attempts and the proposed $3 daily application budget; persistent
-request identities and a cross-day user lock must prevent midnight replay.
+Firestore transactions, rather than process-local counters, reserve each attempt
+and a conservative maximum token count before Groq is called. Questions, passages,
+answers, PDF bytes and filenames must never enter the ledger or logs. UTC day keys
+govern five per-user attempts and the shared Free Plan limits; persistent request
+identities and a cross-day user lock prevent midnight replay.
 
 The required gptTaste skill was read and applied to focus, tactile feedback and
 restrained loading transitions. Its landing-page structure, random typography and
@@ -62,24 +89,26 @@ orange actions and cyan focus. Reduced motion remains respected.
 
 Groq's [production model catalog](https://console.groq.com/docs/models) lists
 `openai/gpt-oss-20b` and `openai/gpt-oss-120b`, both with 131,072-token context.
-Current listed input/output prices per million tokens are $0.075/$0.30 for 20B
-and $0.15/$0.60 for 120B. Both support
+The catalog also displays paid-tier input/output prices; they are not a Kagaz
+spend authorization. GPT-OSS 20B is listed in the Free Plan rate table and
+supports
 [strict structured JSON output](https://console.groq.com/docs/structured-outputs).
-20B is the fixed model on cost and listed speed; actual grounding
-quality still requires an explicitly bounded live evaluation.
+The fixed model remains `openai/gpt-oss-20b`; actual grounding quality still
+requires an explicitly bounded live evaluation.
 
-[Groq spending limits](https://console.groq.com/docs/spend-limits) are monthly,
-organization-wide, paid-tier controls with delayed accounting; they do not prove
-an absolute $3 daily bill ceiling. Account limits have not been inspected.
+[Groq's spending limits](https://console.groq.com/docs/spend-limits) are not used
+to authorize Kagaz Free Plan calls. The organization's current plan has not been
+verified in Groq Console; Free Plan mode remains disabled until the owner confirms
+it. Kagaz does not enable billing, upgrade a plan, or add a payment method.
 
-| Production model      | Input / output USD per million tokens | Listed approximate output rate | Strict schema | Decision                                                              |
-| --------------------- | ------------------------------------- | ------------------------------ | ------------- | --------------------------------------------------------------------- |
-| `openai/gpt-oss-20b`  | $0.075 / $0.30                        | 1,000 tokens/sec               | Supported     | Fixed initial model; cheaper for bounded excerpt answers              |
-| `openai/gpt-oss-120b` | $0.15 / $0.60                         | 500 tokens/sec                 | Supported     | Higher-capacity candidate; no measured live quality advantage claimed |
+| Production model      | Listed approximate output rate | Strict schema | Decision                                                |
+| --------------------- | ------------------------------ | ------------- | ------------------------------------------------------- |
+| `openai/gpt-oss-20b`  | 1,000 tokens/sec               | Supported     | Fixed model; included in the documented Free Plan table |
+| `openai/gpt-oss-120b` | 500 tokens/sec                 | Supported     | No fallback or alternate model is configured            |
 
-Both models have more context capacity than this feature needs. Account-specific
-[rate limits](https://console.groq.com/docs/rate-limits) must be checked in the
-owner's console rather than inferred from a generic plan table. The browser has
+Both models have more context capacity than this feature needs. The published
+[rate limits](https://console.groq.com/docs/rate-limits) are a generic reference;
+the owner must verify the actual account's Free Plan and limits in Console. The browser has
 no model selector. The minimal backend `fetch` integration uses Groq's documented
 OpenAI-compatible completions endpoint, strict JSON schema and no tools/streaming.
 This avoids another SDK and its automatic retry behavior. Each approved request
@@ -132,24 +161,28 @@ retrieval/redaction checks enforce that boundary for the Kagaz UI; backend
 authentication, bounds and costs remain authoritative against arbitrary clients.
 Google login limits one UID, not one human. App Check was considered as additional
 abuse protection and is not implemented or claimed. Multiple-account abuse and
-the cost of Firebase reads/writes remain operational concerns for public use.
+Firebase operational costs remain concerns separate from the $0 provider-spend
+policy.
 
-## Precise quota and budget lifecycle
+## Precise quota and Free Plan lifecycle
 
-The ledger stores integer microdollars, avoiding cumulative floating-point money
-rounding. With the verified 20B rates, a conservative 65,536-token input ceiling,
-1,024 output tokens and a 25% margin, each request reserves **6,530 microdollars
-($0.006530)**. The provider conservatively bounds serialized prompt bytes plus
-framing to the input-token ceiling. There is no unbounded conversation replay.
+Every account keeps the existing five-attempt UTC-day limit, two-start rolling
+minute limit, one active generation lease, and permanent request tombstone.
+Free Plan mode adds application-wide Firestore caps: 5 requests/minute, 100
+requests/day, 6,000 reserved/used tokens/minute and 20,000 tokens/day. Each
+request is limited to a 6,000-token reservation. The provider computes a safe
+upper bound from the UTF-8 request body, framing allowance and maximum output;
+oversized selections fail before a provider request.
 
 Firestore stores only these records:
 
-| Collection          | Data                                                                | Purpose                                         |
-| ------------------- | ------------------------------------------------------------------- | ----------------------------------------------- |
-| `assistantUsers`    | SHA-256 UID key, active request/day/expiry, last two attempt times  | Cross-day concurrency and rolling burst control |
-| `assistantUserDays` | UID hash + UTC day, integer attempts                                | Five attempts per UID/day                       |
-| `assistantBudgets`  | UTC day, reserved/spent microdollars                                | Shared application budget                       |
-| `assistantRequests` | UID hash + request UUID, day/state/expiry, reserved/charged amounts | Permanent replay tombstone and reconciliation   |
+| Collection           | Data                                                                                     | Purpose                                           |
+| -------------------- | ---------------------------------------------------------------------------------------- | ------------------------------------------------- |
+| `assistantUsers`     | SHA-256 UID key, active request/day/expiry, last two attempt times                       | Cross-day concurrency and rolling burst control   |
+| `assistantUserDays`  | UID hash + UTC day, integer attempts                                                     | Five attempts per UID/day                         |
+| `assistantBudgets`   | UTC day, reserved/spent microdollars                                                     | Existing paid-mode guard; Free Plan stays at zero |
+| `assistantFreeUsage` | UTC day, request count, reserved/used tokens, recent hashed event IDs and token ceilings | Shared RPM/RPD/TPM/TPD enforcement                |
+| `assistantRequests`  | UID hash + request UUID, day/state/expiry, reserved/charged amounts and token ceiling    | Permanent replay tombstone and reconciliation     |
 
 All writes include a Firestore server timestamp. Trusted API UTC clocks derive
 day keys; clients cannot supply day, counters, prices or allowance. Keep backend
@@ -159,36 +192,43 @@ be reused. There are no questions, passage bodies, filenames, answers or chats i
 these documents.
 
 1. Verify authentication, schema and per-request reviewed consent.
-2. A Firestore transaction reads the user, daily allowance, global day budget and
-   request tombstone. It rejects replay, an active lease, five consumed attempts,
-   two starts in a rolling minute, or insufficient budget. It reserves one attempt,
-   6,530 microdollars and a 120-second user lease atomically.
+2. A Firestore transaction reads the user, daily allowance, global Free Plan
+   counters and request tombstone. It rejects replay, an active lease, five
+   consumed attempts, two starts in a rolling minute, or a shared request/token
+   cap. It reserves one attempt, one shared request slot, the maximum token
+   ceiling and a 120-second user lease atomically.
 3. A second transaction marks dispatch. It refuses an expired reservation or one
    that crossed UTC midnight. No provider request occurs inside a transaction.
-4. The service calls Groq once. Known usage settles to actual verified token cost
-   plus the 25% margin. Unknown usage, malformed billed output, transport failure
-   or uncertain cancellation consumes the full reservation and attempt.
-5. Only an established no-billing outcome refunds the daily attempt and reserved
-   money. Burst history remains to prevent free-error retry loops. After uncertain
-   cancellation the user lease remains until expiry; new starts are blocked.
-6. Expired unresolved reservations are lazily charged at the maximum to their
-   original UTC day. Already charged uncertain leases clear without a second
-   charge. Late results never revive expired requests. Persistent cross-day UID
-   locks and replay records prevent midnight reuse; new day counters start fresh.
+4. The service calls Groq once. Known token usage replaces the conservative token
+   ceiling; missing or over-limit usage and uncertain failures consume the full
+   reservation. A provider HTTP 429 is not retried, does not switch providers or
+   models, and may conservatively consume the shared app allowance.
+5. A request cancelled before dispatch releases its shared reservation and daily
+   user attempt. Once dispatched, unknown usage keeps the maximum reserved tokens
+   and the user lease until expiry. A confirmed no-billing rejection releases
+   tokens while retaining the shared request-start count if it reached Groq.
+6. Expired unresolved reservations remain charged at their maximum against their
+   original UTC day. Late results never revive expired requests. Persistent
+   cross-day UID locks and replay records prevent midnight reuse; new day counters
+   start fresh.
 
 Firestore failure before reservation or dispatch prevents provider access. Failure
-after a potentially billed call leaves the reservation conservative and returns
-an accurate message that the attempt may count. Disconnect/cancellation cannot
+after dispatch leaves the reservation conservative and returns an accurate
+message that the attempt may count. Disconnect/cancellation cannot
 retract shared excerpts or guarantee Groq stops remotely. The finite lease bounds
 stuck local work, rather than proving provider-side computation has stopped.
 
-The daily budget defaults to **zero**. Activation requires both
-`ASSISTANT_ENABLED=true` and `ASSISTANT_BUDGET_CONFIRMED=true`, with an approved
-positive `ASSISTANT_DAILY_BUDGET_USD` no greater than 3. The proposed $3 has not
-been marked approved. This cap applies only to calls through this shared Kagaz
-ledger. Other keys, provider price changes, provider accounting behavior and
-remote in-flight execution preclude an absolute provider bill guarantee. Groq
-monthly limits have **not** been configured or verified.
+The production target is **Free Plan only with `ASSISTANT_DAILY_BUDGET_USD=0`**.
+Activation requires `ASSISTANT_PROVIDER_MODE=groq-free`, explicit owner-set
+`ASSISTANT_FREE_PLAN_CONFIRMED=true`, and `ASSISTANT_ENABLED=true`; paid budget
+confirmation must remain false. The owner has not yet confirmed the current
+organization tier in Groq Console, so production generation remains disabled.
+The guarded `groq-paid` path preserves the existing positive-budget/reservation
+safeguards for a hypothetical future deployment, but is not authorized for this
+product. Free Plan eligibility is an external account setting; clear the
+confirmation before any tier change. Free-mode limits are shared across Kagaz
+instances, but other applications using the same Groq organization can consume
+its separate provider allowance. Firestore costs are separate from provider spend.
 
 ## Consent, grounding, privacy and design
 
@@ -266,17 +306,22 @@ Owner-dependent sequence:
 2. The registered Web App and production Vercel Firebase values already match;
    the production API origin is correct. Confirm the owner-controlled settings
    remain in place through the next production build.
-3. The owner reports a replacement `GROQ_API_KEY` is set directly in Render. Verify
-   model access for `openai/gpt-oss-20b`, account pricing, rate limits, data
-   controls, and a provider-side monthly cap through the Groq account dashboard.
-   Do not use or redeploy the compromised key.
-4. Keep the configured application budget at zero and both activation flags false
-   until all controls pass and the owner explicitly approves paid activation of
-   the proposed $3/day cap. Firestore operational costs are separate.
-5. Only after approval and verified controls, run one authenticated bounded live
-   request with explicit review of a synthetic PDF passage, then verify citation
-   grounding, Firestore accounting, no PDF upload/transcript persistence, sign-out,
-   and anonymous editing/search. Do not manufacture consent or use a real document.
+3. The owner reports a replacement `GROQ_API_KEY` is set directly in Render. In
+   Groq Console, confirm the organization remains on the Free Plan,
+   `openai/gpt-oss-20b` is available within that plan, and review the provider
+   data controls. Do not use the compromised key, configure payment or upgrade.
+   An API key does not prove the account tier.
+4. Keep `ASSISTANT_ENABLED=false`,
+   `ASSISTANT_PROVIDER_MODE=disabled`,
+   `ASSISTANT_FREE_PLAN_CONFIRMED=false`,
+   `ASSISTANT_BUDGET_CONFIRMED=false`, and
+   `ASSISTANT_DAILY_BUDGET_USD=0` until the owner confirms Free Plan status and
+   Firebase, credential, quota and privacy gates pass. Firestore operating cost
+   is separate from provider spend.
+5. Do not make a live Groq request until the owner confirms the organization is
+   still Free and separately authorizes one bounded synthetic-passage test. Then
+   verify citation grounding, Firestore quota counters, no PDF upload or transcript
+   persistence, sign-out, and anonymous editing/search.
 6. Require green exact-head/main CI and verified production deployment before
    declaring live Phase 6C complete. Keep live disabled if any gate fails.
 
@@ -288,24 +333,25 @@ has Node 22.17.1, Java 22.0.1 and a pnpm 11.25.0 global shim. Commands use the
 declared pnpm 12.3.4 through `npx --yes pnpm@12.3.4` or its installed native
 executable. The latter's directory must precede the global shim on PATH for Turbo.
 
-| Command/check                                   | Actual result so far                                                                                                                                        |
-| ----------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `pnpm install --frozen-lockfile`                | PASS after dependency installation                                                                                                                          |
-| `pnpm lint`                                     | PASS in all three packages                                                                                                                                  |
-| `pnpm typecheck`                                | PASS in all three packages                                                                                                                                  |
-| `pnpm build`                                    | PASS in all three packages                                                                                                                                  |
-| Focused new API tests                           | 135 passed across five files                                                                                                                                |
-| Full web suite                                  | 881 passed across 85 files                                                                                                                                  |
-| `node --test scripts/workspace-sample.test.mjs` | 3 passed                                                                                                                                                    |
-| Full Windows `pnpm test`                        | FAIL: existing native suites need unavailable tools; API 96 failed, 237 passed, 18 skipped at that checkpoint (351 tests, including then-10 emulator cases) |
-| Firestore/Auth emulator suite                   | PASS: 12 real emulator tests, including 25 authenticated rule-denial checks                                                                                 |
-| `scripts/verify-phase6c.mjs`                    | PASS: 17 browser scenarios, zero page errors, five deterministic mock answer requests                                                                       |
-| `pnpm format:check`                             | PASS                                                                                                                                                        |
-| `git diff --check`                              | PASS                                                                                                                                                        |
-| Exact-head GitHub Actions run 107 (`d9ade01`)   | PASS: quality, production-container, Firebase-assistant                                                                                                     |
-| Exact-head GitHub Actions run 108 (`31696c9`)   | PASS: quality, production-container, Firebase-assistant                                                                                                     |
-| Exact-head GitHub Actions run 109 (`c1222f2`)   | PASS: quality, production-container, Firebase-assistant                                                                                                     |
-| Live Groq / production Google sign-in           | NOT RUN; production UI is still baseline and paid requests remain disabled                                                                                  |
+| Command/check                                        | Actual result so far                                                                                                                                        |
+| ---------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `pnpm install --frozen-lockfile`                     | PASS after dependency installation                                                                                                                          |
+| `npx --yes pnpm@12.3.4 lint`                         | PASS in all three packages                                                                                                                                  |
+| `npx --yes pnpm@12.3.4 typecheck`                    | PASS in all three packages                                                                                                                                  |
+| `npx --yes pnpm@12.3.4 build`                        | PASS in all three packages; existing Vite chunk/dynamic-import warnings remain                                                                              |
+| Focused Free Plan/auth/ledger/service/Groq API tests | 133 passed across four files                                                                                                                                |
+| Focused web AI Chat tests                            | 16 passed                                                                                                                                                   |
+| Full web suite                                       | 881 passed across 85 files                                                                                                                                  |
+| `node --test scripts/workspace-sample.test.mjs`      | 3 passed                                                                                                                                                    |
+| Full Windows `pnpm test`                             | FAIL: existing native suites need unavailable tools; API 96 failed, 237 passed, 18 skipped at that checkpoint (351 tests, including then-10 emulator cases) |
+| Firestore/Auth ledger emulator suite                 | PASS: 13 tests, including the new shared Free Plan cap across Firestore-backed instances                                                                    |
+| `scripts/verify-phase6c.mjs`                         | PASS: 17 browser scenarios, zero page errors, five deterministic mock answer requests                                                                       |
+| `pnpm format:check`                                  | PASS                                                                                                                                                        |
+| `git diff --check`                                   | PASS                                                                                                                                                        |
+| Exact-head GitHub Actions run 111 (`7ebfaf4`)        | PASS: quality, production-container, Firebase-assistant                                                                                                     |
+| Exact-head GitHub Actions run 108 (`31696c9`)        | PASS: quality, production-container, Firebase-assistant                                                                                                     |
+| Exact-head GitHub Actions run 109 (`c1222f2`)        | PASS: quality, production-container, Firebase-assistant                                                                                                     |
+| Live Groq / production Google sign-in                | NOT RUN; production UI is still baseline and all provider requests remain disabled                                                                          |
 
 The final emulator/browser runner passed twice, including after a mobile checkbox
 spacing correction. It tests actual Google popup flow against the Auth emulator,
@@ -421,6 +467,11 @@ project before testing. Neither incident is represented as a passing run.
 - Run 110 verified exact branch head `f4ff676e19f4ae53670bf8078bfee6fbeabe27df`
   successfully across Quality, Production-container and Firebase-assistant.
   The working tree was clean before this continuation's documentation update.
+- Run 111 passed Quality, Production-container and Firebase-assistant on exact
+  head `7ebfaf439687edd415cd93cca8660dd3c04f0910`; see
+  [GitHub Actions run 111](https://github.com/AtharvaisOp/Kagaz/actions/runs/39227167519).
+  It predates the Free Plan changes in this checkpoint, which require a new
+  exact-head CI run.
 - Merge and Phase 6C production deployment: not performed. The existing Render
   deployment is healthy but still runs baseline `main`; the Admin credential path
   is configured, while an authenticated Admin/Firestore runtime check remains.
@@ -436,18 +487,18 @@ project before testing. Neither incident is represented as a passing run.
   deny-client rules are verified. Firebase reports billing disabled and Firestore
   free tier. Project IAM inspection returned HTTP 500. The owner-supplied Render
   Secret File path is configured, but the Phase 6C runtime has not consumed it yet.
-- The owner directed that live spending stay disabled. Render now has
+- The owner directed that provider spending stay at $0. Render has
   `ASSISTANT_ENABLED=false`, `ASSISTANT_BUDGET_CONFIRMED=false`, and
-  `ASSISTANT_DAILY_BUDGET_USD=0`. The proposed $3/day amount is not active.
+  `ASSISTANT_DAILY_BUDGET_USD=0`. The earlier paid-budget proposal is cancelled.
 - The owner reports the compromised Groq key was replaced directly in Render and
   confirms the fixed model is allowed. Render's connected API does not expose
   environment entries. The Secret File basename was provided by the owner and its
-  path was configured; its contents were never read. No paid request was made.
+  path was configured; its contents were never read. No provider request was made.
 - The Render deployment is still baseline `main`, so production Google
   ID-token verification and Firestore usage-ledger access are unverified. After
   Phase 6C is deployed, a signed-in Google session can exercise
   `GET /assistant/usage` without contacting Groq. Project IAM permissions, Groq
-  account data controls and provider-side spending limits remain unverified.
+  account Free Plan status and data controls remain unverified.
 - Current Vercel project listing works, but project/environment reads return 404
   and deployment listing returns 403. Previously inspected production Firebase
   settings are unchanged by this continuation; current Vercel readiness is unknown.
@@ -480,8 +531,11 @@ project before testing. Neither incident is represented as a passing run.
       output, including strict schema and independent citation validation.
 - [x] Real shared Firestore transaction authority before provider access.
 - [x] Five attempts per UTC day, two per rolling minute and one active UID lease.
-- [x] Atomic global budget reservations, safety margin and actual reconciliation.
-- [x] Unknown billing conservative; refunds only established unbilled outcomes.
+- [x] Firestore-enforced global Groq Free Plan request/token limits with
+      reservation and actual-use reconciliation; paid monetary safeguards remain
+      separate and guarded for any hypothetical future deployment.
+- [x] Unknown token usage is charged at the reserved ceiling; only a confirmed
+      pre-dispatch cancellation releases the shared request/token reservation.
 - [x] Persistent replay prevention, expiry handling and midnight isolation.
 - [x] Explicit exact-context review on every request; five passages/8,000 passage
       characters/400 question characters; no whole PDF, unselected text or history.
@@ -495,8 +549,10 @@ project before testing. Neither incident is represented as a passing run.
 - [x] Server usage display, UTC/local reset, unavailable/loading/cancel/error states.
 - [x] Emulator/mock verification script and Linux CI integration without paid keys.
 - [x] Final expanded emulator and automated browser suite green.
-- [x] Final formatting and exact-head authoritative Linux CI green, retaining all
-      Phase 4, 5, 6A and 6B regressions (GitHub Actions runs 106 through 110).
+- [ ] Final formatting and exact-head authoritative Linux CI green for this Free
+      Plan change (previous Phase 6C checks passed through Run 111 on `7ebfaf4`).
+- [x] Groq Free Plan mode requires explicit owner confirmation and a $0
+      application budget; the model remains fixed and has no paid fallback.
 - [x] Approved Firebase project, Web App, Google-only provider, authorized domains,
       Firestore database, billing state and deployed deny-client rules inspected.
 - [x] `GOOGLE_APPLICATION_CREDENTIALS` points to the owner-supplied Render Secret
@@ -505,12 +561,15 @@ project before testing. Neither incident is represented as a passing run.
       (Firebase IAM read returned HTTP 500; no role changes were made).
 - [x] Production Vercel Firebase configuration matches the approved Web App and
       preserves the API origin.
-- [x] Render project ID is set to the approved project; live flags are false and
-      configured application budget is zero.
-- [ ] Owner-approved daily budget active in production (intentionally disabled).
+- [x] Render project ID is set to the approved project; assistant enable and paid
+      budget flags are false and the configured dollar budget is zero.
+- [ ] Owner confirms the Groq organization remains on the Free Plan in Console;
+      activation remains disabled without that account-tier check.
+- [x] Shared application caps are below Groq's published Free Plan limits:
+      5 RPM/100 RPD/6,000 TPM/20,000 TPD with 6,000 reserved tokens/request.
 - [ ] Real production Google sign-in, ID-token verification and quota controls.
-- [ ] Groq account model/rate/data controls/monthly cap verified.
-- [ ] One bounded authenticated live request with actual per-request passage approval.
+- [ ] Groq Free Plan account tier and data controls confirmed by the owner.
+- [ ] One synthetic-passage live request only after separate owner authorization.
 - [ ] Authenticated production `GET /assistant/usage` confirms Firebase Admin
       token verification and Firestore access without a Groq request.
 - [ ] Exact-final-main CI green and Vercel/Render Phase 6C deployments verified.
@@ -525,13 +584,16 @@ token verification and Firestore access without spend, deploy the disabled Phase
 6C code and sign in with Google once so the UI can request `/assistant/usage`.
 That owner-authenticated action requires no Groq call; do not paste a token or
 credential into chat. Do not add IAM roles unless a concrete permission failure
-is observed. The owner reports model access is allowed; provider-side data controls
-and spending limits remain to be checked in Groq's dashboard.
+is observed. The owner reports `openai/gpt-oss-20b` is allowed, but has not yet
+confirmed the Groq organization remains on the Free Plan or reviewed its data
+controls in Console. The live service is still on baseline `main`; the new Free
+Plan environment mode has not been configured or deployed.
 
-Keep the Render budget at zero and both activation flags false. The owner must
-explicitly approve paid activation of the proposed $3/day budget after the
-authentication, quota, budget and privacy gates pass. Do not run a paid request
-without that approval. No Phase 6D work is included.
+Keep `ASSISTANT_ENABLED=false`, `ASSISTANT_PROVIDER_MODE=disabled`,
+`ASSISTANT_FREE_PLAN_CONFIRMED=false`, `ASSISTANT_BUDGET_CONFIRMED=false`, and
+`ASSISTANT_DAILY_BUDGET_USD=0` until the account tier is verified and the Firebase,
+quota and privacy checks pass. No live Groq request is authorized yet. No payment
+method, paid plan, or Phase 6D work is included.
 
 Keep Phase 6A's executor as the sole assistant mutation path. The chat answer type
 cannot carry commands. Preserve the context-sharing contract, session epoch and

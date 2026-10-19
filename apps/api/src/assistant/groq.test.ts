@@ -19,6 +19,7 @@ import {
   groqCostMicroUsd,
   validateGroqAnswer,
 } from './groq.js';
+import { GROQ_FREE_PLAN_LIMITS } from './freePlan.js';
 import {
   GROUNDING_CASES,
   KNOWN_PDF_PASSAGES,
@@ -76,6 +77,23 @@ afterEach(() => {
 });
 
 describe('single-attempt bounded Groq boundary', () => {
+  it('uses a conservative Free Plan token ceiling and rejects oversized selections before transmission', () => {
+    const provider = new GroqProvider({ apiKey: 'synthetic' });
+    expect(provider.reservationTokenCeiling(context)).toBeLessThanOrEqual(
+      GROQ_FREE_PLAN_LIMITS.maxTokensPerRequest,
+    );
+    const oversized: ExplicitContextShareRequest = {
+      ...context,
+      passages: context.passages.map((passage) => ({
+        ...passage,
+        text: 'x'.repeat(8_000),
+      })),
+    };
+    expect(provider.reservationTokenCeiling(oversized)).toBeGreaterThan(
+      GROQ_FREE_PLAN_LIMITS.maxTokensPerRequest,
+    );
+  });
+
   it('uses one fixed model/HTTPS endpoint, strict schema and no tools or history', async () => {
     const { provider, fetch } = setup();
     await expect(
@@ -96,6 +114,7 @@ describe('single-attempt bounded Groq boundary', () => {
     });
     const body = bodyFrom(fetch);
     expect(body.model).toBe(GROQ_MODEL);
+    expect(body.service_tier).toBe('on_demand');
     expect(body.max_completion_tokens).toBe(GROQ_MAX_OUTPUT_TOKENS);
     expect(body.stream).toBe(false);
     expect(body.n).toBe(1);
