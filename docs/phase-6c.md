@@ -2,7 +2,7 @@
 
 ## Durable checkpoint
 
-Updated: 2026-10-19 (Asia/Kolkata). Status: **PARTIAL — Groq Free Plan mode is now explicitly gated with a $0 application budget. Focused tests pass locally; exact-head CI and the production-container job are pending. Live AI remains disabled pending owner verification of the Groq organization plan and production Firebase runtime checks.**
+Updated: 2026-10-19 (Asia/Kolkata). Status: **PARTIAL — Groq Free Plan mode is explicitly gated with a $0 application budget. Exact-head Run 112 passed all three CI jobs on code commit `70b41963dc703b016b60112781d61324d0791c62`. Live AI remains disabled pending owner verification of the Groq organization plan and production Firebase runtime checks.**
 
 - Started from clean `main` / `origin/main` at
   `f252998ff2ffce209d28b8073b19b633bbac0e48`.
@@ -349,6 +349,7 @@ executable. The latter's directory must precede the global shim on PATH for Turb
 | `pnpm format:check`                                  | PASS                                                                                                                                                        |
 | `git diff --check`                                   | PASS                                                                                                                                                        |
 | Exact-head GitHub Actions run 111 (`7ebfaf4`)        | PASS: quality, production-container, Firebase-assistant                                                                                                     |
+| Exact-head GitHub Actions run 112 (`70b4196`)        | PASS: quality, production-container, Firebase-assistant on the Free Plan code head                                                                          |
 | Exact-head GitHub Actions run 108 (`31696c9`)        | PASS: quality, production-container, Firebase-assistant                                                                                                     |
 | Exact-head GitHub Actions run 109 (`c1222f2`)        | PASS: quality, production-container, Firebase-assistant                                                                                                     |
 | Live Groq / production Google sign-in                | NOT RUN; production UI is still baseline and all provider requests remain disabled                                                                          |
@@ -470,8 +471,11 @@ project before testing. Neither incident is represented as a passing run.
 - Run 111 passed Quality, Production-container and Firebase-assistant on exact
   head `7ebfaf439687edd415cd93cca8660dd3c04f0910`; see
   [GitHub Actions run 111](https://github.com/AtharvaisOp/Kagaz/actions/runs/39227167519).
-  It predates the Free Plan changes in this checkpoint, which require a new
-  exact-head CI run.
+  It predates the Free Plan changes; Run 112 below verifies those changes.
+- Free Plan implementation commit `70b41963dc703b016b60112781d61324d0791c62`
+  (`feat: enforce Groq Free Plan quotas`) passed exact-head GitHub Actions run
+  **112** across Quality, Production-container and Firebase-assistant; see
+  [GitHub Actions run 112](https://github.com/AtharvaisOp/Kagaz/actions/runs/39231574092).
 - Merge and Phase 6C production deployment: not performed. The existing Render
   deployment is healthy but still runs baseline `main`; the Admin credential path
   is configured, while an authenticated Admin/Firestore runtime check remains.
