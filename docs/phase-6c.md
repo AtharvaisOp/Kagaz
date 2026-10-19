@@ -2,7 +2,7 @@
 
 ## Durable checkpoint
 
-Updated: 2026-10-19 (Asia/Kolkata). Status: **PARTIAL — engineering and local verification complete; authoritative Linux CI pending; live AI disabled.**
+Updated: 2026-10-19 (Asia/Kolkata). Status: **PARTIAL — engineering, local verification and exact-head Linux CI complete; live AI disabled pending owner setup.**
 
 - Started from clean `main` / `origin/main` at
   `f252998ff2ffce209d28b8073b19b633bbac0e48`.
@@ -10,13 +10,15 @@ Updated: 2026-10-19 (Asia/Kolkata). Status: **PARTIAL — engineering and local 
 - GitHub integration found no open pull requests at initial inspection.
 - Read repository instructions, visual specification, README and Phase 6A/6B
   reports; retained existing retrieval and the sole approval-gated editor executor.
-- Firebase plugin is installed, but project listing and developer-knowledge
-  discovery returned HTTP 401. No active project, app ID or Firebase config was
-  present. Reauthentication has been requested. No cloud project was invented,
-  created, billed or modified.
-- Supplied Groq credential is in ignored `apps/api/.env` only, with generation and
-  budget approval disabled. No live provider call
-  has been made. Generation must remain disabled until the approved Firebase
+- Firebase reports the cached owner account, but project discovery returns HTTP
+  401 (`invalid authentication credentials`). A fresh supported reauthentication
+  session was issued; the owner chose to keep live spending disabled and did not
+  supply an authorization code or approved project ID. No cloud project was
+  invented, created, billed or modified.
+- Supplied Groq credential is in ignored `apps/api/.env` only. The owner has said
+  to keep live spend disabled; local activation flags remain false and the daily
+  budget remains zero. No live provider call has been made. Generation must
+  remain disabled until the approved Firebase
   project, Admin credentials, deployed deny-client rules, Google provider/domain,
   owner-approved budget and production verification are confirmed.
 
@@ -213,7 +215,17 @@ only a return-to-AI-tab marker is stored, never PDF content or a question.
 
 No Firebase production project, paid service, rule deployment or live Groq switch
 has been changed. Existing Vercel frontend and Render Docker API remain the
-deployment targets. Owner-dependent sequence:
+deployment targets. Read-only account inspection on 2026-10-19 found the Vercel
+`kagaz` project serving a READY production deployment from baseline `main`
+(`f252998ff2ffce209d28b8073b19b633bbac0e48`). Its production environment returns
+`VITE_API_URL=https://kagaz-api.onrender.com`; no `VITE_FIREBASE_*` variables were
+configured. Render has a live `kagaz-api` Docker service in Singapore, with
+`apps/api/Dockerfile` and `/health`; its latest live deployment is also baseline
+`main` at `f252998ff2ffce209d28b8073b19b633bbac0e48`. The available Render read
+does not disclose environment variable names, so production Firebase/Groq secret
+configuration remains unverified. No hosting settings were changed.
+
+Owner-dependent sequence:
 
 1. Complete Firebase plugin reauthentication and choose the approved Kagaz project.
    Inspect its billing, Firestore edition/location, IAM, Web App and current rules.
@@ -262,7 +274,7 @@ executable. The latter's directory must precede the global shim on PATH for Turb
 | `scripts/verify-phase6c.mjs`                    | PASS: 17 browser scenarios, zero page errors, five deterministic mock answer requests                                                                       |
 | `pnpm format:check`                             | PASS                                                                                                                                                        |
 | `git diff --check`                              | PASS                                                                                                                                                        |
-| Authoritative Linux CI / Phase 4/5 regressions  | Pending PR run                                                                                                                                              |
+| Exact-head GitHub Actions run 106 (`ef390b1`)   | PASS: quality, production-container, Firebase-assistant                                                                                                     |
 | Live Groq / production Google sign-in           | NOT RUN; required external configuration missing                                                                                                            |
 
 The final emulator/browser runner passed twice, including after a mobile checkbox
@@ -275,16 +287,16 @@ sign-out, Start Over and redaction never restore an old answer or protected text
 Network and browser-storage checks detect PDF bytes, unselected content and
 transcript persistence. These are emulator/mock results, not live Groq evidence.
 
-Linux run 105 passed the entire quality job: **341 API tests**, **881 web tests**
-and **3 sampler tests**, plus install, lint, typecheck, build, formatting and diff
-checks. Its Firebase job passed all **12 real emulator tests**, then exposed a
-popup harness readiness race: Firebase's emulator renders its Add Account button
-before its blocking cosmetic Material CDN script finishes and its inline event
-handlers register. The harness now waits for actual handler readiness and serves
-empty cosmetic CDN assets only to the loopback emulator widget. Firebase SDK,
-auth helpers, iframe messaging, token issuance and server verification remain
-real. The application code is unchanged. A final Linux run is still required.
-The corrected full `emulators:exec` runner passed locally with 12 emulator tests,
+Exact-head Linux run **106** passed all three jobs on
+`ef390b152cea07590b4021f1b9881c1d835ba68f`. Quality passed **881 web tests**,
+**341 API tests**, and **3 workspace sampler tests**, along with install, lint,
+typecheck, build, formatting and diff checks. The 12 emulator-only API tests are
+excluded from the ordinary API test command and passed in the Firebase job; that
+job also passed all **17 Phase 6C browser scenarios**. The production-container
+job passed its container, resource, Phase 4/5 and Phase 6A/6B regression checks.
+Run 106 is the final implementation-head CI evidence; its three job records are
+available at [GitHub Actions run 106](https://github.com/AtharvaisOp/Kagaz/actions/runs/39156337701).
+The corrected local `emulators:exec` runner also passed with 12 emulator tests,
 17 browser scenarios and zero errors; artifacts are under
 `C:\temp\KagazPhase6CPopupFix\phase6c`. Its emulators and test servers shut down
 cleanly after the run.
@@ -350,12 +362,13 @@ project before testing. Neither incident is represented as a passing run.
 - Initial Linux CI run 104 failed at dependency installation because the CLI's
   optional Linux `re2` build needed an explicit pnpm policy. It is now explicitly
   disabled: it is a hosting accelerator unused by these emulators. No application
-  check ran in that failed job. The next run must verify the final policy/head.
-- Follow-up commit: `85c7982113dab9176a23b3f90efac61d4fd3a379`
-  (`fix: declare optional Firebase CLI build policy`). Linux run 105 passed its
-  quality gate and all emulator unit tests; popup verification required the
-  scripts-only readiness fix described above. Container regressions were still
-  running when that fix was prepared.
+  check ran in that failed job. Run 106 later passed the corrected policy and
+  implementation head.
+- Follow-up commits: `85c7982113dab9176a23b3f90efac61d4fd3a379`
+  (`fix: declare optional Firebase CLI build policy`) and
+  `ef390b152cea07590b4021f1b9881c1d835ba68f`
+  (`test: wait for Firebase popup readiness`). The latter is the exact head
+  verified by successful run 106.
 - Merge and production deployment: not performed. Live activation depends on the
   explicit production checks above; missing Firebase access is not bypassed.
 - No credentials are tracked or put into the Vite bundle. The supplied key is
@@ -363,10 +376,12 @@ project before testing. Neither incident is represented as a passing run.
 
 ## Deviations and known limitations
 
-- Firebase environment discovery is blocked by plugin HTTP 401. Rechecking at
-  the owner's request returned the same error. A login URL and session-ID check
-  were provided; no authorization code or approved project ID has arrived.
-- The $3 amount remains proposed and unconfirmed in server configuration.
+- Firebase project discovery is blocked by HTTP 401 despite the cached owner
+  account. A fresh login URL and session-ID verification were provided; the
+  owner has not supplied the authorization code or approved project ID.
+- The owner explicitly chose to keep live spending disabled. The $3/day proposal
+  remains unapproved; local configuration remains at zero with both activation
+  flags false.
 - Real Google production-domain login, Admin/IAM access, deployed rules, model
   account access, Groq monthly spending limits/data controls, and one bounded live
   smoke request remain owner-dependent. No live availability is claimed.
@@ -414,8 +429,8 @@ project before testing. Neither incident is represented as a passing run.
 - [x] Server usage display, UTC/local reset, unavailable/loading/cancel/error states.
 - [x] Emulator/mock verification script and Linux CI integration without paid keys.
 - [x] Final expanded emulator and automated browser suite green.
-- [ ] Final formatting and exact-head authoritative Linux CI green, retaining all
-      Phase 4, 5, 6A and 6B regressions.
+- [x] Final formatting and exact-head authoritative Linux CI green, retaining all
+      Phase 4, 5, 6A and 6B regressions (GitHub Actions run 106).
 - [ ] Approved Firebase project/Web App/provider/domain/IAM/billing inspected.
 - [ ] Owner-reviewed rules deployed to the approved Firestore database.
 - [ ] Confirmed owner-approved daily budget active in production.
@@ -424,14 +439,14 @@ project before testing. Neither incident is represented as a passing run.
 - [ ] One bounded authenticated live request with actual per-request passage approval.
 - [ ] Exact-final-main CI green and Vercel/Render production deployments verified.
 
-## Next exact action / Phase 6D handoff
+## Next release gate
 
-Finish final formatting and exact-head Linux CI, then preserve the reviewed
-implementation on the phase branch. Complete
-Firebase-dependent discovery only after valid authentication and owner project
-selection; do not enable live generation to make a demo pass. The next agent must
-follow the production sequence above and update this checkpoint with real
-evidence. Phase 6D scope is not implemented or inferred here.
+The reviewed implementation remains on the phase branch and PR #14 stays draft.
+Continue Firebase-dependent discovery only after valid authentication and owner
+selection of the approved project. The owner has directed that live spending stay
+disabled, so do not configure activation flags or send a live Groq request. Update
+this checkpoint with verified production evidence if the owner later authorizes
+the remaining release gates. No Phase 6D work is included.
 
 Keep Phase 6A's executor as the sole assistant mutation path. The chat answer type
 cannot carry commands. Preserve the context-sharing contract, session epoch and

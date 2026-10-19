@@ -608,7 +608,7 @@ evidence, resource measurements and remaining isolation limits.
 - Phase 5F — [final production-readiness audit](docs/phase-5f.md) (engineering and CI gates passed; anonymous live PDF verification blocked by deployment protection)
 - Phase 6A — [local command assistant](docs/phase-6a.md) (approval-gated browser-local editor actions)
 - Phase 6B — [local PDF retrieval](docs/phase-6b.md) (complete)
-- Phase 6C — [Google authentication and Groq chat](docs/phase-6c.md) (engineering verification in progress; live generation disabled pending owner setup)
+- Phase 6C — [Google authentication and Groq chat](docs/phase-6c.md) (engineering and exact-head Linux CI complete; live generation disabled pending owner setup)
 
 The browser-local architecture remains the default for operations that can be
 performed safely on the device.
