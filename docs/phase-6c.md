@@ -2,22 +2,24 @@
 
 ## Durable checkpoint
 
-Updated: 2026-10-19 (Asia/Kolkata). Status: **PARTIAL — engineering, local verification and exact-head Linux CI complete; live AI disabled pending owner setup.**
+Updated: 2026-10-19 (Asia/Kolkata). Status: **PARTIAL — engineering and exact-head Linux CI complete; live AI disabled pending owner setup.**
 
 - Started from clean `main` / `origin/main` at
   `f252998ff2ffce209d28b8073b19b633bbac0e48`.
 - Working branch: `codex/phase-6c-firebase-groq-chat`.
-- GitHub integration found no open pull requests at initial inspection.
+- Existing PR [#14](https://github.com/AtharvaisOp/Kagaz/pull/14) is open and draft.
 - Read repository instructions, visual specification, README and Phase 6A/6B
   reports; retained existing retrieval and the sole approval-gated editor executor.
-- Firebase reports the cached owner account, but project discovery returns HTTP
-  401 (`invalid authentication credentials`). A fresh supported reauthentication
-  session was issued; the owner chose to keep live spending disabled and did not
-  supply an authorization code or approved project ID. No cloud project was
-  invented, created, billed or modified.
-- Supplied Groq credential is in ignored `apps/api/.env` only. The owner has said
-  to keep live spend disabled; local activation flags remain false and the daily
-  budget remains zero. No live provider call has been made. Generation must
+- Firebase reports the cached owner account, but has no active project and project
+  discovery returns HTTP 401 (`invalid authentication credentials`). The current
+  connection must be refreshed through the supported Firebase sign-in flow; the
+  approved project ID is still missing. No cloud project was invented, created,
+  billed or modified.
+- The previously exposed Groq credential is compromised. Its value has been
+  removed from the ignored local `apps/api/.env`; revoke it with Groq and configure
+  a replacement directly in Render's secure environment settings. Local activation
+  flags remain false and the daily budget remains zero. No live provider call has
+  been made. Generation must
   remain disabled until the approved Firebase
   project, Admin credentials, deployed deny-client rules, Google provider/domain,
   owner-approved budget and production verification are confirmed.
@@ -274,7 +276,7 @@ executable. The latter's directory must precede the global shim on PATH for Turb
 | `scripts/verify-phase6c.mjs`                    | PASS: 17 browser scenarios, zero page errors, five deterministic mock answer requests                                                                       |
 | `pnpm format:check`                             | PASS                                                                                                                                                        |
 | `git diff --check`                              | PASS                                                                                                                                                        |
-| Exact-head GitHub Actions run 106 (`ef390b1`)   | PASS: quality, production-container, Firebase-assistant                                                                                                     |
+| Exact-head GitHub Actions run 107 (`d9ade01`)   | PASS: quality, production-container, Firebase-assistant                                                                                                     |
 | Live Groq / production Google sign-in           | NOT RUN; required external configuration missing                                                                                                            |
 
 The final emulator/browser runner passed twice, including after a mobile checkbox
@@ -296,6 +298,10 @@ job also passed all **17 Phase 6C browser scenarios**. The production-container
 job passed its container, resource, Phase 4/5 and Phase 6A/6B regression checks.
 Run 106 is the final implementation-head CI evidence; its three job records are
 available at [GitHub Actions run 106](https://github.com/AtharvaisOp/Kagaz/actions/runs/39156337701).
+The later documentation checkpoint at branch head
+`d9ade0187aee2d563f9247fedea758284144664b` was also verified by exact-head Linux
+run **107**; quality, production-container and Firebase-assistant all passed. Its
+three job records are available at [GitHub Actions run 107](https://github.com/AtharvaisOp/Kagaz/actions/runs/39203428122).
 The corrected local `emulators:exec` runner also passed with 12 emulator tests,
 17 browser scenarios and zero errors; artifacts are under
 `C:\temp\KagazPhase6CPopupFix\phase6c`. Its emulators and test servers shut down
@@ -369,19 +375,26 @@ project before testing. Neither incident is represented as a passing run.
   `ef390b152cea07590b4021f1b9881c1d835ba68f`
   (`test: wait for Firebase popup readiness`). The latter is the exact head
   verified by successful run 106.
+- Verified checkpoint commit: `d9ade0187aee2d563f9247fedea758284144664b`
+  (`docs: record Phase 6C CI and release blockers`), verified by successful
+  exact-head run 107. This checkpoint records the current unresolved production
+  access and credential-rotation gates.
 - Merge and production deployment: not performed. Live activation depends on the
   explicit production checks above; missing Firebase access is not bypassed.
-- No credentials are tracked or put into the Vite bundle. The supplied key is
-  local server configuration only, with both activation flags false.
+- No credentials are tracked or put into the Vite bundle. The compromised local
+  Groq key entry has been cleared; no replacement is available to the application.
+  Both activation flags are false and the daily budget remains zero.
 
 ## Deviations and known limitations
 
 - Firebase project discovery is blocked by HTTP 401 despite the cached owner
-  account. A fresh login URL and session-ID verification were provided; the
-  owner has not supplied the authorization code or approved project ID.
-- The owner explicitly chose to keep live spending disabled. The $3/day proposal
-  remains unapproved; local configuration remains at zero with both activation
-  flags false.
+  account, and no active project is selected. The owner must refresh the Firebase
+  plugin connection through its supported sign-in flow and provide the approved
+  Kagaz Firebase project ID. Do not reuse prior authorization links or codes.
+- The owner explicitly chose to keep live spending disabled. The proposed $3/day
+  budget is not activated; local configuration remains at zero with both
+  activation flags false. The exposed Groq key must be revoked and replaced
+  directly in Render before any paid request.
 - Real Google production-domain login, Admin/IAM access, deployed rules, model
   account access, Groq monthly spending limits/data controls, and one bounded live
   smoke request remain owner-dependent. No live availability is claimed.
@@ -430,7 +443,7 @@ project before testing. Neither incident is represented as a passing run.
 - [x] Emulator/mock verification script and Linux CI integration without paid keys.
 - [x] Final expanded emulator and automated browser suite green.
 - [x] Final formatting and exact-head authoritative Linux CI green, retaining all
-      Phase 4, 5, 6A and 6B regressions (GitHub Actions run 106).
+      Phase 4, 5, 6A and 6B regressions (GitHub Actions runs 106 and 107).
 - [ ] Approved Firebase project/Web App/provider/domain/IAM/billing inspected.
 - [ ] Owner-reviewed rules deployed to the approved Firestore database.
 - [ ] Confirmed owner-approved daily budget active in production.
@@ -442,11 +455,12 @@ project before testing. Neither incident is represented as a passing run.
 ## Next release gate
 
 The reviewed implementation remains on the phase branch and PR #14 stays draft.
-Continue Firebase-dependent discovery only after valid authentication and owner
-selection of the approved project. The owner has directed that live spending stay
-disabled, so do not configure activation flags or send a live Groq request. Update
-this checkpoint with verified production evidence if the owner later authorizes
-the remaining release gates. No Phase 6D work is included.
+To resume production setup, refresh Firebase plugin authentication through its
+supported sign-in flow and provide the approved Firebase project ID. Revoke the
+exposed Groq credential, then have its replacement configured directly through
+Render's secure environment settings. The owner has directed that live spending
+stay disabled, so do not configure activation flags or send a live Groq request.
+No Phase 6D work is included.
 
 Keep Phase 6A's executor as the sole assistant mutation path. The chat answer type
 cannot carry commands. Preserve the context-sharing contract, session epoch and
