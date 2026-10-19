@@ -7,6 +7,7 @@ export default defineConfig({
   server: {
     proxy: {
       '/tools': { target: 'http://localhost:4000', changeOrigin: false },
+      '/assistant': { target: 'http://localhost:4000', changeOrigin: false },
     },
   },
   build: {

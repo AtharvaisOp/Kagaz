@@ -499,5 +499,15 @@ export function useLocalPdfSearch({
     clear,
     visibleResults,
     pendingRedactionPageNumbers,
+    blockedSourcePages,
+    // A review belongs to one precise local retrieval/workspace snapshot.
+    // This includes form text only in memory; it is never sent as metadata.
+    contextRevision: JSON.stringify([
+      structureSignature,
+      formSignature,
+      [...blockedSourcePages].sort(),
+      state.summary?.generation ?? 0,
+      state.results.map((result) => [result.id, result.excerpt]),
+    ]),
   };
 }

@@ -21,7 +21,8 @@
     "busboy": "1.6.0",
     "cors": "^2.8.5",
     "dotenv": "^17.2.2",
-    "express": "^5.2.1"
+    "express": "^5.2.1",
+    "firebase-admin": "14.5.0"
   },
   "devDependencies": {
     "@types/busboy": "1.5.4",

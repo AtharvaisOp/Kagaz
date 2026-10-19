@@ -23,6 +23,8 @@ import { createAssistantWorkspaceSnapshot } from './snapshot';
 import { normalizeSearchText, RETRIEVAL_LIMITS } from './retrieval/index';
 import type { RetrievalResult } from './retrieval/index';
 import { useLocalPdfSearch } from './retrieval/useLocalPdfSearch';
+import { AssistantChatPanel } from './chat/AssistantChatPanel';
+import { consumeAiReturn, hasPendingAiReturn } from './chat/firebaseAuth';
 
 import type { AssistantEditorPorts } from './executeOperation';
 import type {
@@ -179,8 +181,8 @@ function AssistantSearchPanel({
           watermarks are excluded. Scanned pages are not OCR’d.
         </p>
         <p>
-          Results are evidence from matching words and phrases. A generative
-          model is not connected for broader reasoning.
+          Results are evidence from matching words and phrases. AI Chat offers
+          separate, login-gated generation after explicit passage review.
         </p>
       </div>
 
@@ -445,7 +447,12 @@ export function AssistantDialog({
     createBrowserIdFactory('assistant-watermark'),
   );
   const [prompt, setPrompt] = useState('');
-  const [mode, setMode] = useState<'edit' | 'ask'>('edit');
+  const [mode, setMode] = useState<'edit' | 'ask' | 'chat'>(() =>
+    hasPendingAiReturn() ? 'chat' : 'edit',
+  );
+  useEffect(() => {
+    consumeAiReturn();
+  }, []);
   const [planned, setPlanned] = useState<PlannedAction | null>(null);
   const [status, setStatus] = useState<
     'idle' | 'planning' | 'applying' | 'applied' | 'cancelled'
@@ -654,17 +661,17 @@ export function AssistantDialog({
     >
       <div id="assistant-privacy" className="assistant-privacy">
         <p>
-          <strong>Browser-local assistant</strong>
+          <strong>Local editing and search · optional AI Chat</strong>
         </p>
         <p>
           Editing commands use the offline interpreter. Ask PDF extracts and
-          searches selectable source text in this browser. PDF bytes, extracted
-          text, committed form values, filenames and annotations are not sent
-          anywhere.
+          searches selectable source text in this browser, without an account.
+          AI Chat requires Google sign-in and shares only a question and PDF
+          passages you explicitly select and approve for each request.
         </p>
         <p className="assistant-remote-status">
-          Remote generative answers are disabled. Search results are grounded
-          passages, not model-generated conclusions.
+          Original PDF files stay in your browser. AI Chat sends approved text
+          through Kagaz’s server to Groq; it does not execute editor commands.
         </p>
       </div>
 
@@ -688,6 +695,14 @@ export function AssistantDialog({
           onClick={() => setMode('ask')}
         >
           Ask PDF
+        </button>
+        <button
+          className={mode === 'chat' ? 'is-active' : ''}
+          type="button"
+          aria-pressed={mode === 'chat'}
+          onClick={() => setMode('chat')}
+        >
+          AI Chat
         </button>
       </div>
 
@@ -852,7 +867,7 @@ export function AssistantDialog({
             </section>
           ) : null}
         </>
-      ) : (
+      ) : mode === 'ask' ? (
         <AssistantSearchPanel
           pages={pages}
           state={localSearch.state}
@@ -860,6 +875,14 @@ export function AssistantDialog({
           pendingRedactionPageNumbers={localSearch.pendingRedactionPageNumbers}
           onSearch={(query) => void localSearch.search(query)}
           onCancel={localSearch.cancel}
+          onNavigate={(pageId) => {
+            if (scrollToPage(pageId)) onClose();
+          }}
+        />
+      ) : (
+        <AssistantChatPanel
+          pages={pages}
+          search={localSearch}
           onNavigate={(pageId) => {
             if (scrollToPage(pageId)) onClose();
           }}

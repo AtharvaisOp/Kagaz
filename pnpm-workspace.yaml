@@ -3,6 +3,10 @@ packages:
   - packages/*
 
 allowBuilds:
+  '@firebase/util': false
   esbuild: true
+  protobufjs: false
+  # Optional Firebase CLI hosting accelerator; unused by Auth/Firestore emulators.
+  re2: false
 
 injectWorkspacePackages: true

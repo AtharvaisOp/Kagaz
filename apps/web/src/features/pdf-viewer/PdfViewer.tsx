@@ -22,6 +22,7 @@ import { RedactionSummary } from '../pdf-redactions/components/RedactionSummary'
 import type { PdfWatermarkController } from '../pdf-watermarks/hooks/usePdfWatermarks';
 import { WatermarkDialog } from '../pdf-watermarks/components/WatermarkDialog';
 import { AssistantDialog } from '../pdf-assistant/AssistantDialog';
+import { hasPendingAiReturn } from '../pdf-assistant/chat/firebaseAuth';
 import {
   watermarkAppliesToPage,
   targetWatermarkPageIds,
@@ -148,7 +149,7 @@ export function PdfViewer({
     setRedactionActive,
   ]);
   const [mobilePageManagerOpen, setMobilePageManagerOpen] = useState(false);
-  const [assistantOpen, setAssistantOpen] = useState(false);
+  const [assistantOpen, setAssistantOpen] = useState(hasPendingAiReturn);
   const assistantTriggerRef = useRef<HTMLButtonElement>(null);
   const retrievalResetRef = useRef<(() => void) | null>(null);
   const startOver = useCallback(() => {
