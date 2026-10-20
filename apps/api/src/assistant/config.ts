@@ -46,8 +46,9 @@ export function readAssistantConfig(
         'AI Chat is disabled until the owner confirms the Groq organization is on the Free Plan.';
     else if (!zeroFreeBudget)
       reason = 'Groq Free Plan mode requires a zero-dollar application budget.';
-    else if (environment.ASSISTANT_BUDGET_CONFIRMED === 'true')
-      reason = 'Paid budget confirmation cannot activate Groq Free Plan mode.';
+    else if (environment.ASSISTANT_BUDGET_CONFIRMED !== 'false')
+      reason =
+        'Groq Free Plan mode requires paid budget confirmation to be explicitly false.';
   } else if (
     environment.ASSISTANT_BUDGET_CONFIRMED !== 'true' ||
     !validPaidBudget

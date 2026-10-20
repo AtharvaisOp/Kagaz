@@ -144,6 +144,8 @@ describe('fail-closed live configuration', () => {
       { ASSISTANT_DAILY_BUDGET_USD: undefined },
       { ASSISTANT_DAILY_BUDGET_USD: '0.01' },
       { ASSISTANT_BUDGET_CONFIRMED: 'true' },
+      { ASSISTANT_BUDGET_CONFIRMED: undefined },
+      { ASSISTANT_BUDGET_CONFIRMED: 'unknown' },
     ])
       expect(readAssistantConfig({ ...free, ...overrides }).enabled).toBe(
         false,
