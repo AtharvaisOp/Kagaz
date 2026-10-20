@@ -2,7 +2,7 @@
 
 ## Durable checkpoint
 
-Updated: 2026-10-19 (Asia/Kolkata). Status: **PARTIAL — Phase 6C is merged and deployed disabled-by-default on main SHA `d8bcd88e9605896b72cea8bc812756d88fc99f91`. Exact-main Run 116 passed all three jobs. Production Google sign-in, Firebase ID-token verification, Firestore quota reads, anonymous PDF workflows, and export passed. The owner has not authorized Free Plan activation or a live Groq request; Cloud Console access still prevents independently confirming the previously exposed Firebase Admin key's revocation and the service account's exact IAM role.**
+Updated: 2026-10-20 (Asia/Calcutta). Status: **PARTIAL — Phase 6C is on current `main` SHA `0201ecacb62e9ba62b7ffde825f33593b26d4238`; exact-main Run 119 passed all three jobs and Vercel/Render production deployments are live on that SHA. The owner confirmed the old Firebase Admin key was revoked, the rotated credential is active, Groq is Free Plan with Zero Data Retention enabled, and authorized one synthetic production request. Sign-in and passage review succeeded, but the one request returned `provider-unavailable`; the daily allowance now shows 4 of 5. Generation has been disabled again. Provider receipt and token usage were not independently verifiable, and no further provider request is authorized.**
 
 - Started from clean `main` / `origin/main` at
   `f252998ff2ffce209d28b8073b19b633bbac0e48`.
@@ -642,10 +642,11 @@ Run 116 passed all three required jobs.
 
 Keep `ASSISTANT_ENABLED=false`, `ASSISTANT_PROVIDER_MODE=disabled`,
 `ASSISTANT_FREE_PLAN_CONFIRMED=false`, `ASSISTANT_BUDGET_CONFIRMED=false`, and
-`ASSISTANT_DAILY_BUDGET_USD=0`. The owner has not authorized the first live Groq
-request or Free Plan activation. No paid plan, payment method, or Phase 6D work
-is included. Do not grant additional IAM roles without a concrete permission
-failure and owner review.
+`ASSISTANT_DAILY_BUDGET_USD=0`. The owner authorized exactly one synthetic
+production request; that request failed with `provider-unavailable`. Do not
+retry or make another provider request without fresh explicit approval. No paid
+plan, payment method, or Phase 6D work is included. Do not grant additional IAM
+roles without a concrete permission failure and owner review.
 
 Keep Phase 6A's executor as the sole assistant mutation path. The chat answer type
 cannot carry commands. Preserve the context-sharing contract, session epoch and
@@ -653,3 +654,121 @@ post-token-refresh review checks. Never replace Firestore authority with in-memo
 counters, call Groq inside a transaction, add silent retries, delete replay
 tombstones casually, upload PDFs for AI, or persist conversations without a new
 explicit product/privacy decision.
+
+## Prior activation checkpoint — 2026-10-19 (superseded)
+
+- Exact-main GitHub Actions Run 117 passed Quality, Production-container, and
+  Firebase-assistant on `da7a178ea46bb34c3141345a2b8b5aad08b542be`.
+- The owner confirmed the previously exposed Firebase Admin key was revoked or
+  deleted. The rotated Render Secret File and `GOOGLE_APPLICATION_CREDENTIALS`
+  path continue to provide working Admin authentication and Firestore access;
+  the exact service-account IAM grants remain inaccessible to this account.
+- The owner authorized Free Plan activation and exactly one synthetic test. Render
+  temporarily served activation deployment `dep-dbb5pfo473hc73cnueu0` on the
+  current main SHA. Google sign-in redirected back to Kagaz, but this task's
+  in-app browser did not retain a Firebase session, so the request never reached
+  passage review or consent. No `/assistant/answer` request appeared in Render
+  request logs from 18:09:46Z to 18:18:47Z, and this task made zero Groq calls.
+- Generation was restored to the disabled configuration. Render deployment
+  `dep-dbb5tl67bikc73d6fva0` is live on the same SHA with
+  `ASSISTANT_ENABLED=false`, `ASSISTANT_PROVIDER_MODE=disabled`,
+  `ASSISTANT_FREE_PLAN_CONFIRMED=false`,
+  `ASSISTANT_BUDGET_CONFIRMED=false`, and
+  `ASSISTANT_DAILY_BUDGET_USD=0`. `/health` returned HTTP 200 and unauthenticated
+  `GET /assistant/usage` returned HTTP 401 after the redeploy.
+- The owner then asked to connect Chrome. A fresh CUA inventory still exposed
+  only the in-app browser and MCP Apps; opening Chrome returned “Browser is not
+  available,” and Windows Computer Use listed only the Codex window. No browser
+  authentication was automated. The next turn connected an authenticated Kagaz
+  session and ran the single approved smoke test; its outcome is recorded below.
+
+## Latest activation outcome — 2026-10-20
+
+- Exact-main GitHub Actions Run 119 (`39376245332`) passed `quality`,
+  `firebase-assistant`, and `production-container` on
+  `0201ecacb62e9ba62b7ffde825f33593b26d4238`. The earlier emulator concurrency
+  timeout passed on a failed-job-only rerun; no full-suite rerun was needed.
+- Vercel production deployment `dpl_DsfMmdgBd6ShScjpKY1CUiTMuF5m` is READY on
+  that SHA and aliases `kagaz-personal.vercel.app`. Render deployment
+  `dep-dbbgip67bikc738gdgc0` is live on the same SHA after restoring the safe
+  disabled configuration.
+- The owner confirmed the exposed Firebase Admin key was revoked and the
+  rotated Render Secret File credential is active. Production token verification
+  and Firestore usage reads remain verified. The precise service-account IAM
+  grants were not independently inspectable; no additional roles were granted.
+- The owner confirmed Groq Free Plan, no developer billing, model permission for
+  `openai/gpt-oss-20b`, and Zero Data Retention. Render settings were temporarily
+  changed to `ASSISTANT_ENABLED=true`, `ASSISTANT_PROVIDER_MODE=groq-free`,
+  `ASSISTANT_FREE_PLAN_CONFIRMED=true`, `ASSISTANT_BUDGET_CONFIRMED=false`, and
+  `ASSISTANT_DAILY_BUDGET_USD=0`, only after CI passed and under explicit owner
+  authorization. They were then restored to the safe disabled values above.
+- Google sign-in completed. Local retrieval found two synthetic matches; only
+  the question “According to the passage, when is the invoice payable?” and the
+  selected 143-character page-3 synthetic passage were reviewed and submitted.
+  No other passage, filename, PDF bytes, or chat history was selected for remote
+  sharing. The UI returned `provider-unavailable`; it did not display an answer
+  or citations. The account allowance moved from 5/5 to 4/5. The UI later showed
+  AI Chat disabled and no active generation. Because provider usage was unknown,
+  the request is conservatively accounted; no retry or second request was made.
+- One application provider dispatch was attempted. The adapter performs one
+  fixed Groq fetch with no retries or fallback, but the provider's receipt,
+  HTTP status and token usage could not be independently confirmed from the
+  available Render logs. Provider error bodies are intentionally not read or
+  logged. The app recorded no paid-mode cost; actual provider-side usage is
+  unverified. No evidence of paid inference or a payment method was introduced.
+- The approved smoke test failed; generation was disabled immediately afterward.
+  The authenticated usage UI shows 4 of 5 daily attempts remaining while
+  disabled. Anonymous PDF editing and browser-local Ask PDF remain available.
+  The PDF was not uploaded and the chat is not persisted.
+- Next: inspect Groq's account-side request/usage record without sending another
+  request, diagnose the failure, then obtain fresh explicit approval before any
+  additional live provider request. Keep the production assistant disabled in
+  the meantime.
+
+## Failure diagnosis and privacy-safe telemetry — 2026-10-20
+
+- No additional Groq or authenticated provider requests were made. The only
+  production generation attempt remains the previously authorized synthetic
+  attempt. Render request and application log queries for the relevant period
+  returned no matching records. The Groq Console request/usage record and its
+  HTTP status, token usage, and provider-side charge were not available for this
+  inspection.
+- The reported `provider-unavailable` value cannot identify the cause. The old
+  adapter mapped other provider HTTP statuses and fetch/network exceptions to
+  that same client error. The service could also map a post-response usage-read
+  failure to `provider-unavailable`. Firestore's 5-to-4 daily allowance change
+  confirms conservative attempt accounting, not provider receipt or billing.
+- Offline comparison with Groq's current official documentation found the
+  fixed Chat Completions endpoint, `openai/gpt-oss-20b`, strict JSON Schema,
+  `reasoning_effort=low`, `include_reasoning=false`, `service_tier=on_demand`,
+  and `max_completion_tokens` are documented request features. GPT-OSS 20B is
+  listed as supporting strict structured output; the docs show `include_reasoning`
+  alongside `reasoning_effort` for GPT-OSS. No protocol incompatibility is
+  established. The bounded 1,024 completion-token limit is below the model's
+  documented maximum output limit. References:
+  [Chat Completions API](https://console.groq.com/docs/api-reference),
+  [Structured Outputs](https://console.groq.com/docs/structured-outputs),
+  [Reasoning](https://console.groq.com/docs/reasoning),
+  [Service Tiers](https://console.groq.com/docs/service-tiers), and
+  [GPT-OSS 20B](https://console.groq.com/docs/model/openai/gpt-oss-20b).
+- A focused diagnostics change has been implemented on
+  `codex/phase-6c-provider-diagnostics`, based on exact production `main` SHA
+  `0201ecacb62e9ba62b7ffde825f33593b26d4238`. Failure logs carry only fixed
+  stage/category labels, a validated numeric HTTP status or null, whether an
+  HTTP response was received, and a bounded duration. Provider bodies, request
+  data, identity, credentials, headers, and response text are excluded. The
+  client errors, reservations, settlement rules, retries, and provider choices
+  are unchanged.
+- Mock-only verification: focused assistant adapter/service/config tests pass (117
+  tests), API typecheck passes, and API lint passes. No live provider request was
+  used. Full CI and deployment remain pending; the deployed API is still the
+  verified disabled deployment on `0201ecacb62e9ba62b7ffde825f33593b26d4238`.
+- Production remains disabled with the confirmed safe values:
+  `ASSISTANT_ENABLED=false`, `ASSISTANT_PROVIDER_MODE=disabled`,
+  `ASSISTANT_FREE_PLAN_CONFIRMED=false`,
+  `ASSISTANT_BUDGET_CONFIRMED=false`, and
+  `ASSISTANT_DAILY_BUDGET_USD=0`. The tested account remains at four of five
+  daily attempts. Do not modify that usage or send another provider request.
+- Next: inspect the original attempt's Groq Console entry if available, using
+  status-only metadata. Keep the provider disabled. A future live retry would
+  require separate explicit approval after any diagnostic release and review.

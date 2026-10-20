@@ -20,6 +20,7 @@ import {
   validateGroqAnswer,
 } from './groq.js';
 import { GROQ_FREE_PLAN_LIMITS } from './freePlan.js';
+import type { AssistantDiagnostic } from './diagnostics.js';
 import {
   GROUNDING_CASES,
   KNOWN_PDF_PASSAGES,
@@ -198,14 +199,16 @@ describe('single-attempt bounded Groq boundary', () => {
   ])(
     'handles HTTP $status once without reflecting provider error bodies',
     async ({ status, code, billing }) => {
+      const diagnostics: AssistantDiagnostic[] = [];
       const fetch = vi
         .fn<typeof globalThis.fetch>()
         .mockResolvedValue(
-          new Response('private PDF content and secret', { status }),
+          new Response('private provider body and question secret', { status }),
         );
       const result = new GroqProvider({
         apiKey: 'synthetic-server-secret',
         fetch,
+        diagnosticSink: (diagnostic) => diagnostics.push(diagnostic),
       }).generate(context, new AbortController().signal);
       await expect(result).rejects.toMatchObject({ code, billing });
       await expect(result).rejects.not.toHaveProperty(
@@ -213,16 +216,42 @@ describe('single-attempt bounded Groq boundary', () => {
         expect.stringContaining('private PDF content'),
       );
       expect(fetch).toHaveBeenCalledTimes(1);
+      expect(diagnostics).toHaveLength(1);
+      expect(diagnostics[0]).toMatchObject({
+        event: 'assistant.provider.failure',
+        failureStage: 'provider-http-response',
+        errorCategory:
+          status === 401
+            ? 'provider-auth'
+            : status === 429
+              ? 'provider-rate-limit'
+              : 'provider-http-error',
+        providerHttpStatus: status,
+        responseReceived: true,
+      });
+      expect(diagnostics[0]?.durationMs).toBeGreaterThanOrEqual(0);
+      expect(diagnostics[0]?.durationMs).toBeLessThanOrEqual(31_000);
+      const diagnosticText = JSON.stringify(diagnostics[0]);
+      for (const privateValue of [
+        'synthetic-server-secret',
+        'private provider body',
+        'question secret',
+        context.question,
+        context.passages[0]!.text,
+      ])
+        expect(diagnosticText).not.toContain(privateValue);
     },
   );
 
   it('does not expose a network error or attempt an automatic retry', async () => {
+    const diagnostics: AssistantDiagnostic[] = [];
     const fetch = vi
       .fn<typeof globalThis.fetch>()
       .mockRejectedValue(new Error('secret prompt reflected by upstream'));
     const result = new GroqProvider({
       apiKey: 'synthetic-server-secret',
       fetch,
+      diagnosticSink: (diagnostic) => diagnostics.push(diagnostic),
     }).generate(context, new AbortController().signal);
     await expect(result).rejects.toMatchObject({
       code: 'provider-unavailable',
@@ -233,6 +262,47 @@ describe('single-attempt bounded Groq boundary', () => {
       expect.stringContaining('secret prompt'),
     );
     expect(fetch).toHaveBeenCalledTimes(1);
+    expect(diagnostics).toEqual([
+      expect.objectContaining({
+        event: 'assistant.provider.failure',
+        failureStage: 'provider-fetch',
+        errorCategory: 'transport-error',
+        providerHttpStatus: null,
+        responseReceived: false,
+      }),
+    ]);
+    const diagnosticText = JSON.stringify(diagnostics[0]);
+    expect(diagnosticText).not.toContain('synthetic-server-secret');
+    expect(diagnosticText).not.toContain('secret prompt reflected by upstream');
+    expect(diagnosticText).not.toContain(context.question);
+    expect(diagnosticText).not.toContain(context.passages[0]!.text);
+  });
+
+  it('classifies a received but malformed response without logging its body', async () => {
+    const diagnostics: AssistantDiagnostic[] = [];
+    const privateResponse = 'private response with echoed passage content';
+    const fetch = vi
+      .fn<typeof globalThis.fetch>()
+      .mockResolvedValue(new Response(JSON.stringify({ privateResponse })));
+    await expect(
+      new GroqProvider({
+        apiKey: 'synthetic-server-secret',
+        fetch,
+        diagnosticSink: (diagnostic) => diagnostics.push(diagnostic),
+      }).generate(context, new AbortController().signal),
+    ).rejects.toMatchObject({ code: 'provider-invalid-response' });
+    expect(diagnostics).toEqual([
+      expect.objectContaining({
+        event: 'assistant.provider.failure',
+        failureStage: 'provider-response-validation',
+        errorCategory: 'invalid-response',
+        providerHttpStatus: 200,
+        responseReceived: true,
+      }),
+    ]);
+    const diagnosticText = JSON.stringify(diagnostics[0]);
+    expect(diagnosticText).not.toContain(privateResponse);
+    expect(diagnosticText).not.toContain('synthetic-server-secret');
   });
 
   it('cancels before transmission without consuming a provider attempt', async () => {
@@ -250,10 +320,12 @@ describe('single-attempt bounded Groq boundary', () => {
       () => new Promise(() => undefined),
     );
     const controller = new AbortController();
-    const result = new GroqProvider({ apiKey: 'synthetic', fetch }).generate(
-      context,
-      controller.signal,
-    );
+    const diagnostics: AssistantDiagnostic[] = [];
+    const result = new GroqProvider({
+      apiKey: 'synthetic',
+      fetch,
+      diagnosticSink: (diagnostic) => diagnostics.push(diagnostic),
+    }).generate(context, controller.signal);
     controller.abort();
     await expect(result).rejects.toMatchObject({
       code: 'cancelled',
@@ -261,10 +333,18 @@ describe('single-attempt bounded Groq boundary', () => {
     });
     expect(fetch).toHaveBeenCalledTimes(1);
     expect(fetch.mock.calls[0]?.[1]?.signal?.aborted).toBe(true);
+    expect(diagnostics).toEqual([
+      expect.objectContaining({
+        errorCategory: 'cancelled',
+        providerHttpStatus: null,
+        responseReceived: false,
+      }),
+    ]);
   });
 
   it('enforces the deadline even if the fetch implementation ignores cancellation', async () => {
     vi.useFakeTimers();
+    const diagnostics: AssistantDiagnostic[] = [];
     const fetch = vi.fn<typeof globalThis.fetch>(
       () => new Promise(() => undefined),
     );
@@ -272,6 +352,7 @@ describe('single-attempt bounded Groq boundary', () => {
       apiKey: 'synthetic',
       fetch,
       timeoutMs: 999_999,
+      diagnosticSink: (diagnostic) => diagnostics.push(diagnostic),
     }).generate(context, new AbortController().signal);
     const rejected = expect(result).rejects.toMatchObject({
       code: 'provider-timeout',
@@ -282,9 +363,18 @@ describe('single-attempt bounded Groq boundary', () => {
     expect(fetch).toHaveBeenCalledTimes(1);
     expect(fetch.mock.calls[0]?.[1]?.signal?.aborted).toBe(true);
     expect(vi.getTimerCount()).toBe(0);
+    expect(diagnostics).toEqual([
+      expect.objectContaining({
+        failureStage: 'provider-fetch',
+        errorCategory: 'timeout',
+        providerHttpStatus: null,
+        responseReceived: false,
+      }),
+    ]);
   });
 
   it('cancels a response body stalled after headers', async () => {
+    const diagnostics: AssistantDiagnostic[] = [];
     const cancel = vi.fn();
     const response = new Response(
       new ReadableStream({
@@ -296,14 +386,23 @@ describe('single-attempt bounded Groq boundary', () => {
     );
     const fetch = vi.fn<typeof globalThis.fetch>().mockResolvedValue(response);
     const controller = new AbortController();
-    const result = new GroqProvider({ apiKey: 'synthetic', fetch }).generate(
-      context,
-      controller.signal,
-    );
+    const result = new GroqProvider({
+      apiKey: 'synthetic',
+      fetch,
+      diagnosticSink: (diagnostic) => diagnostics.push(diagnostic),
+    }).generate(context, controller.signal);
     await Promise.resolve();
     controller.abort();
     await expect(result).rejects.toMatchObject({ code: 'cancelled' });
     expect(cancel).toHaveBeenCalledTimes(1);
+    expect(diagnostics).toEqual([
+      expect.objectContaining({
+        failureStage: 'provider-response-read',
+        errorCategory: 'cancelled',
+        providerHttpStatus: 200,
+        responseReceived: true,
+      }),
+    ]);
   });
 
   it.each(['question', 'passages'] as const)(

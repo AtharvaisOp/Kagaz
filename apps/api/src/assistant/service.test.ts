@@ -10,6 +10,7 @@ import { ProviderError } from './provider.js';
 import type { AssistantProvider } from './provider.js';
 import type { AssistantAnswerRequest } from '@kagaz/shared-types';
 import { GROQ_FREE_PLAN_LIMITS } from './freePlan.js';
+import type { AssistantDiagnostic } from './diagnostics.js';
 
 const NOW = Date.parse('2026-10-18T12:00:00Z');
 function body(): AssistantAnswerRequest {
@@ -38,6 +39,7 @@ function fixture(
     freePlanMode?: boolean;
     localHttp?: boolean;
     renderProxy?: boolean;
+    diagnosticSink?: (diagnostic: AssistantDiagnostic) => void;
   } = {},
 ) {
   const ledger = new AssistantLedger(
@@ -81,6 +83,7 @@ function fixture(
     allowLocalHttp: options.localHttp ?? true,
     renderProxy: options.renderProxy,
     freePlanMode: options.freePlanMode,
+    diagnosticSink: options.diagnosticSink,
     now: () => NOW,
   });
   return {
@@ -279,13 +282,64 @@ describe('billable generation admission and settlement', () => {
     });
   });
   it('does not return a result if final Firestore settlement cannot be committed', async () => {
-    const { service, settle } = fixture();
+    const diagnostics: AssistantDiagnostic[] = [];
+    const { service, settle, generate } = fixture({
+      diagnosticSink: (diagnostic) => diagnostics.push(diagnostic),
+    });
     settle.mockRejectedValue(
       new AssistantError('quota-unavailable', 503, 'Settlement unavailable.'),
     );
     await expect(
       service.answer('uid', body(), new AbortController().signal),
     ).rejects.toMatchObject({ code: 'quota-unavailable' });
+    expect(generate).toHaveBeenCalledTimes(1);
+    expect(settle).toHaveBeenCalledTimes(2);
+    expect(diagnostics).toEqual([
+      expect.objectContaining({
+        event: 'assistant.request.failure',
+        failureStage: 'quota-settlement',
+        errorCategory: 'quota-error',
+        providerHttpStatus: null,
+        responseReceived: true,
+      }),
+    ]);
+    const diagnosticText = JSON.stringify(diagnostics[0]);
+    expect(diagnosticText).not.toContain('uid');
+    expect(diagnosticText).not.toContain('Tomorrow.');
+    expect(diagnosticText).not.toContain('When?');
+  });
+  it('diagnoses a post-settlement usage-read error without logging request data', async () => {
+    const diagnostics: AssistantDiagnostic[] = [];
+    const { service, settle, usage, generate } = fixture({
+      diagnosticSink: (diagnostic) => diagnostics.push(diagnostic),
+    });
+    usage.mockRejectedValue(new Error('synthetic question and passage secret'));
+    await expect(
+      service.answer('uid-private', body(), new AbortController().signal),
+    ).rejects.toMatchObject({ code: 'provider-unavailable' });
+    expect(generate).toHaveBeenCalledTimes(1);
+    expect(settle).toHaveBeenCalledWith(expect.anything(), {
+      billing: 'known',
+      costMicroUsd: 132,
+      tokenCount: 1_100,
+    });
+    expect(diagnostics).toEqual([
+      expect.objectContaining({
+        event: 'assistant.request.failure',
+        failureStage: 'quota-usage-read',
+        errorCategory: 'unexpected-error',
+        providerHttpStatus: null,
+        responseReceived: true,
+      }),
+    ]);
+    const diagnosticText = JSON.stringify(diagnostics[0]);
+    for (const privateValue of [
+      'uid-private',
+      'synthetic question and passage secret',
+      'When?',
+      'Tomorrow.',
+    ])
+      expect(diagnosticText).not.toContain(privateValue);
   });
   it('validates review before reserving and keeps disabled AI inaccessible', async () => {
     const { service, reserve } = fixture({ enabled: false });
