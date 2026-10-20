@@ -25,6 +25,9 @@ import { GROQ_FREE_PLAN_LIMITS } from './freePlan.js';
 import { ProviderError } from './provider.js';
 import type { AssistantProvider } from './provider.js';
 import { validateAnswerRequest } from './validation.js';
+import { performance } from 'node:perf_hooks';
+import { boundedDurationMs, reportAssistantDiagnostic } from './diagnostics.js';
+import type { AssistantDiagnosticSink } from './diagnostics.js';
 
 export interface AssistantServiceOptions {
   readonly auth?: AssistantAuthenticator;
@@ -37,6 +40,7 @@ export interface AssistantServiceOptions {
   readonly freePlanMode?: boolean;
   readonly now?: () => number;
   readonly deadlineMs?: number;
+  readonly diagnosticSink?: AssistantDiagnosticSink;
 }
 
 export class AssistantService {
@@ -122,6 +126,10 @@ export class AssistantService {
         : await ledger.reserve(uid, request.requestId, tokenCeiling);
     let dispatched = false;
     let settled = false;
+    let providerResponseReceived = false;
+    let postProviderFailureStage: 'quota-settlement' | 'quota-usage-read' =
+      'quota-settlement';
+    let providerStartedAt = 0;
     const controller = new AbortController();
     const abort = () => controller.abort();
     signal.addEventListener('abort', abort, { once: true });
@@ -143,10 +151,13 @@ export class AssistantService {
           'none',
         );
       dispatched = true;
+      providerStartedAt = performance.now();
       const result = await provider.generate(
         request.context,
         controller.signal,
       );
+      providerResponseReceived = true;
+      postProviderFailureStage = 'quota-settlement';
       const billing = result.usage
         ? {
             billing: 'known' as const,
@@ -170,12 +181,33 @@ export class AssistantService {
           'cancelled',
           'Generation was cancelled. Already transmitted passages cannot be retracted.',
         );
+      postProviderFailureStage = 'quota-usage-read';
+      const usage = await this.usage(uid);
       return {
         requestId: request.requestId,
         answer: result.answer,
-        usage: await this.usage(uid),
+        usage,
       };
     } catch (error) {
+      if (providerResponseReceived) {
+        const errorCategory =
+          error instanceof ProviderError && error.code === 'cancelled'
+            ? 'cancelled'
+            : error instanceof AssistantError
+              ? 'quota-error'
+              : 'unexpected-error';
+        reportAssistantDiagnostic(
+          {
+            event: 'assistant.request.failure',
+            failureStage: postProviderFailureStage,
+            errorCategory,
+            providerHttpStatus: null,
+            responseReceived: true,
+            durationMs: boundedDurationMs(providerStartedAt, performance.now()),
+          },
+          this.options.diagnosticSink,
+        );
+      }
       if (!settled) {
         try {
           await ledger.settle(reservation, {

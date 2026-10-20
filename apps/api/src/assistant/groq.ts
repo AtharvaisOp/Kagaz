@@ -2,8 +2,19 @@ import type {
   AssistantGroundedAnswer,
   ExplicitContextShareRequest,
 } from '@kagaz/shared-types';
+import { performance } from 'node:perf_hooks';
 import { ProviderError } from './provider.js';
 import type { AssistantProvider, ProviderGeneration } from './provider.js';
+import { boundedDurationMs, reportAssistantDiagnostic } from './diagnostics.js';
+import type {
+  AssistantDiagnostic,
+  AssistantDiagnosticSink,
+} from './diagnostics.js';
+
+type ProviderFailureDiagnostic = Extract<
+  AssistantDiagnostic,
+  { event: 'assistant.provider.failure' }
+>;
 
 /** Pricing verified against Groq's production model catalogue on 2026-10-18. */
 export const GROQ_MODEL = 'openai/gpt-oss-20b';
@@ -317,6 +328,8 @@ function parseGeneration(
 export interface GroqProviderOptions {
   readonly apiKey?: string;
   readonly fetch?: typeof globalThis.fetch;
+  /** Receives allowlisted metadata only; production writes the same metadata to logs. */
+  readonly diagnosticSink?: AssistantDiagnosticSink;
   /** Test seam; production deadlines cannot be raised above 25 seconds. */
   readonly timeoutMs?: number;
 }
@@ -326,10 +339,12 @@ export class GroqProvider implements AssistantProvider {
   readonly #apiKey: string;
   readonly #fetch: typeof globalThis.fetch;
   readonly #timeoutMs: number;
+  readonly #diagnosticSink?: AssistantDiagnosticSink;
 
   constructor(options: GroqProviderOptions = {}) {
     this.#apiKey = options.apiKey ?? process.env.GROQ_API_KEY ?? '';
     this.#fetch = options.fetch ?? globalThis.fetch;
+    this.#diagnosticSink = options.diagnosticSink;
     this.#timeoutMs = Math.min(
       Math.max(options.timeoutMs ?? GROQ_DEADLINE_MS, 1),
       GROQ_DEADLINE_MS,
@@ -362,8 +377,13 @@ export class GroqProvider implements AssistantProvider {
         'none',
       );
     const body = requestBody(context);
+    const startedAt = performance.now();
     const controller = new AbortController();
     let timedOut = false;
+    let failureStage: ProviderFailureDiagnostic['failureStage'] =
+      'provider-fetch';
+    let responseReceived = false;
+    let providerHttpStatus: number | null = null;
     const abort = () => controller.abort();
     signal.addEventListener('abort', abort, { once: true });
     const timer = setTimeout(() => {
@@ -394,7 +414,10 @@ export class GroqProvider implements AssistantProvider {
         signal: controller.signal,
         redirect: 'error',
       });
+      responseReceived = true;
+      providerHttpStatus = response.status;
       if (!response.ok) {
+        failureStage = 'provider-http-response';
         // Provider error bodies can contain echoed user data. Never read/log or
         // return them. Only an explicit authentication failure is unbillable.
         void response.body?.cancel().catch(() => undefined);
@@ -414,19 +437,59 @@ export class GroqProvider implements AssistantProvider {
           'The AI provider could not complete this request. Usage may still count.',
         );
       }
-      return parseGeneration(
-        await readResponse(response, controller.signal),
-        context,
-      );
+      failureStage = 'provider-response-read';
+      const value = await readResponse(response, controller.signal);
+      failureStage = 'provider-response-validation';
+      return parseGeneration(value, context);
     };
     try {
       return await Promise.race([generate(), interrupted]);
     } catch (error) {
-      if (error instanceof ProviderError) throw error;
-      throw new ProviderError(
-        'provider-unavailable',
-        'The AI provider could not complete this request. Usage may still count.',
+      const providerError =
+        error instanceof ProviderError
+          ? error
+          : new ProviderError(
+              'provider-unavailable',
+              'The AI provider could not complete this request. Usage may still count.',
+            );
+      const errorCategory: ProviderFailureDiagnostic['errorCategory'] =
+        timedOut || providerError.code === 'provider-timeout'
+          ? 'timeout'
+          : providerError.code === 'cancelled'
+            ? 'cancelled'
+            : providerError.code === 'provider-invalid-response'
+              ? 'invalid-response'
+              : providerHttpStatus === 401
+                ? 'provider-auth'
+                : providerHttpStatus === 429
+                  ? 'provider-rate-limit'
+                  : responseReceived &&
+                      providerHttpStatus !== null &&
+                      (providerHttpStatus < 200 || providerHttpStatus >= 300)
+                    ? 'provider-http-error'
+                    : responseReceived
+                      ? 'response-processing-error'
+                      : 'transport-error';
+      const status = providerHttpStatus;
+      const diagnosticStatus =
+        typeof status === 'number' &&
+        Number.isInteger(status) &&
+        status >= 100 &&
+        status <= 599
+          ? status
+          : null;
+      reportAssistantDiagnostic(
+        {
+          event: 'assistant.provider.failure',
+          failureStage,
+          errorCategory,
+          providerHttpStatus: diagnosticStatus,
+          responseReceived,
+          durationMs: boundedDurationMs(startedAt, performance.now()),
+        },
+        this.#diagnosticSink,
       );
+      throw providerError;
     } finally {
       clearTimeout(timer);
       signal.removeEventListener('abort', abort);
