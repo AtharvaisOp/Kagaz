@@ -9,6 +9,12 @@ import {
   validatePdf,
 } from './pdfValidation.js';
 import { MAX_OCR_INPUT_BYTES } from './upload.js';
+import {
+  readOcrRejection,
+  reportOcrDiagnostic,
+  type OcrDiagnosticSink,
+  type OcrDiagnosticStage,
+} from './ocrDiagnostics.js';
 
 export const OCR_POLICY = {
   inputBytes: MAX_OCR_INPUT_BYTES,
@@ -24,6 +30,7 @@ export const OCR_POLICY = {
   },
 } as const;
 export interface OcrEngineOptions {
+  readonly ocrDiagnosticSink?: OcrDiagnosticSink;
   readonly ocrmypdf?: string;
   readonly python?: string;
   readonly qpdf?: string;
@@ -63,82 +70,116 @@ export async function ocrPdf(
   signal: AbortSignal,
   options: OcrEngineOptions = {},
 ): Promise<{ path: string; metadata: OcrMetadata }> {
-  const runner = options.runner ?? runNative;
-  const run = (executable: string, args: string[]) =>
-    runner({
-      executable,
-      args,
-      cwd: dirname(input),
-      signal,
-      timeoutMs: OCR_POLICY.timeoutMs,
-      limits: OCR_POLICY.limits,
-    });
-  const qpdf = options.qpdf ?? 'qpdf';
-  const originalBytes = await pdfHeader(input, OCR_POLICY.inputBytes);
-  const pages = await validatePdf(input, signal, run, qpdf, OCR_POLICY.pages);
-  await validateFlattenedPdf(input, run, qpdf);
-  const inspect = async (paths: string[]) => {
-    const result = await run(options.python ?? 'python3', [
-      inspector,
-      ...paths,
-    ]);
-    if (result.exitCode === 2) throw new HeavyToolError('unsupported-pdf');
-    if (result.exitCode !== 0) throw new HeavyToolError('ocr-failed');
-    return readInventory(result.stdout, pages);
-  };
-  const inventory = await inspect([input]);
-  if (inventory.pagesOcred === 0) throw new HeavyToolError('no-ocr-needed');
-  const result = await run(options.ocrmypdf ?? 'ocrmypdf', [
-    '--language',
-    'eng',
-    '--skip-text',
-    '--output-type',
-    'pdf',
-    '--optimize',
-    '0',
-    '--pdf-renderer',
-    'hocr',
-    '--jobs',
-    '1',
-    '--tesseract-timeout',
-    '60',
-    '--max-image-mpixels',
-    '16',
-    '--fast-web-view',
-    '0',
-    '--quiet',
-    input,
-    output,
-  ]);
-  if (result.exitCode !== 0) throw new HeavyToolError('ocr-failed');
-  let outputBytes: number;
+  let stage: OcrDiagnosticStage = 'input-validation';
   try {
-    outputBytes = await pdfHeader(output, OCR_POLICY.outputBytes);
-    if (
-      (await validatePdf(output, signal, run, qpdf, OCR_POLICY.pages)) !== pages
-    )
+    const runner = options.runner ?? runNative;
+    const run = (executable: string, args: string[]) =>
+      runner({
+        executable,
+        args,
+        cwd: dirname(input),
+        signal,
+        timeoutMs: OCR_POLICY.timeoutMs,
+        limits: OCR_POLICY.limits,
+      });
+    const qpdf = options.qpdf ?? 'qpdf';
+    const originalBytes = await pdfHeader(input, OCR_POLICY.inputBytes);
+    const pages = await validatePdf(input, signal, run, qpdf, OCR_POLICY.pages);
+    await validateFlattenedPdf(input, run, qpdf);
+    const inspect = async (paths: string[]) => {
+      const result = await run(options.python ?? 'python3', [
+        inspector,
+        ...paths,
+      ]);
+      if (result.exitCode === 2)
+        throw new HeavyToolError(
+          'unsupported-pdf',
+          readOcrRejection(result.stdout),
+        );
+      if (result.exitCode !== 0) throw new HeavyToolError('ocr-failed');
+      return readInventory(result.stdout, pages);
+    };
+    stage = 'source-inspection';
+    const inventory = await inspect([input]);
+    if (inventory.pagesOcred === 0) throw new HeavyToolError('no-ocr-needed');
+    stage = 'engine';
+    const result = await run(options.ocrmypdf ?? 'ocrmypdf', [
+      '--language',
+      'eng',
+      '--skip-text',
+      '--output-type',
+      'pdf',
+      '--optimize',
+      '0',
+      '--pdf-renderer',
+      'hocr',
+      '--jobs',
+      '1',
+      '--tesseract-timeout',
+      '60',
+      '--max-image-mpixels',
+      '16',
+      '--fast-web-view',
+      '0',
+      '--quiet',
+      input,
+      output,
+    ]);
+    if (result.exitCode !== 0) throw new HeavyToolError('ocr-failed');
+    let outputBytes: number;
+    stage = 'output-validation';
+    try {
+      outputBytes = await pdfHeader(output, OCR_POLICY.outputBytes);
+      if (
+        (await validatePdf(output, signal, run, qpdf, OCR_POLICY.pages)) !==
+        pages
+      )
+        throw new HeavyToolError('ocr-failed');
+      await validateFlattenedPdf(output, run, qpdf);
+      const verified = await inspect([input, output]);
+      if (verified.pagesOcred !== inventory.pagesOcred)
+        throw new HeavyToolError('ocr-failed');
+    } catch (error) {
+      if (
+        error instanceof HeavyToolError &&
+        (error.code === 'cancelled' || error.code === 'processing-timeout')
+      )
+        throw error;
       throw new HeavyToolError('ocr-failed');
-    await validateFlattenedPdf(output, run, qpdf);
-    const verified = await inspect([input, output]);
-    if (verified.pagesOcred !== inventory.pagesOcred)
-      throw new HeavyToolError('ocr-failed');
+    }
+    checkAbort(signal);
+    return {
+      path: output,
+      metadata: {
+        originalBytes,
+        outputBytes,
+        pages,
+        language: 'eng',
+        ...inventory,
+      },
+    };
   } catch (error) {
-    if (
-      error instanceof HeavyToolError &&
-      (error.code === 'cancelled' || error.code === 'processing-timeout')
-    )
-      throw error;
-    throw new HeavyToolError('ocr-failed');
+    const category =
+      error instanceof HeavyToolError && error.rejectionCategory
+        ? error.rejectionCategory
+        : error instanceof HeavyToolError && error.code === 'no-ocr-needed'
+          ? 'no-ocr-needed'
+          : error instanceof HeavyToolError &&
+              error.code === 'processing-timeout'
+            ? 'timeout'
+            : error instanceof HeavyToolError && error.code === 'cancelled'
+              ? 'cancelled'
+              : stage === 'output-validation'
+                ? 'output-integrity'
+                : stage === 'engine'
+                  ? 'engine-failed'
+                  : stage === 'input-validation'
+                    ? 'invalid-input'
+                    : 'processing-failed';
+    reportOcrDiagnostic(
+      { event: 'ocr.request.rejected', stage, category },
+      options.ocrDiagnosticSink,
+    );
+    throw error;
   }
-  checkAbort(signal);
-  return {
-    path: output,
-    metadata: {
-      originalBytes,
-      outputBytes,
-      pages,
-      language: 'eng',
-      ...inventory,
-    },
-  };
 }

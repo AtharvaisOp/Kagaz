@@ -148,6 +148,10 @@ jobs:
           node scripts/verify-phase4a.mjs
           node scripts/verify-phase4b.mjs
           node scripts/verify-phase4c.mjs
+      - name: Verify OCR rejection feedback without backend processing
+        env:
+          KAGAZ_ARTIFACT_DIR: ${{ runner.temp }}/phase4c-artifacts
+        run: node scripts/verify-ocr-feedback.mjs
       - name: Verify browser-local redaction and independent content removal
         env:
           KAGAZ_ARTIFACT_DIR: ${{ runner.temp }}/phase4c-artifacts

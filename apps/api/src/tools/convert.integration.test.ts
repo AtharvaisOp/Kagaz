@@ -5,6 +5,7 @@ import type { OfficeFormat } from '@kagaz/shared-types';
 import { describe, expect, it } from 'vitest';
 import { officeFixture } from '../../../../scripts/office-fixtures.mjs';
 import { convertToPdf } from './convert.js';
+import { ocrPdf } from './ocr.js';
 
 const python = process.env.OCR_PYTHON_PATH ?? 'python3';
 const libreoffice =
@@ -54,6 +55,16 @@ describe.skipIf(process.platform !== 'linux')(
           expect((await stat(result.path)).size).toBeLessThanOrEqual(
             40 * 1024 * 1024,
           );
+          if (format === 'pptx') {
+            await expect(
+              ocrPdf(
+                result.path,
+                join(root, 'ocr.pdf'),
+                new AbortController().signal,
+                { python, qpdf, ocrDiagnosticSink: () => {} },
+              ),
+            ).rejects.toMatchObject({ code: 'no-ocr-needed' });
+          }
         } finally {
           await rm(root, {
             recursive: true,

@@ -58,8 +58,9 @@ export function OcrDialog({
             <span>
               <strong>English OCR</strong>
               <span>
-                Searchable text is added to scanned pages. Pages with existing
-                text are skipped.
+                Invisible searchable text is added to scanned pages. Pages with
+                any existing text are skipped, including pages that also contain
+                scanned regions. OCR does not edit the visible original text.
               </span>
             </span>
           </label>
