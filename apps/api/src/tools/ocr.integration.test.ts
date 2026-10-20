@@ -1,7 +1,7 @@
 import { mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { PDFDocument } from 'pdf-lib';
+import { PDFDict, PDFDocument, PDFName } from 'pdf-lib';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { createScan } from './fixtures/createScan.js';
 import { ocrPdf } from './ocr.js';
@@ -93,6 +93,41 @@ describe('real OCRmyPDF searchable output', () => {
     },
     30_000,
   );
+  it('preserves an inert internal link while adding OCR to its scanned page', async () => {
+    const workspace = await createTempWorkspace(root);
+    try {
+      const source = await PDFDocument.load(await createScan());
+      const page = source.getPage(0);
+      page.node.set(
+        PDFName.of('Annots'),
+        source.context.obj([
+          {
+            Type: 'Annot',
+            Subtype: 'Link',
+            Rect: [20, 20, 150, 60],
+            Border: [0, 0, 0],
+            A: { S: 'GoTo', D: [page.ref, 'Fit'] },
+          },
+        ]),
+      );
+      await writeFile(workspace.input, await source.save());
+      const result = await ocrPdf(
+        workspace.input,
+        workspace.output,
+        new AbortController().signal,
+        binaries,
+      );
+      expect(result.metadata.pagesOcred).toBe(1);
+      const output = await PDFDocument.load(await readFile(result.path));
+      const link = output.getPage(0).node.Annots()!.lookup(0, PDFDict);
+      expect(link.get(PDFName.of('Subtype'))).toEqual(PDFName.of('Link'));
+      expect(
+        link.lookup(PDFName.of('A'), PDFDict).get(PDFName.of('S')),
+      ).toEqual(PDFName.of('GoTo'));
+    } finally {
+      await workspace.cleanup();
+    }
+  }, 120_000);
   it('rejects malformed, encrypted and excessive-dimension inputs before OCR', async () => {
     const workspace = await createTempWorkspace(root);
     try {

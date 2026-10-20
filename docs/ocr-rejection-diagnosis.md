@@ -7,23 +7,24 @@ is not available here. Do not label the original incident resolved.
 
 ## Verified behavior and exact stage map
 
-| Input/check                                                       | Result and stage                                                                                                                     |
-| ----------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
-| Encrypted PDF                                                     | qpdf `--is-encrypted`, input-validation / encrypted; rejected.                                                                       |
-| Damaged PDF or qpdf recovery warning                              | qpdf check, input-validation / invalid-input; rejected without repair.                                                               |
-| More than 20 pages                                                | qpdf page inventory, input-validation / page-limit.                                                                                  |
-| Interactive AcroForm                                              | qpdf form inventory, input-validation / interactive-forms.                                                                           |
-| URI hyperlink, JavaScript, external/active structures, signatures | `validate_pdf_structure` inside native inventory, source-inspection / unsafe-structure.                                              |
-| Harmless local GoTo link or passive note                          | Shared safety scan passes; OCR's stricter `/Annots` check rejects at source-inspection / annotations. It is not evidence of malware. |
-| Page over 1008 points per side after UserUnit                     | source-inspection / page-dimensions.                                                                                                 |
-| Image/mask above 16 MP                                            | source-inspection / image-budget.                                                                                                    |
-| Effective raster above 400 DPI or 16 MP                           | source-inspection / raster-budget.                                                                                                   |
-| Nested/excessive resources                                        | source-inspection / resource-budget.                                                                                                 |
-| Digital selectable text                                           | pagesOcred=0; no-ocr-needed if all pages skipped; no engine dispatch.                                                                |
-| Existing text plus scan on the same page                          | Whole page skipped by the existing conservative `--skip-text` policy.                                                                |
-| Separate digital and scanned pages                                | Digital pages skipped; scanned pages are candidates.                                                                                 |
-| Image-only scan or outlined glyph graphics                        | OCR candidate, not proof recognition will succeed.                                                                                   |
-| Empty page                                                        | Skipped. Blank raster scans remain candidates and can fail meaningful-recognition verification.                                      |
+| Input/check                                                       | Result and stage                                                                                                 |
+| ----------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| Encrypted PDF                                                     | qpdf `--is-encrypted`, input-validation / encrypted; rejected.                                                   |
+| Damaged PDF or qpdf recovery warning                              | qpdf check, input-validation / invalid-input; rejected without repair.                                           |
+| More than 20 pages                                                | qpdf page inventory, input-validation / page-limit.                                                              |
+| Interactive AcroForm                                              | qpdf form inventory, input-validation / interactive-forms.                                                       |
+| URI hyperlink, JavaScript, external/active structures, signatures | `validate_pdf_structure` inside native inventory, source-inspection / unsafe-structure.                          |
+| Simple internal GoTo link                                         | Originally rejected by the blanket OCR annotation check; now accepted with strict output retention verification. |
+| Passive note or complex link                                      | Shared safety scan may pass; OCR rejects at source-inspection / annotations. This is not evidence of malware.    |
+| Page over 1008 points per side after UserUnit                     | source-inspection / page-dimensions.                                                                             |
+| Image/mask above 16 MP                                            | source-inspection / image-budget.                                                                                |
+| Effective raster above 400 DPI or 16 MP                           | source-inspection / raster-budget.                                                                               |
+| Nested/excessive resources                                        | source-inspection / resource-budget.                                                                             |
+| Digital selectable text                                           | pagesOcred=0; no-ocr-needed if all pages skipped; no engine dispatch.                                            |
+| Existing text plus scan on the same page                          | Whole page skipped by the existing conservative `--skip-text` policy.                                            |
+| Separate digital and scanned pages                                | Digital pages skipped; scanned pages are candidates.                                                             |
+| Image-only scan or outlined glyph graphics                        | OCR candidate, not proof recognition will succeed.                                                               |
+| Empty page                                                        | Skipped. Blank raster scans remain candidates and can fail meaningful-recognition verification.                  |
 
 Synthetic 960x540 presentation PDFs with text, images and URI/local links reproduce
 the two distinct annotation/action rejection stages. This is not an assertion
@@ -51,14 +52,19 @@ restrictions. Neither `no-ocr-needed` nor OCR success means the visible source i
 editable. No automatic conversion, forced OCR, rasterization, link removal or
 flattening was introduced.
 
-No compatibility restriction was relaxed. The URI policy is explicit in the
-shared security scanner and its attack tests. The harmless local-link rejection
-comes from OCR's visual-derivative retention contract: the output verifier checks
-streams, images, geometry and text but does not independently verify annotation
-destinations/appearances. Simply accepting annotations could silently lose or
-change content. A bounded future compatibility change must whitelist inert local
-links, canonicalize destination targets by output page identity and compare their
-geometry/semantics after OCR. External-link removal or raster conversion would
+The original blanket annotation rejection incorrectly included inert internal
+links already accepted by the shared security scanner. Added a bounded local-link
+compatibility path with output retention verification: explicit same-document
+destinations are canonicalized by page position rather than rewritten object IDs;
+rectangle, border, flags, color, quad geometry and labels are compared as an
+in-memory digest after OCR. Equivalent GoTo actions/direct destinations compare
+equally. Missing links or changed destinations/attributes reject the derivative.
+Source labels and digests never enter logs or responses.
+
+Only simple internal Link annotations are accepted. Named destinations, appearance
+streams, tagged annotation relationships, unknown attributes and non-Link
+annotations remain rejected. URI links and every existing active-content check
+remain blocked by the unchanged shared scanner. External-link removal or raster conversion would
 need an explicit user-reviewed derivative option and disclosure of interactivity,
 selectability, layout and accessibility effects. No such lossy step was taken.
 
@@ -80,8 +86,8 @@ Only explanatory text changes; no redesign or new motion.
 ## Validation and remaining work
 
 - Mock OCR HTTP plus diagnostic tests: 43 passed.
-- Native OCR classifications plus existing shared malicious-structure tests:
-  43 passed (15 new inventory cases + 28 shared safety cases). Local diagnostics
+- Native OCR classifications/retention plus shared malicious-structure tests:
+  56 passed (28 inventory/retention cases + 28 shared safety cases). Local diagnostics
   used an isolated external Python environment with pikepdf 10.17/OCRmyPDF 17.13;
   deployment uses the unchanged Debian image, verified by Linux CI.
 - Frontend OCR tests: 28 passed; dialog text additionally asserts mixed-page and
@@ -93,6 +99,7 @@ Only explanatory text changes; no redesign or new motion.
   release candidate. An initial test-only require-await lint error was repaired.
 - Real OCR engine/LibreOffice tests and full container/emulator checks require
   Linux CI; do not represent local mocked feedback as native OCR success.
+  A new real-engine case verifies OCR on a scan retains its internal GoTo link.
 
 No production deployment or settings change is performed. After review and green
 CI, merge the separate PR to deploy diagnostics. A new user-initiated OCR request
@@ -110,8 +117,10 @@ cannot be retroactively assigned a root cause.
 - [x] Preserve existing resource and security limits.
 - [ ] Attribute the owner's original unsupported PDF to a specific predicate;
       requires its stage metadata or a separately supplied reproduction.
-- [ ] Enable broader source-annotation compatibility; retention verification is
-      required before safely changing this policy.
+- [x] Accept simple inert local links only with destination/appearance-attribute
+      retention verification; reject changed or dropped output links.
+- [ ] Enable complex source annotations, named/tagged destinations or external
+      links; these remain outside this compatibility change.
 
 Next agents must not fix this by bypassing `validate_pdf_structure`, deleting
 links silently, increasing resource limits, or forcing OCR over digital pages.

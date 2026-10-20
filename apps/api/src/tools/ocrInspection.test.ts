@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it } from 'vitest';
-import { PDFDocument, PDFName, PDFString } from 'pdf-lib';
+import { PDFDict, PDFDocument, PDFName, PDFString } from 'pdf-lib';
 
 const python = process.env.OCR_PYTHON_PATH ?? 'python3';
 const inspector = fileURLToPath(
@@ -37,7 +37,9 @@ async function fixture(kind: string) {
       y: 490,
       size: 18,
     });
-  if (['scan', 'mixed-page', 'mixed-document'].includes(kind)) {
+  if (
+    ['scan', 'scan-local-link', 'mixed-page', 'mixed-document'].includes(kind)
+  ) {
     const image = await doc.embedPng(
       await readFile(new URL('./fixtures/english-scan.png', import.meta.url)),
     );
@@ -56,7 +58,9 @@ async function fixture(kind: string) {
       PDFName.of('SyntheticMetadata'),
       doc.context.obj({ Type: 'StructElem', S: 'P', A: { O: 'Layout' } }),
     );
-  if (['uri-link', 'local-link', 'passive-note'].includes(kind))
+  if (
+    ['uri-link', 'local-link', 'scan-local-link', 'passive-note'].includes(kind)
+  )
     page.node.set(
       PDFName.of('Annots'),
       doc.context.obj([
@@ -71,7 +75,7 @@ async function fixture(kind: string) {
                   URI: PDFString.of('https://example.invalid/synthetic'),
                 },
               }
-            : kind === 'local-link'
+            : kind === 'local-link' || kind === 'scan-local-link'
               ? { A: { S: 'GoTo', D: [page.ref, 'Fit'] } }
               : { Contents: PDFString.of('private synthetic annotation') }),
         },
@@ -109,14 +113,24 @@ async function fixture(kind: string) {
     );
   return doc;
 }
-async function inspect(doc: PDFDocument, script = inspector) {
+async function inspect(
+  doc: PDFDocument,
+  script = inspector,
+  output?: PDFDocument,
+) {
   const root = await mkdtemp(join(tmpdir(), 'kagaz-ocr-inventory-'));
   roots.push(root);
   const path = join(root, 'private-filename.pdf');
   await writeFile(path, await doc.save());
+  const outputPath = join(root, 'output.pdf');
+  if (output) await writeFile(outputPath, await output.save());
   const result = spawnSync(
     python,
-    [script, path, ...(script === safety ? ['20'] : [])],
+    [
+      script,
+      path,
+      ...(script === safety ? ['20'] : output ? [outputPath] : []),
+    ],
     {
       encoding: 'utf8',
       windowsHide: true,
@@ -143,6 +157,8 @@ describe('real bounded OCR source inspection', () => {
     ['digital', 0, 1],
     ['mixed-page', 0, 1],
     ['scan', 1, 0],
+    ['scan-local-link', 1, 0],
+    ['local-link', 0, 1],
     ['mixed-document', 1, 1],
     ['outlined', 1, 0],
     ['blank', 0, 1],
@@ -159,7 +175,6 @@ describe('real bounded OCR source inspection', () => {
   it.each([
     ['uri-link', 'unsafe-structure'],
     ['javascript', 'unsafe-structure'],
-    ['local-link', 'annotations'],
     ['passive-note', 'annotations'],
     ['dimensions', 'page-dimensions'],
     ['image-budget', 'image-budget'],
@@ -170,10 +185,89 @@ describe('real bounded OCR source inspection', () => {
       data: { rejection },
     });
   });
-  it('proves the local link is structurally safe but outside OCR annotation-retention verification', async () => {
+  it('keeps the shared safety scanner authoritative for simple local links', async () => {
     expect(await inspect(await fixture('local-link'), safety)).toEqual({
       code: 0,
       data: { pages: 1 },
+    });
+  });
+  it.each(['destination', 'removed', 'rectangle', 'label', 'border'])(
+    'rejects output that changes local-link %s while accepting an unchanged rewrite',
+    async (change) => {
+      const source = await fixture('local-link');
+      source.addPage([960, 540]);
+      const copy = await PDFDocument.load(await source.save());
+      expect((await inspect(source, inspector, copy)).code).toBe(0);
+      const page = copy.getPage(0);
+      const link = page.node.Annots()!.lookup(0, PDFDict);
+      if (change === 'destination')
+        link
+          .lookup(PDFName.of('A'), PDFDict)
+          .set(PDFName.of('D'), copy.context.obj([copy.getPage(1).ref, 'Fit']));
+      if (change === 'removed') page.node.delete(PDFName.of('Annots'));
+      if (change === 'rectangle')
+        link.set(PDFName.of('Rect'), copy.context.obj([40, 480, 500, 510]));
+      if (change === 'label')
+        link.set(
+          PDFName.of('Contents'),
+          PDFString.of('private synthetic changed label'),
+        );
+      if (change === 'border')
+        link.set(PDFName.of('Border'), copy.context.obj([0, 0, 3]));
+      expect(await inspect(source, inspector, copy)).toEqual({
+        code: 1,
+        data: null,
+      });
+    },
+  );
+  it('normalizes equivalent GoTo actions and direct page destinations across rewriting', async () => {
+    const source = await fixture('local-link');
+    const copy = await PDFDocument.load(await source.save());
+    const link = copy.getPage(0).node.Annots()!.lookup(0, PDFDict);
+    link.set(
+      PDFName.of('Dest'),
+      link.lookup(PDFName.of('A'), PDFDict).get(PDFName.of('D'))!,
+    );
+    link.delete(PDFName.of('A'));
+    expect((await inspect(source, inspector, copy)).code).toBe(0);
+  });
+  it.each([
+    'appearance',
+    'named',
+    'tagged',
+    'invalid-rect',
+    'invalid-destination',
+    'unknown-key',
+  ])('does not broaden compatibility to unsupported %s links', async (kind) => {
+    const doc = await fixture('local-link');
+    const link = doc.getPage(0).node.Annots()!.lookup(0, PDFDict);
+    if (kind === 'appearance')
+      link.set(
+        PDFName.of('AP'),
+        doc.context.obj({
+          N: doc.context.register(doc.context.stream(new Uint8Array())),
+        }),
+      );
+    if (kind === 'named')
+      link
+        .lookup(PDFName.of('A'), PDFDict)
+        .set(PDFName.of('D'), PDFString.of('private synthetic destination'));
+    if (kind === 'tagged')
+      link.set(PDFName.of('StructParent'), doc.context.obj(0));
+    if (kind === 'invalid-rect')
+      link.set(PDFName.of('Rect'), doc.context.obj([0, 'Invalid', 100, 100]));
+    if (kind === 'invalid-destination') {
+      link.delete(PDFName.of('A'));
+      link.set(
+        PDFName.of('Dest'),
+        doc.context.obj([doc.getPage(0).ref, 'FitR', 0]),
+      );
+    }
+    if (kind === 'unknown-key')
+      link.set(PDFName.of('UnsupportedLinkData'), doc.context.obj(1));
+    expect(await inspect(doc)).toEqual({
+      code: 2,
+      data: { rejection: 'annotations' },
     });
   });
 });

@@ -9,12 +9,13 @@ import logging
 import math
 import sys
 from collections import Counter
+from decimal import Decimal
 
 import pikepdf
 from pdfminer.high_level import extract_pages
 from pdfminer.layout import LTChar, LTContainer, LTTextContainer
 from ocrmypdf.pdfinfo import PdfInfo
-from pdf_safety import validate_pdf_structure
+from pdf_safety import destination, validate_pdf_structure
 
 logging.disable(logging.CRITICAL)
 
@@ -24,6 +25,103 @@ class OcrRejection(ValueError):
     def __init__(self, category):
         self.category = category
         super().__init__(category)
+
+
+def local_links(page, page_ids):
+    """Accept only inert local links whose semantics can be verified after OCR.
+
+    The shared scanner still examines every object first. Appearance streams,
+    named destinations and tagged-annotation relationships need broader retention
+    verification and remain outside this deliberately narrow compatibility path.
+    Only a digest is retained; link labels and document strings never leave here.
+    """
+    def primitive(value, depth=0):
+        if depth > 4:
+            raise OcrRejection('annotations')
+        if value is None:
+            return None
+        if isinstance(value, pikepdf.Name):
+            return ['name', str(value)]
+        if isinstance(value, pikepdf.String):
+            return ['string', str(value)]
+        if not isinstance(value, bool) and isinstance(value, (int, float, Decimal)):
+            number = float(value)
+            if math.isfinite(number):
+                return number
+        if isinstance(value, pikepdf.Array) and len(value) <= 128:
+            return [primitive(child, depth + 1) for child in value]
+        raise OcrRejection('annotations')
+
+    def numbers(value, count=None):
+        if not isinstance(value, pikepdf.Array) or len(value) > 128:
+            return False
+        if count is not None and len(value) != count:
+            return False
+        return all(not isinstance(number, bool)
+                   and isinstance(number, (int, float, Decimal))
+                   and math.isfinite(number) for number in value)
+
+    allowed = {'/Type', '/Subtype', '/Rect', '/A', '/Dest', '/Border', '/H',
+               '/F', '/C', '/Contents', '/NM', '/P', '/QuadPoints'}
+    links = []
+    for annotation in page.obj.get('/Annots', []):
+        if (not isinstance(annotation, pikepdf.Dictionary)
+                or annotation.get('/Subtype') != '/Link'
+                or annotation.get('/Type', '/Annot') != '/Annot'
+                or not set(annotation.keys()) <= allowed):
+            raise OcrRejection('annotations')
+        if '/P' in annotation and (not isinstance(annotation['/P'], pikepdf.Dictionary)
+                                   or annotation['/P'].objgen != page.obj.objgen):
+            raise OcrRejection('annotations')
+        rect = annotation.get('/Rect')
+        if not numbers(rect, 4) or rect[2] < rect[0] or rect[3] < rect[1]:
+            raise OcrRejection('annotations')
+        if '/Border' in annotation:
+            border = annotation['/Border']
+            if (not isinstance(border, pikepdf.Array) or len(border) not in (3, 4)
+                    or not numbers(pikepdf.Array(list(border)[:3]), 3)
+                    or any(value < 0 for value in list(border)[:3])
+                    or (len(border) == 4 and (not numbers(border[3])
+                                             or any(value < 0 for value in border[3])))):
+                raise OcrRejection('annotations')
+        if '/C' in annotation and (not numbers(annotation['/C'], 3)
+                                   or any(not 0 <= value <= 1 for value in annotation['/C'])):
+            raise OcrRejection('annotations')
+        if '/H' in annotation and (not isinstance(annotation['/H'], pikepdf.Name)
+                                   or str(annotation['/H']) not in ('/N', '/I', '/O', '/P')):
+            raise OcrRejection('annotations')
+        if '/F' in annotation and (not isinstance(annotation['/F'], int)
+                                   or isinstance(annotation['/F'], bool)
+                                   or not 0 <= annotation['/F'] <= 2**31 - 1):
+            raise OcrRejection('annotations')
+        if '/QuadPoints' in annotation and (not numbers(annotation['/QuadPoints'])
+                                           or len(annotation['/QuadPoints']) % 8 != 0):
+            raise OcrRejection('annotations')
+        if any(key in annotation and not isinstance(annotation[key], pikepdf.String)
+               for key in ('/Contents', '/NM')):
+            raise OcrRejection('annotations')
+        if ('/A' in annotation) == ('/Dest' in annotation):
+            raise OcrRejection('annotations')
+        target = annotation.get('/Dest')
+        if '/A' in annotation:
+            # action() in pdf_safety has already restricted this to local GoTo.
+            target = annotation['/A']['/D']
+        if (not isinstance(target, pikepdf.Array) or len(target) < 2
+                or not isinstance(target[0], pikepdf.Dictionary)
+                or not isinstance(target[1], pikepdf.Name)
+                or target[0].objgen not in page_ids):
+            raise OcrRejection('annotations')
+        try:
+            destination(target, set(page_ids))
+        except Exception:
+            raise OcrRejection('annotations') from None
+        values = {key: primitive(value) for key, value in annotation.items()
+                  if key not in ('/Type', '/Subtype', '/A', '/Dest', '/P')}
+        # Object IDs change during rewriting; destination page identity must not.
+        values['destination'] = [page_ids[target[0].objgen],
+                                 *[primitive(value) for value in list(target)[1:]]]
+        links.append(values)
+    return hashlib.sha256(json.dumps(links, sort_keys=True).encode()).digest()
 
 
 def contents(page):
@@ -66,17 +164,18 @@ def inventory(path):
             validate_pdf_structure(pdf, 20)
         except Exception:
             raise OcrRejection('unsafe-structure') from None
+        page_ids = {page.obj.objgen: index for index, page in enumerate(pdf.pages)}
         result = []
         for page in pdf.pages:
-            if page.obj.get('/Annots'):
-                raise OcrRejection('annotations')
+            links = local_links(page, page_ids)
             box = [float(v) for v in page.mediabox]
             unit = float(page.obj.get('/UserUnit', 1))
             width, height = (box[2] - box[0]) * unit, (box[3] - box[1]) * unit
             if not all(math.isfinite(v) for v in box + [unit, width, height]) or not (0 < width <= 1008 and 0 < height <= 1008):
                 raise OcrRejection('page-dimensions')
             result.append({'geometry': (box, list(page.cropbox), unit, int(page.obj.get('/Rotate', 0)) % 360),
-                           'images': Counter(images(page.resources)), 'contents': contents(page)})
+                           'images': Counter(images(page.resources)), 'contents': contents(page),
+                           'links': links})
     info = PdfInfo(path, max_workers=1)
     for page, facts in zip(info, result):
         dpi = max(page.dpi.x, page.dpi.y)
@@ -121,7 +220,8 @@ def main():
             if len(source) != len(output):
                 return 1
             for before, after in zip(source, output):
-                if before['geometry'] != after['geometry'] or before['images'] != after['images']:
+                if (before['geometry'] != after['geometry'] or before['images'] != after['images']
+                        or before['links'] != after['links']):
                     return 1
                 # OCRmyPDF coalesces streams and adds graphics-state wrappers.
                 # Require every original stream to remain, in order, without requiring
