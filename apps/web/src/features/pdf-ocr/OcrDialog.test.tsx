@@ -19,6 +19,8 @@ describe('OCR consent and export guard semantics', () => {
     expect(markup).toContain('English OCR');
     expect(markup).toContain('Searchable PDF');
     expect(markup).toContain('existing text are skipped');
+    expect(markup).toContain('scanned regions');
+    expect(markup).toContain('OCR does not edit the visible original text.');
     expect(markup).toContain('Start OCR');
     expect(markup).toContain('aria-describedby="ocr-privacy"');
     expect(prepare).not.toHaveBeenCalled();

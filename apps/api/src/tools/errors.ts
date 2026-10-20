@@ -2,6 +2,7 @@ import type {
   HeavyToolErrorCode,
   HeavyToolErrorResponse,
 } from '@kagaz/shared-types';
+import type { OcrRejectionCategory } from './ocrDiagnostics.js';
 
 const messages: Record<HeavyToolErrorCode, string> = {
   'invalid-request': 'Send exactly one file and supported tool options.',
@@ -18,7 +19,7 @@ const messages: Record<HeavyToolErrorCode, string> = {
   'unsupported-language':
     'Only English OCR is supported. Select English and retry.',
   'no-ocr-needed':
-    'No scanned pages need OCR. Existing text remains usable; blank pages have no text to recognize.',
+    'All pages were skipped because existing text was detected or pages were blank. Mixed text-and-image pages are also skipped; this does not establish that visible characters are editable.',
   'ocr-failed':
     'The server could not validate a searchable PDF. Try a clearer scan or fewer pages. Your workspace is intact.',
   'unsupported-format':
@@ -31,7 +32,10 @@ const messages: Record<HeavyToolErrorCode, string> = {
 };
 
 export class HeavyToolError extends Error {
-  constructor(readonly code: HeavyToolErrorCode) {
+  constructor(
+    readonly code: HeavyToolErrorCode,
+    readonly rejectionCategory?: OcrRejectionCategory,
+  ) {
     super(messages[code]);
     this.name = 'HeavyToolError';
   }
