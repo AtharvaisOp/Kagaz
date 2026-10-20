@@ -26,6 +26,10 @@ import { isAnnotationDocument } from './validation';
 export type AnnotationAction =
   | { readonly type: 'ADD_ANNOTATION'; readonly annotation: PdfAnnotation }
   | {
+      readonly type: 'ADD_ANNOTATIONS';
+      readonly annotations: readonly PdfAnnotation[];
+    }
+  | {
       readonly type: 'UPDATE_ANNOTATION';
       readonly pageId: string;
       readonly annotationId: AnnotationId;
@@ -127,6 +131,11 @@ export function annotationReducer(
   action: AnnotationAction,
 ): AnnotationHistoryState {
   switch (action.type) {
+    case 'ADD_ANNOTATIONS':
+      return commitAnnotationEdit(
+        state,
+        action.annotations.reduce(addAnnotation, state.present),
+      );
     case 'ADD_ANNOTATION':
       return commitAnnotationEdit(
         state,

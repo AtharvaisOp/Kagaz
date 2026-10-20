@@ -22,6 +22,8 @@ import {
 } from './annotationStyleInteraction';
 
 interface AnnotationToolbarProps {
+  readonly sourceTextOnly?: boolean;
+  readonly onSourceTextOnlyChange?: (enabled: boolean) => void;
   readonly controller: PdfAnnotationController;
   readonly redactionController?: PdfRedactionController;
   readonly onOpenWatermark?: () => void;
@@ -84,6 +86,8 @@ function annotationOpacity(annotation: PdfAnnotation | null): number | null {
 }
 
 export function AnnotationToolbar({
+  sourceTextOnly = false,
+  onSourceTextOnlyChange,
   controller,
   redactionController,
   onOpenWatermark,
@@ -119,11 +123,12 @@ export function AnnotationToolbar({
   } = controller;
   const setActiveTool = useCallback(
     (tool: AnnotationTool) => {
+      onSourceTextOnlyChange?.(false);
       redactionController?.setActive(false);
       redactionController?.select(null);
       setAnnotationTool(tool);
     },
-    [redactionController, setAnnotationTool],
+    [redactionController, setAnnotationTool, onSourceTextOnlyChange],
   );
   const deleteSelected = useCallback(() => {
     if (redactionController?.selectionId) redactionController.removeSelected();
@@ -328,13 +333,36 @@ export function AnnotationToolbar({
             type="button"
             className="annotation-tool-button"
             aria-label={`${label} (${shortcut})`}
-            aria-pressed={!redactionController?.active && activeTool === tool}
+            aria-pressed={
+              !redactionController?.active &&
+              activeTool === tool &&
+              !(tool === 'select' && sourceTextOnly)
+            }
             title={`${label} · ${shortcut}`}
             onClick={() => setActiveTool(tool)}
           >
             {label}
           </button>
         ))}
+        {onSourceTextOnlyChange ? (
+          <button
+            type="button"
+            className="annotation-tool-button"
+            aria-pressed={
+              activeTool === 'select' &&
+              sourceTextOnly &&
+              !redactionController?.active
+            }
+            title="Select and copy source text through existing annotations"
+            onClick={() => {
+              setActiveTool('select');
+              clearSelection();
+              onSourceTextOnlyChange(true);
+            }}
+          >
+            Select PDF text
+          </button>
+        ) : null}
         <button
           type="button"
           className="annotation-tool-button"
@@ -609,6 +637,13 @@ export function AnnotationToolbar({
         <div className="annotation-error" role="alert">
           {imageError}
         </div>
+      ) : null}
+      {activeTool === 'text' || activeTool === 'highlight' ? (
+        <p className="annotation-font-status">
+          {activeTool === 'text'
+            ? 'Text adds an editable Kagaz annotation. Original PDF text cannot be rewritten or moved here.'
+            : 'Drag over source text to highlight it. Drag on blank space for a manual highlight. Select existing highlights in Annotations.'}
+        </p>
       ) : null}
       {textContext && textSupport.status !== 'ready' ? (
         <p

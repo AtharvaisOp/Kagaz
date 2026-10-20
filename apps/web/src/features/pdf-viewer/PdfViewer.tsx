@@ -149,6 +149,7 @@ export function PdfViewer({
     setRedactionActive,
   ]);
   const [mobilePageManagerOpen, setMobilePageManagerOpen] = useState(false);
+  const [sourceTextOnly, setSourceTextOnly] = useState(false);
   const [assistantOpen, setAssistantOpen] = useState(hasPendingAiReturn);
   const assistantTriggerRef = useRef<HTMLButtonElement>(null);
   const retrievalResetRef = useRef<(() => void) | null>(null);
@@ -320,6 +321,8 @@ export function PdfViewer({
         />
       ) : null}
       <AnnotationToolbar
+        sourceTextOnly={sourceTextOnly}
+        onSourceTextOnlyChange={setSourceTextOnly}
         controller={annotationController}
         redactionController={redactionController}
         watermarkTriggerRef={watermarkTriggerRef}
@@ -376,6 +379,7 @@ export function PdfViewer({
         controller={annotationController}
         pageId={selectedPageId}
         onActivate={() => {
+          setSourceTextOnly(false);
           redactionController.setActive(false);
           redactionController.select(null);
         }}
@@ -509,7 +513,9 @@ export function PdfViewer({
                   onSelectAnnotation={annotationController.selectAnnotation}
                   onCommitAnnotation={annotationController.commitAnnotation}
                   onCreateAnnotation={annotationController.addAnnotation}
+                  onCreateAnnotations={annotationController.addAnnotations}
                   activeTool={annotationController.activeTool}
+                  sourceTextOnly={sourceTextOnly}
                   styleDefaults={annotationController.styleDefaults}
                   createAnnotationId={annotationController.createAnnotationId}
                   assetRegistry={annotationController.assetRegistry}

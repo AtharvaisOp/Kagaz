@@ -90,6 +90,7 @@ export interface PdfAnnotationController {
   ) => void;
   readonly commitAnnotation: (annotation: PdfAnnotation) => void;
   readonly addAnnotation: (annotation: PdfAnnotation) => boolean;
+  readonly addAnnotations: (annotations: readonly PdfAnnotation[]) => void;
   readonly undo: () => void;
   readonly redo: () => void;
   readonly resetAnnotations: () => void;
@@ -234,7 +235,15 @@ export function usePdfAnnotations(
         action.type !== 'PRUNE_REMOVED_PAGES' &&
         action.type !== 'RESET_ANNOTATIONS'
       ) {
-        if ('annotation' in action)
+        if ('annotations' in action)
+          history?.record([
+            ...new Set(
+              action.annotations.map(
+                (annotation) => annotation.workspacePageId,
+              ),
+            ),
+          ]);
+        else if ('annotation' in action)
           history?.record([action.annotation.workspacePageId]);
         else if ('pageId' in action) history?.record([action.pageId]);
       }
@@ -348,6 +357,14 @@ export function usePdfAnnotations(
         annotationId: annotation.id,
       });
       return true;
+    },
+    [dispatchTracked],
+  );
+
+  const addAnnotations = useCallback(
+    (annotations: readonly PdfAnnotation[]) => {
+      dispatchTracked({ type: 'ADD_ANNOTATIONS', annotations });
+      setSelection(null);
     },
     [dispatchTracked],
   );
@@ -867,6 +884,7 @@ export function usePdfAnnotations(
       selectAnnotation,
       commitAnnotation,
       addAnnotation,
+      addAnnotations,
       undo,
       redo,
       resetAnnotations,
@@ -909,6 +927,7 @@ export function usePdfAnnotations(
     [
       commitAnnotation,
       addAnnotation,
+      addAnnotations,
       activeTool,
       assetRegistry,
       beginTextCreation,
