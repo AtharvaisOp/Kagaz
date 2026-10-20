@@ -34,6 +34,7 @@ import type {
   WatermarkPreviewGeometry,
 } from '../pdf-watermarks/model/types';
 import { WatermarkPreview } from '../pdf-watermarks/rendering/WatermarkPreview';
+import { PdfTextLayer } from './PdfTextLayer';
 
 import type {
   WorkspacePage,
@@ -63,7 +64,9 @@ interface PdfPageProps {
   ) => void;
   readonly onCommitAnnotation: (annotation: PdfAnnotation) => void;
   readonly onCreateAnnotation: (annotation: PdfAnnotation) => void;
+  readonly onCreateAnnotations: (annotations: readonly PdfAnnotation[]) => void;
   readonly activeTool: AnnotationTool;
+  readonly sourceTextOnly: boolean;
   readonly styleDefaults: AnnotationStyleDefaults;
   readonly createAnnotationId: () => string;
   readonly assetRegistry: AnnotationAssetRegistry;
@@ -120,7 +123,9 @@ export function PdfPage({
   onSelectAnnotation,
   onCommitAnnotation,
   onCreateAnnotation,
+  onCreateAnnotations,
   activeTool,
+  sourceTextOnly,
   styleDefaults,
   createAnnotationId,
   assetRegistry,
@@ -329,6 +334,13 @@ export function PdfPage({
       </div>
       <div
         className="pdf-page-surface"
+        onPointerDownCapture={(event) => {
+          const target = event.target instanceof Element ? event.target : null;
+          if (target?.closest('.text-selection-action')) return;
+          if (target?.closest('.pdf-text-layer'))
+            onSelectAnnotation(page.id, null);
+          else window.getSelection()?.removeAllRanges();
+        }}
         style={{ width: surfaceWidth, height: surfaceHeight }}
         data-viewport-signature={renderedViewport?.signature}
       >
@@ -353,6 +365,24 @@ export function PdfPage({
           <div className="page-error" role="alert">
             Page {workspacePageNumber} could not be rendered.
           </div>
+        ) : null}
+        {hasRenderedViewport && renderedViewport ? (
+          <PdfTextLayer
+            key={`text:${renderedViewport.signature}`}
+            document={document}
+            pageIndex={page.sourcePageIndex}
+            pageId={page.id}
+            viewport={renderedViewport.viewport}
+            enabled={
+              !redactionActive &&
+              !textEditSession &&
+              (activeTool === 'select' || activeTool === 'highlight')
+            }
+            highlighting={activeTool === 'highlight'}
+            styleDefaults={styleDefaults}
+            createId={createAnnotationId}
+            onHighlight={onCreateAnnotations}
+          />
         ) : null}
         {hasRenderedViewport && renderedViewport ? (
           formWidgets.length > 0 ? (
@@ -402,6 +432,7 @@ export function PdfPage({
             onCommitAnnotation={onCommitAnnotation}
             onCreateAnnotation={onCreateAnnotation}
             activeTool={activeTool}
+            sourceTextOnly={sourceTextOnly}
             styleDefaults={styleDefaults}
             createAnnotationId={createAnnotationId}
             assetRegistry={assetRegistry}

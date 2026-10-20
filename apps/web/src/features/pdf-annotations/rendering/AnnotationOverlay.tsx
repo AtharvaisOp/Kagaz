@@ -34,6 +34,7 @@ import {
   createTextPlacementBox,
 } from './annotationPlacement';
 import { TextEditorOverlay } from './TextEditorOverlay';
+import { annotationHitClip } from './annotationHitRegions';
 
 import { viewportPointToPdfPoint } from '../geometry/coordinateTransforms';
 import type {
@@ -65,6 +66,7 @@ interface AnnotationOverlayProps {
   ) => void;
   readonly onCommitAnnotation: (annotation: PdfAnnotation) => void;
   readonly activeTool: AnnotationTool;
+  readonly sourceTextOnly: boolean;
   readonly styleDefaults: AnnotationStyleDefaults;
   readonly createAnnotationId: () => string;
   readonly onCreateAnnotation: (annotation: PdfAnnotation) => void;
@@ -104,6 +106,7 @@ export function AnnotationOverlay({
   onSelectAnnotation,
   onCommitAnnotation,
   activeTool,
+  sourceTextOnly,
   styleDefaults,
   createAnnotationId,
   onCreateAnnotation,
@@ -122,6 +125,7 @@ export function AnnotationOverlay({
   const nodeRefs = useRef(new Map<string, Konva.Node>());
   const transformerRef = useRef<Konva.Transformer>(null);
   const gestureRef = useRef<AnnotationGestureSnapshot | null>(null);
+  const [transforming, setTransforming] = useState(false);
   const creationRef = useRef(createCreationDraftSession());
   const creationContextKey = `${workspacePageId}\0${viewportSignature}\0${activeTool}`;
   const [creationState, setCreationState] = useState<{
@@ -177,6 +181,7 @@ export function AnnotationOverlay({
   };
 
   const handleDragStart = (annotation: PdfAnnotation, node: Konva.Node) => {
+    setTransforming(true);
     onSelectAnnotation(workspacePageId, annotation.id);
     gestureRef.current = captureAnnotationGesture(
       annotation,
@@ -197,6 +202,7 @@ export function AnnotationOverlay({
     annotation: PdfAnnotation,
     node: Konva.Node,
   ) => {
+    setTransforming(true);
     onSelectAnnotation(workspacePageId, annotation.id);
     gestureRef.current = captureAnnotationGesture(
       annotation,
@@ -214,6 +220,7 @@ export function AnnotationOverlay({
   };
 
   const handleDragEnd = (node: Konva.Node) => {
+    setTransforming(false);
     const gesture = gestureRef.current;
     gestureRef.current = null;
     if (!gesture || !gestureMatchesViewport(gesture, viewportSignature)) {
@@ -234,6 +241,7 @@ export function AnnotationOverlay({
   };
 
   const handleTransformEnd = (node: Konva.Node) => {
+    setTransforming(false);
     const gesture = gestureRef.current;
     gestureRef.current = null;
     if (!gesture || !gestureMatchesViewport(gesture, viewportSignature)) {
@@ -375,7 +383,7 @@ export function AnnotationOverlay({
 
   return (
     <div
-      className={`annotation-overlay${creating ? ' annotation-overlay--creating' : ''}`}
+      className={`annotation-overlay${creating ? ' annotation-overlay--creating' : ''}${activeTool === 'highlight' ? ' annotation-overlay--highlighting' : ''}`}
       data-annotation-overlay="true"
       data-viewport-signature={viewportSignature}
       style={{
@@ -388,7 +396,15 @@ export function AnnotationOverlay({
         width={viewport.width}
         height={viewport.height}
         preventDefault={false}
-        style={{ width: viewport.width, height: viewport.height }}
+        style={{
+          width: viewport.width,
+          height: viewport.height,
+          pointerEvents: sourceTextOnly && !creating ? 'none' : 'auto',
+          clipPath:
+            !creating && !transforming
+              ? annotationHitClip(annotations, selectedAnnotationId, viewport)
+              : undefined,
+        }}
         onPointerDown={(event) => {
           if (creating) {
             handleCreationDown(event);
