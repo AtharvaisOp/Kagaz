@@ -46,7 +46,7 @@ describe('bounded shared heavy-tool response transport', () => {
           ),
       );
       await expect(request()).rejects.toThrow(
-        /flattened PDF.*encryption.*interactive forms.*digital-signature structures.*active content/i,
+        /encryption.*interactive forms.*digital-signature structures.*active content.*external hyperlink actions.*unflattened source annotations.*no automatic conversion/i,
       );
     },
   );
