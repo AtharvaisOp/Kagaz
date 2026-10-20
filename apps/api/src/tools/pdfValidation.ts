@@ -71,7 +71,8 @@ export async function validatePdf(
 ): Promise<number> {
   checkAbort(signal);
   const encrypted = await run(qpdf, ['--is-encrypted', path]);
-  if (encrypted.exitCode === 0) throw new HeavyToolError('unsupported-pdf');
+  if (encrypted.exitCode === 0)
+    throw new HeavyToolError('unsupported-pdf', 'encrypted');
   if (encrypted.exitCode !== 2) throw new HeavyToolError('invalid-pdf');
   const checked = await run(qpdf, ['--check', path]);
   // Warning/recovery status 3 is deliberately rejected, not silently repaired.
@@ -80,7 +81,8 @@ export async function validatePdf(
   const count = Number(pageInfo.stdout.trim());
   if (pageInfo.exitCode !== 0 || !Number.isInteger(count) || count < 1)
     throw new HeavyToolError('invalid-pdf');
-  if (count > maximumPages) throw new HeavyToolError('unsupported-pdf');
+  if (count > maximumPages)
+    throw new HeavyToolError('unsupported-pdf', 'page-limit');
   return count;
 }
 
@@ -109,5 +111,5 @@ export async function validateFlattenedPdf(
   )
     throw new HeavyToolError('invalid-pdf');
   if (formInfo.acroform.hasacroform)
-    throw new HeavyToolError('unsupported-pdf');
+    throw new HeavyToolError('unsupported-pdf', 'interactive-forms');
 }

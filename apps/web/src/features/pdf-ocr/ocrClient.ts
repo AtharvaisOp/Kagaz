@@ -10,14 +10,14 @@ export const OCR_ERRORS: Readonly<Record<string, string>> = {
   'file-too-large':
     'OCR supports PDFs up to 10 MiB. Extract fewer pages and try again.',
   'unsupported-pdf':
-    'OCR supports up to 20 pages, at most 14 inches per side and 400 DPI. Submit a flattened PDF without encryption, interactive forms, digital-signature structures or active content.',
+    'OCR cannot safely accept this PDF. Limits are 20 pages, 14 inches per side, 400 DPI and 16 megapixels per image. Encryption, forms, signatures, external hyperlink actions and unflattened source annotations can also block processing. Your workspace is unchanged; no automatic conversion was performed.',
   'processing-timeout':
     'OCR took too long. Extract fewer pages or use a clearer scan and retry.',
   'server-busy': 'The server is busy. Please try again in a moment.',
   'processing-failed': 'The OCR server is unavailable. Please retry.',
   'unsupported-language': 'Only English OCR is supported.',
   'no-ocr-needed':
-    'No scanned pages need OCR. Existing text remains usable; blank pages have no text to recognize.',
+    'OCR skipped every page because it detected existing text or blank pages. Try selecting and copying readable text directly. Pages combining existing text and scanned regions are also skipped. This does not mean all visible characters are editable.',
   'ocr-failed':
     'The server could not validate searchable text. Try a clearer scan or fewer pages. Your workspace is intact.',
   cancelled: 'OCR was cancelled.',

@@ -19,6 +19,13 @@ from pdf_safety import validate_pdf_structure
 logging.disable(logging.CRITICAL)
 
 
+class OcrRejection(ValueError):
+    """Only fixed application-owned categories may leave the inspector."""
+    def __init__(self, category):
+        self.category = category
+        super().__init__(category)
+
+
 def contents(page):
     streams = page.obj.get('/Contents', [])
     if isinstance(streams, pikepdf.Stream):
@@ -28,7 +35,7 @@ def contents(page):
 
 def images(resources, depth=0, seen=None):
     if depth > 12:
-        raise ValueError('resource nesting')
+        raise OcrRejection('resource-budget')
     seen = set() if seen is None else seen
     found = []
     for _, obj in resources.get('/XObject', {}).items():
@@ -36,17 +43,17 @@ def images(resources, depth=0, seen=None):
             continue
         seen.add(obj.objgen)
         if len(seen) > 512:
-            raise ValueError('resource count')
+            raise OcrRejection('resource-budget')
         if obj.get('/Subtype') == '/Image':
             width, height = int(obj.get('/Width', 0)), int(obj.get('/Height', 0))
             if not 0 < width * height <= 16_000_000:
-                raise ValueError('image pixels')
+                raise OcrRejection('image-budget')
             # Hash encoded streams: no large image decompression just to verify retention.
             found.append(hashlib.sha256(obj.read_raw_bytes()).hexdigest())
             mask = obj.get('/SMask')
             if isinstance(mask, pikepdf.Stream):
                 if int(mask.get('/Width', 0)) * int(mask.get('/Height', 0)) > 16_000_000:
-                    raise ValueError('mask pixels')
+                    raise OcrRejection('image-budget')
                 found.append(hashlib.sha256(mask.read_raw_bytes()).hexdigest())
         elif obj.get('/Subtype') == '/Form':
             found.extend(images(obj.get('/Resources', {}), depth + 1, seen))
@@ -55,23 +62,26 @@ def images(resources, depth=0, seen=None):
 
 def inventory(path):
     with pikepdf.open(path, attempt_recovery=False) as pdf:
-        validate_pdf_structure(pdf, 20)
+        try:
+            validate_pdf_structure(pdf, 20)
+        except Exception:
+            raise OcrRejection('unsafe-structure') from None
         result = []
         for page in pdf.pages:
             if page.obj.get('/Annots'):
-                raise ValueError('unflattened annotations')
+                raise OcrRejection('annotations')
             box = [float(v) for v in page.mediabox]
             unit = float(page.obj.get('/UserUnit', 1))
             width, height = (box[2] - box[0]) * unit, (box[3] - box[1]) * unit
             if not all(math.isfinite(v) for v in box + [unit, width, height]) or not (0 < width <= 1008 and 0 < height <= 1008):
-                raise ValueError('page dimensions')
+                raise OcrRejection('page-dimensions')
             result.append({'geometry': (box, list(page.cropbox), unit, int(page.obj.get('/Rotate', 0)) % 360),
                            'images': Counter(images(page.resources)), 'contents': contents(page)})
     info = PdfInfo(path, max_workers=1)
     for page, facts in zip(info, result):
         dpi = max(page.dpi.x, page.dpi.y)
         if not math.isfinite(dpi) or dpi > 400 or page.width_pixels * page.height_pixels > 16_000_000:
-            raise ValueError('raster budget')
+            raise OcrRejection('raster-budget')
         facts['existing'] = page.has_text
         facts['needs'] = not page.has_text and bool(page.images or page.has_vector)
     texts = []
@@ -87,7 +97,7 @@ def inventory(path):
         normalized = ''.join(text.split())
         texts.append((hashlib.sha256(normalized.encode()).digest(), any(c.isalnum() for c in normalized)))
     if len(texts) != len(result):
-        raise ValueError('text inventory')
+        raise OcrRejection('text-inventory')
     for facts, text in zip(result, texts):
         facts['text'] = text
     return result
@@ -96,7 +106,14 @@ def inventory(path):
 def main():
     try:
         source = inventory(sys.argv[1])
+    except OcrRejection as error:
+        print(json.dumps({'rejection': error.category}))
+        return 2
+    except pikepdf.PasswordError:
+        print(json.dumps({'rejection': 'encrypted'}))
+        return 2
     except Exception:
+        print(json.dumps({'rejection': 'unreadable-pdf'}))
         return 2  # Fail closed without printing paths, content or native exceptions.
     if len(sys.argv) == 3:
         try:
