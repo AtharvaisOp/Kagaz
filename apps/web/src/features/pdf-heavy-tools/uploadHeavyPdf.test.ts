@@ -33,7 +33,7 @@ describe('bounded shared heavy-tool response transport', () => {
     ],
   ] as const)(
     'explains the active-content policy for %s rejection',
-    async (_operation, request) => {
+    async (operation, request) => {
       vi.stubGlobal(
         'fetch',
         vi
@@ -46,7 +46,9 @@ describe('bounded shared heavy-tool response transport', () => {
           ),
       );
       await expect(request()).rejects.toThrow(
-        /encryption.*interactive forms.*digital-signature structures.*active content.*external hyperlink actions.*unflattened source annotations.*no automatic conversion/i,
+        operation === 'OCR'
+          ? /encryption.*interactive forms.*digital-signature structures.*active content.*external hyperlink actions.*unflattened source annotations.*no automatic conversion/i
+          : /flattened PDF.*encryption.*interactive forms.*digital-signature structures.*active content/i,
       );
     },
   );
