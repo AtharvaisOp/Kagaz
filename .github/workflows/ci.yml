@@ -15,6 +15,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: 01b822955a0d5d3c838b7c7162ed1bedd083161e
 
       - name: Set up pnpm
         uses: pnpm/action-setup@v4
@@ -63,6 +65,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: 01b822955a0d5d3c838b7c7162ed1bedd083161e
       - name: Set up pnpm
         uses: pnpm/action-setup@v4
         with:
@@ -101,6 +105,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
+          ref: 01b822955a0d5d3c838b7c7162ed1bedd083161e
           fetch-depth: 0
       - name: Set up pnpm
         uses: pnpm/action-setup@v4
