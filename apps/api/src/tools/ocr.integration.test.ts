@@ -1,7 +1,7 @@
 import { mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { PDFDict, PDFDocument, PDFName } from 'pdf-lib';
+import { PDFArray, PDFDict, PDFDocument, PDFName, PDFNumber } from 'pdf-lib';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { createScan } from './fixtures/createScan.js';
 import { ocrPdf } from './ocr.js';
@@ -93,7 +93,7 @@ describe('real OCRmyPDF searchable output', () => {
     },
     30_000,
   );
-  it('preserves an inert internal link and its border style while adding OCR to its scanned page', async () => {
+  it('preserves an inert internal link, border style and grayscale color while adding OCR to its scanned page', async () => {
     const workspace = await createTempWorkspace(root);
     try {
       const source = await PDFDocument.load(await createScan());
@@ -107,6 +107,7 @@ describe('real OCRmyPDF searchable output', () => {
             Rect: [20, 20, 150, 60],
             Border: [0, 0, 0],
             BS: { Type: 'Border', W: 1, S: 'D', D: [3, 2] },
+            C: [0.25],
             A: { S: 'GoTo', D: [page.ref, 'Fit'] },
           },
         ]),
@@ -125,6 +126,9 @@ describe('real OCRmyPDF searchable output', () => {
       expect(
         link.lookup(PDFName.of('BS'), PDFDict).get(PDFName.of('S')),
       ).toEqual(PDFName.of('D'));
+      expect(
+        link.lookup(PDFName.of('C'), PDFArray).lookup(0, PDFNumber).asNumber(),
+      ).toBe(0.25);
       expect(
         link.lookup(PDFName.of('A'), PDFDict).get(PDFName.of('S')),
       ).toEqual(PDFName.of('GoTo'));

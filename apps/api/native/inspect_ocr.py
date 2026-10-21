@@ -100,9 +100,11 @@ def local_links(page, page_ids):
                 if (not numbers(dash) or any(value < 0 for value in dash)
                         or (len(dash) > 0 and not any(value > 0 for value in dash))):
                     raise OcrRejection('annotations')
-        if '/C' in annotation and (not numbers(annotation['/C'], 3)
-                                   or any(not 0 <= value <= 1 for value in annotation['/C'])):
-            raise OcrRejection('annotations')
+        if '/C' in annotation:
+            color = annotation['/C']
+            if (not numbers(color) or len(color) not in (0, 1, 3, 4)
+                    or any(not 0 <= value <= 1 for value in color)):
+                raise OcrRejection('annotations')
         if '/H' in annotation and (not isinstance(annotation['/H'], pikepdf.Name)
                                    or str(annotation['/H']) not in ('/N', '/I', '/O', '/P')):
             raise OcrRejection('annotations')

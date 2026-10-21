@@ -156,3 +156,24 @@ production `provider-unavailable` incident to that path. Its provider receipt,
 HTTP status and usage remain unverified. The change is local and not deployed;
 production generation remains disabled pending the already documented fresh
 authorization and release process.
+
+## Production release follow-up — 2026-10-21
+
+The owner subsequently requested the next confirmed fixes and production
+release. The display-only usage read now has a two-second bound and stops
+waiting when the service deadline fires after settlement. A settled answer
+returns with `usage: null` even if that read never resolves; an explicit user
+cancellation still discards the answer. Late completion or rejection of the
+read does not issue another provider call or alter the returned answer.
+
+Admission now distinguishes a permanently oversized request using
+`context-too-large` (HTTP 422). Local copy asks the user to select shorter or
+fewer passages. It no longer suggests waiting for a shared allowance reset,
+and rejection occurs before provider dispatch or quota debit. Invalid token
+estimates continue to fail quota verification. The assistant error-message
+lookup also accepts only own keys, so inherited property names cannot appear
+as object or function text in the UI.
+
+These corrections use offline providers and synthetic fixtures. Production
+release authorization covers publishing the code through the existing pipeline;
+the historical failure remains unverified and no new live Groq request is made.

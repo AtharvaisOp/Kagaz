@@ -1,3 +1,5 @@
+import { once } from 'node:events';
+import { createServer, type Server } from 'node:http';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { uploadCompression } from '../pdf-compression/compressionClient';
 import { uploadOcr } from '../pdf-ocr/ocrClient';
@@ -6,6 +8,11 @@ const input = new TextEncoder().encode('%PDF-1.7 original workspace bytes');
 const output = new TextEncoder().encode('%PDF-1.7 result');
 const upload = (signal = new AbortController().signal) =>
   uploadCompression(input, 'balanced', signal, () => {});
+function serverUrl(server: Server) {
+  const address = server.address();
+  if (!address || typeof address === 'string') throw new Error('address');
+  return `http://127.0.0.1:${address.port}`;
+}
 function headers() {
   return new Headers({
     'Content-Type': 'application/pdf',
@@ -25,6 +32,50 @@ afterEach(() => {
 });
 
 describe('bounded shared heavy-tool response transport', () => {
+  it.each([307, 308])(
+    'does not resend an OCR upload to another origin after HTTP %s',
+    async (status) => {
+      let sourceRequests = 0;
+      let redirectedUploads = 0;
+      const target = createServer((request, response) => {
+        redirectedUploads++;
+        request.resume();
+        response.writeHead(502);
+        response.end();
+      });
+      const source = createServer((request, response) => {
+        sourceRequests++;
+        request.resume();
+        response.writeHead(status, { Location: `${serverUrl(target)}/upload` });
+        response.end();
+      });
+      try {
+        target.listen(0, '127.0.0.1');
+        await once(target, 'listening');
+        source.listen(0, '127.0.0.1');
+        await once(source, 'listening');
+        await expect(
+          uploadOcr(
+            input,
+            'eng',
+            new AbortController().signal,
+            () => {},
+            serverUrl(source),
+          ),
+        ).rejects.toThrow();
+        expect(sourceRequests).toBe(1);
+        expect(redirectedUploads).toBe(0);
+      } finally {
+        for (const server of [source, target]) server.closeAllConnections();
+        await Promise.all(
+          [source, target].map(
+            (server) =>
+              new Promise<void>((resolve) => server.close(() => resolve())),
+          ),
+        );
+      }
+    },
+  );
   it.each([
     ['compression', () => upload()],
     [

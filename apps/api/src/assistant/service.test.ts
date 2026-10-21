@@ -39,6 +39,7 @@ function fixture(
     freePlanMode?: boolean;
     localHttp?: boolean;
     renderProxy?: boolean;
+    deadlineMs?: number;
     diagnosticSink?: (diagnostic: AssistantDiagnostic) => void;
   } = {},
 ) {
@@ -84,6 +85,7 @@ function fixture(
     renderProxy: options.renderProxy,
     freePlanMode: options.freePlanMode,
     diagnosticSink: options.diagnosticSink,
+    deadlineMs: options.deadlineMs,
     now: () => NOW,
   });
   return {
@@ -106,6 +108,7 @@ afterEach(async () => {
   }
   server = undefined;
   vi.restoreAllMocks();
+  vi.useRealTimers();
 });
 async function start(service: AssistantService) {
   server = createApp(['http://localhost:5173'], undefined, service).listen(
@@ -247,6 +250,42 @@ describe('billable generation admission and settlement', () => {
     ).rejects.toMatchObject({ code: 'assistant-unavailable' });
     expect(generate).not.toHaveBeenCalled();
   });
+  it('rejects oversized Free Plan context without dispatching or changing accounting', async () => {
+    const writes = vi.fn();
+    const ledger = new AssistantLedger(
+      {
+        transaction: (operation) =>
+          operation({
+            get: () => Promise.resolve(undefined),
+            set: writes,
+          }),
+      },
+      0,
+      0,
+      () => NOW,
+      GROQ_FREE_PLAN_LIMITS,
+    );
+    const dispatch = vi.spyOn(ledger, 'markDispatched');
+    const generate = vi.fn<AssistantProvider['generate']>();
+    const service = new AssistantService({
+      ledger,
+      provider: {
+        generate,
+        reservationTokenCeiling: () =>
+          GROQ_FREE_PLAN_LIMITS.maxTokensPerRequest + 1,
+      },
+      enabled: true,
+      unavailableReason: '',
+      freePlanMode: true,
+      now: () => NOW,
+    });
+    await expect(
+      service.answer('uid', body(), new AbortController().signal),
+    ).rejects.toMatchObject({ code: 'context-too-large', status: 422 });
+    expect(dispatch).not.toHaveBeenCalled();
+    expect(generate).not.toHaveBeenCalled();
+    expect(writes).not.toHaveBeenCalled();
+  });
   it('refunds a known unbilled provider rejection and a cancellation before dispatch', async () => {
     const { service, generate, settle } = fixture();
     generate.mockRejectedValue(
@@ -377,6 +416,81 @@ describe('billable generation admission and settlement', () => {
     await expect(
       service.answer('uid', body(), controller.signal),
     ).rejects.toMatchObject({ code: 'cancelled' });
+  });
+  it('returns the settled answer within two seconds when usage stalls and consumes a late rejection', async () => {
+    vi.useFakeTimers();
+    const diagnostics: AssistantDiagnostic[] = [];
+    const { service, settle, usage, generate } = fixture({
+      diagnosticSink: (diagnostic) => diagnostics.push(diagnostic),
+    });
+    let rejectUsage: ((reason: Error) => void) | undefined;
+    usage.mockImplementation(
+      () =>
+        new Promise((_resolve, reject) => {
+          rejectUsage = reject;
+        }),
+    );
+    const result = service.answer('uid', body(), new AbortController().signal);
+    await vi.advanceTimersByTimeAsync(2_000);
+    await expect(result).resolves.toMatchObject({
+      answer: { text: 'Tomorrow.', citations: ['p1'] },
+      usage: null,
+    });
+    expect(generate).toHaveBeenCalledTimes(1);
+    expect(settle).toHaveBeenCalledTimes(1);
+    expect(vi.getTimerCount()).toBe(0);
+    rejectUsage?.(new Error('private late store failure'));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(diagnostics).toEqual([
+      expect.objectContaining({
+        failureStage: 'quota-usage-read',
+        errorCategory: 'quota-error',
+        responseReceived: true,
+      }),
+    ]);
+    expect(JSON.stringify(diagnostics)).not.toContain('private');
+  });
+  it.each(['usage-read', 'settlement'])(
+    'preserves a settled answer if the service deadline expires during %s',
+    async (stage) => {
+      vi.useFakeTimers();
+      const { service, settle, usage, generate } = fixture({ deadlineMs: 50 });
+      if (stage === 'settlement')
+        settle.mockImplementationOnce(
+          () => new Promise((resolve) => setTimeout(() => resolve(true), 100)),
+        );
+      usage.mockImplementation(() => new Promise(() => {}));
+      const result = service.answer(
+        'uid',
+        body(),
+        new AbortController().signal,
+      );
+      await vi.advanceTimersByTimeAsync(100);
+      await expect(result).resolves.toMatchObject({
+        answer: { text: 'Tomorrow.', citations: ['p1'] },
+        usage: null,
+      });
+      expect(generate).toHaveBeenCalledTimes(1);
+      expect(settle).toHaveBeenCalledTimes(1);
+      expect(usage).toHaveBeenCalledTimes(stage === 'settlement' ? 0 : 1);
+      expect(vi.getTimerCount()).toBe(0);
+    },
+  );
+  it('discards a settled answer promptly when the user cancels a stalled usage read', async () => {
+    vi.useFakeTimers();
+    const { service, usage, settle } = fixture();
+    usage.mockImplementation(() => new Promise(() => {}));
+    const controller = new AbortController();
+    const result = service.answer('uid', body(), controller.signal);
+    const rejected = expect(result).rejects.toMatchObject({
+      code: 'cancelled',
+    });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(usage).toHaveBeenCalledTimes(1);
+    controller.abort();
+    await rejected;
+    expect(settle).toHaveBeenCalledTimes(1);
+    expect(vi.getTimerCount()).toBe(0);
   });
   it('validates review before reserving and keeps disabled AI inaccessible', async () => {
     const { service, reserve } = fixture({ enabled: false });

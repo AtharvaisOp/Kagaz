@@ -120,7 +120,7 @@ export interface AssistantUsageStatus {
 export interface AssistantAnswerResponse {
   readonly requestId: string;
   readonly answer: AssistantGroundedAnswer;
-  /** Null only after successful settlement when the subsequent usage read fails.
+  /** Null only after successful settlement when the subsequent usage read fails or times out.
    * Keep the answer; disable further generation until fresh usage is verified.
    */
   readonly usage: AssistantUsageStatus | null;
@@ -132,6 +132,7 @@ export type AssistantErrorCode =
   | 'google-sign-in-required'
   | 'https-required'
   | 'invalid-request'
+  | 'context-too-large'
   | 'assistant-unavailable'
   | 'quota-unavailable'
   | 'daily-limit'

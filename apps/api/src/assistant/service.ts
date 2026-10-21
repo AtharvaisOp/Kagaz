@@ -29,6 +29,33 @@ import { performance } from 'node:perf_hooks';
 import { boundedDurationMs, reportAssistantDiagnostic } from './diagnostics.js';
 import type { AssistantDiagnosticSink } from './diagnostics.js';
 
+const SETTLED_USAGE_READ_TIMEOUT_MS = 2_000;
+
+/** This display read cannot hold an already settled answer past its deadline.
+ * Firestore does not expose per-read cancellation; Promise.race also consumes
+ * any later rejection from the abandoned read.
+ */
+async function readSettledUsage(
+  read: () => Promise<AssistantUsageStatus>,
+  signal: AbortSignal,
+): Promise<AssistantUsageStatus> {
+  if (signal.aborted) throw quotaUnavailable();
+  let timer: NodeJS.Timeout | undefined;
+  let abort: (() => void) | undefined;
+  try {
+    const unavailable = new Promise<never>((_resolve, reject) => {
+      abort = () => reject(quotaUnavailable());
+      signal.addEventListener('abort', abort, { once: true });
+      timer = setTimeout(abort, SETTLED_USAGE_READ_TIMEOUT_MS);
+      timer.unref();
+    });
+    return await Promise.race([read(), unavailable]);
+  } finally {
+    clearTimeout(timer);
+    if (abort) signal.removeEventListener('abort', abort);
+  }
+}
+
 export interface AssistantServiceOptions {
   readonly auth?: AssistantAuthenticator;
   readonly ledger?: AssistantLedger;
@@ -194,7 +221,7 @@ export class AssistantService {
           409,
           'The generation expired. Its result cannot be presented as current.',
         );
-      if (controller.signal.aborted)
+      if (signal.aborted)
         throw new ProviderError(
           'cancelled',
           'Generation was cancelled. Already transmitted passages cannot be retracted.',
@@ -202,13 +229,16 @@ export class AssistantService {
       postProviderFailureStage = 'quota-usage-read';
       let usage: AssistantUsageStatus | null = null;
       try {
-        usage = await this.usage(uid);
+        usage = await readSettledUsage(
+          () => this.usage(uid),
+          controller.signal,
+        );
       } catch (error) {
         // Settlement already committed. A failed display-only read must not
         // discard a validated answer or encourage another provider request.
-        if (!controller.signal.aborted) reportPostProviderFailure(error);
+        if (!signal.aborted) reportPostProviderFailure(error);
       }
-      if (controller.signal.aborted)
+      if (signal.aborted)
         throw new ProviderError(
           'cancelled',
           'Generation was cancelled. Already transmitted passages cannot be retracted.',

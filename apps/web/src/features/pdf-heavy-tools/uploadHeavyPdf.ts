@@ -91,6 +91,8 @@ export async function uploadHeavyPdf<M>(
         signal,
         credentials: 'omit',
         cache: 'no-store',
+        redirect: 'error',
+        referrerPolicy: 'no-referrer',
       },
     );
   } catch (error) {

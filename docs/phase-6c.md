@@ -2,19 +2,18 @@
 
 ## Durable checkpoint
 
-Updated: 2026-10-21 (UTC). Status: **PARTIAL — Phase 6C and the privacy-safe
-provider diagnostics are present in this checkout at `95b3ea3` (PR #19 merge,
-local branch `work`). The 2026-10-20 diagnosis in
-`docs/ai-response-failure-diagnosis.md` found no evidence-backed runtime fix and
-did not identify the original provider failure's cause. This worktree now adds
-local follow-up fixes for confirmed OCR response and post-settlement Groq
-response paths; they are not deployed. The owner reports
-exact-main Run 121 passed. The diagnosis recorded Render deployment
-`dep-dbbheinlk1mc73dpd130` live on code SHA `6413d39`. The one separately
-authorized synthetic production request returned `provider-unavailable`;
-provider receipt, HTTP status and token usage remain unverified, and the daily
-allowance is 4 of 5. Production generation remains disabled, and no further
-provider request is authorized.**
+Updated: 2026-10-21 (UTC), production release preparation. Status: **PARTIAL —
+Phase 6C is implemented and response fixes are prepared on
+`codex/ocr-groq-production-fixes`, including local commit `bc076a6`. The owner
+has requested the next confirmed fixes and their production release. At the
+start of this release, both production services were verified on `95b3ea3`:
+Render deploy `dep-dbbltes9v7es73flufpg` was live and Vercel deployment
+`dpl_8zaMwERagAFVp5CQd4FCwyLQmfX4` was READY. Main CI Run `39418550937`
+passed. The original OCR PDF and the historical Groq failure's exact cause
+remain unavailable. The one separately authorized synthetic Groq request
+returned `provider-unavailable`; provider receipt, HTTP status and token usage
+remain unverified. Production generation remains disabled, and release of code
+does not authorize another provider request.**
 
 - Started from clean `main` / `origin/main` at
   `f252998ff2ffce209d28b8073b19b633bbac0e48`.
@@ -366,7 +365,7 @@ executable. The latter's directory must precede the global shim on PATH for Turb
 | Exact-head GitHub Actions run 109 (`c1222f2`)        | PASS: quality, production-container, Firebase-assistant                                                                                                     |
 | Production Google sign-in and `/assistant/usage`     | PASS: sign-in succeeded; authenticated usage returned HTTP 200, unauthenticated request HTTP 401; no Groq call                                              |
 | Anonymous production PDF workflows                   | PASS: local Ask PDF, reviewed rotation, export, logout, and post-logout local Ask PDF with synthetic fixture                                                |
-| Live Groq request                                    | One separately authorized synthetic request returned `provider-unavailable`; provider receipt/status/usage remain unverified; generation is disabled         |
+| Live Groq request                                    | One separately authorized synthetic request returned `provider-unavailable`; provider receipt/status/usage remain unverified; generation is disabled        |
 
 The final emulator/browser runner passed twice, including after a mobile checkbox
 spacing correction. It tests actual Google popup flow against the Auth emulator,
@@ -808,3 +807,44 @@ explicit product/privacy decision.
   performed. See the follow-up sections in
   `docs/ocr-rejection-diagnosis.md` and
   `docs/ai-response-failure-diagnosis.md` for exact scope and limits.
+
+## Additional production response corrections — 2026-10-21
+
+The owner requested a production release after the local follow-up. Review found
+five further reproducible defects:
+
+- Valid internal-link colors using transparent, grayscale or CMYK arrays were
+  rejected by an RGB-only OCR check. Accept the PDF-defined 0/1/3/4-component
+  arrays while retaining finite bounds and exact output retention checks.
+- Heavy-tool fetches could follow a redirect and resend the uploaded document.
+  Reject redirects and suppress the referrer; verify a second origin receives
+  no upload for HTTP 307/308 responses.
+- A permanently pending usage read could still hide a settled Groq answer.
+  Bound this display read to two seconds and stop waiting at the request
+  deadline. Preserve the answer with unverified usage while honoring explicit
+  user cancellation.
+- A request above the per-request Free Plan token ceiling was described as
+  temporary shared allowance exhaustion. Return `context-too-large` with
+  guidance to select shorter or fewer passages, before any provider dispatch
+  or quota debit.
+- Unknown assistant error codes could resolve inherited object properties.
+  Select messages only from own keys of the local fixed-message map.
+
+Release through a separate pull request, require the quality, Firebase emulator,
+and production-container jobs, then merge to the existing production `main`
+branch. Both hosts deploy from that branch. Verify the resulting commit and
+live/READY state for each service and smoke-test the public frontend, health,
+and synthetic OCR behavior. Keep existing provider and budget flags in their
+disabled state. This release makes no model, billing, credential or quota changes.
+
+Local release-candidate verification passed: 183 focused API/native tests (125
+assistant service/ledger/provider and 58 OCR inspection/real-engine tests), 72
+frontend tests (22 assistant-client and 50 OCR/shared-upload), root lint,
+typecheck, build, full format check and diff check. Build retains the existing
+large-chunk and mixed static/dynamic image-import warnings. New compatibility,
+stalled-read and redirect regressions reproduce the defects before their fixes.
+
+Read `design.md`; the new messages use the existing error presentation without
+changing layout or motion. The required gptTaste skill was unavailable in this
+environment. The prior OCR desktop/mobile feedback verification remains
+applicable to the unchanged dialog structure.

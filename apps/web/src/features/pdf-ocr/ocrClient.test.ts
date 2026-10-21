@@ -48,6 +48,8 @@ describe('explicit OCR upload and trusted response', () => {
     const [url, options] = fetchMock.mock.calls[0]!;
     expect(url).toBe('https://api.example/tools/ocr');
     expect(options?.credentials).toBe('omit');
+    expect(options?.redirect).toBe('error');
+    expect(options?.referrerPolicy).toBe('no-referrer');
     const body = options?.body;
     if (!(body instanceof FormData)) throw new Error('body');
     expect([...body.keys()]).toEqual(['file', 'language']);

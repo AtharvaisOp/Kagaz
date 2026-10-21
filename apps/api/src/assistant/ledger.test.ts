@@ -311,6 +311,40 @@ describe('shared assistant accounting lifecycle', () => {
 });
 
 describe('shared Groq Free Plan limits', () => {
+  it('distinguishes oversized context from temporary exhaustion without debiting usage', async () => {
+    const { store, ledger } = freeFixture();
+    await expect(
+      ledger.reserve(
+        'oversized',
+        randomUUID(),
+        GROQ_FREE_PLAN_LIMITS.maxTokensPerRequest + 1,
+      ),
+    ).rejects.toMatchObject({ code: 'context-too-large', status: 422 });
+    expect(store.documents.size).toBe(0);
+    expect(await ledger.usage('oversized')).toMatchObject({
+      remaining: 5,
+      available: true,
+      active: false,
+    });
+    await expect(
+      ledger.reserve('oversized', randomUUID(), 500),
+    ).resolves.toBeDefined();
+    expect(store.documents.get('assistantFreeUsage/2026-10-18')).toMatchObject({
+      requests: 1,
+      reservedTokens: 500,
+      usedTokens: 0,
+    });
+  });
+  it.each([undefined, 0, -1, 1.5, NaN])(
+    'fails quota verification for invalid token estimate %s without accounting writes',
+    async (tokens) => {
+      const { store, ledger } = freeFixture();
+      await expect(
+        ledger.reserve('invalid-estimate', randomUUID(), tokens),
+      ).rejects.toMatchObject({ code: 'quota-unavailable' });
+      expect(store.documents.size).toBe(0);
+    },
+  );
   it('shares the request-per-minute cap atomically across users and instances at $0', async () => {
     const { store, ledger, now } = freeFixture();
     const secondInstance = new AssistantLedger(
