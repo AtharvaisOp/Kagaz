@@ -109,7 +109,9 @@ export function readAnswer(
   )
     return null;
   const usage = readUsage(value.usage);
-  if (!usage) return null;
+  // Explicit null means the settled answer is valid but quota display is
+  // unavailable. Missing or malformed quota must still reject the envelope.
+  if (!usage && value.usage !== null) return null;
   const response: AssistantAnswerResponse = {
     requestId: request.requestId,
     usage,

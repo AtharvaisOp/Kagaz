@@ -51,6 +51,10 @@ export async function uploadHeavyPdf<M>(
     readonly maximumInput: number;
     readonly sizeHeader: string;
     readonly errors: Readonly<Record<string, string>>;
+    /** Fixed local copy indexed by error code and an allowlisted server reason. */
+    readonly errorReasons?: Readonly<
+      Record<string, Readonly<Record<string, string>>>
+    >;
     readonly validate: (headers: Headers, actualBytes: number) => M;
   },
 ): Promise<{ bytes: Uint8Array; metadata: M }> {
@@ -111,6 +115,18 @@ export async function uploadHeavyPdf<M>(
         Object.hasOwn(options.errors, payload.error.code)
       ) {
         message = options.errors[payload.error.code]!;
+        const reasons =
+          options.errorReasons &&
+          Object.hasOwn(options.errorReasons, payload.error.code)
+            ? options.errorReasons[payload.error.code]
+            : undefined;
+        if (
+          reasons &&
+          'reason' in payload.error &&
+          typeof payload.error.reason === 'string' &&
+          Object.hasOwn(reasons, payload.error.reason)
+        )
+          message = reasons[payload.error.reason]!;
       }
     } catch {
       /* Proxies may return HTML; never expose it to the user. */

@@ -22,10 +22,26 @@ export type HeavyToolErrorCode =
   | 'conversion-failed'
   | 'cancelled';
 
+/** Fixed input predicates only; never native output or document-derived strings. */
+export type PdfRejectionReason =
+  | 'encrypted'
+  | 'page-limit'
+  | 'interactive-forms'
+  | 'unsafe-structure'
+  | 'annotations'
+  | 'page-dimensions'
+  | 'image-budget'
+  | 'raster-budget'
+  | 'resource-budget'
+  | 'unreadable-pdf'
+  | 'text-inventory'
+  | 'inspection-rejected';
+
 export interface HeavyToolErrorResponse {
   readonly error: {
     readonly code: HeavyToolErrorCode;
     readonly message: string;
+    readonly reason?: PdfRejectionReason;
   };
 }
 
@@ -104,7 +120,10 @@ export interface AssistantUsageStatus {
 export interface AssistantAnswerResponse {
   readonly requestId: string;
   readonly answer: AssistantGroundedAnswer;
-  readonly usage: AssistantUsageStatus;
+  /** Null only after successful settlement when the subsequent usage read fails.
+   * Keep the answer; disable further generation until fresh usage is verified.
+   */
+  readonly usage: AssistantUsageStatus | null;
 }
 
 export type AssistantErrorCode =

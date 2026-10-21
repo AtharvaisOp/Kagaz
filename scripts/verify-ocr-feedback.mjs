@@ -18,10 +18,17 @@ let code = 'no-ocr-needed',
   requests = 0;
 await page.route('**/tools/ocr', async (route) => {
   requests++;
+  const rejection = {
+    error: {
+      code,
+      message: 'fixed server envelope',
+      ...(code === 'unsupported-pdf' ? { reason: 'unsafe-structure' } : {}),
+    },
+  };
   await route.fulfill({
     status: 422,
     contentType: 'application/json',
-    body: JSON.stringify({ error: { code, message: 'fixed server envelope' } }),
+    body: JSON.stringify(rejection),
   });
 });
 try {
@@ -54,7 +61,9 @@ try {
   await dialog.getByRole('button', { name: 'Retry OCR', exact: true }).click();
   await dialog
     .getByRole('alert')
-    .filter({ hasText: 'external hyperlink actions' })
+    .filter({
+      hasText: 'external links, actions, attachments or digital signatures',
+    })
     .waitFor();
   await page.screenshot({ path: resolve(artifacts, 'desktop.png') });
   await page.setViewportSize({ width: 390, height: 844 });

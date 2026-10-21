@@ -199,6 +199,45 @@ describe('OCR shared HTTP lifecycle and policy', () => {
       runner.mock.calls.some(([request]) => request.executable === 'ocrmypdf'),
     ).toBe(false);
   });
+  it.each(['annotations', 'raster-budget', 'private-native-secret'])(
+    'returns only a fixed rejection reason for native OCR rejection %s',
+    async (category) => {
+      const runner = vi.fn<NativeRunner>(async (request) =>
+        request.executable === 'python3'
+          ? {
+              exitCode: 2,
+              stdout: JSON.stringify({
+                rejection: category,
+                text: 'native-secret',
+              }),
+              stderr: 'native-secret',
+            }
+          : good(request),
+      );
+      const url = await start(runner);
+      const response = await fetch(url, { method: 'POST', body: form() });
+      expect(response.status).toBe(422);
+      const payload: unknown = await response.json();
+      expect(payload).toMatchObject({
+        error: {
+          code: 'unsupported-pdf',
+          reason:
+            category === 'private-native-secret'
+              ? 'inspection-rejected'
+              : category,
+        },
+      });
+      expect(
+        typeof (payload as { error?: { message?: unknown } }).error?.message,
+      ).toBe('string');
+      expect(JSON.stringify(payload)).not.toContain('native-secret');
+      expect(
+        runner.mock.calls.some(
+          ([request]) => request.executable === 'ocrmypdf',
+        ),
+      ).toBe(false);
+    },
+  );
   it.each([
     'native-exit',
     'missing-output',

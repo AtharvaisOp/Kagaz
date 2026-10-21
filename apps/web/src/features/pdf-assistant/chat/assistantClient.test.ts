@@ -119,6 +119,7 @@ describe('authenticated AI network boundary', () => {
     for (const value of [
       null,
       { ...answer, usage: {} },
+      { ...answer, usage: undefined },
       { ...answer, requestId: 'other' },
       { ...answer, answer: { ...answer.answer, text: '' } },
       { ...answer, answer: { ...answer.answer, text: 'a'.repeat(2_401) } },
@@ -132,6 +133,27 @@ describe('authenticated AI network boundary', () => {
       },
     ])
       expect(readAnswer(value, request)).toBeNull();
+  });
+  it('accepts a validated answer with explicitly unavailable usage without trusting forged citations', async () => {
+    const settledAnswer = { ...answer, usage: null };
+    vi.stubGlobal('window', { location: { origin: 'http://127.0.0.1:5173' } });
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(new Response(JSON.stringify(settledAnswer)));
+    vi.stubGlobal('fetch', fetchMock);
+    await expect(
+      generateAssistantAnswer(request, 'token', new AbortController().signal),
+    ).resolves.toEqual(settledAnswer);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(
+      readAnswer(
+        {
+          ...settledAnswer,
+          answer: { ...answer.answer, citations: ['unapproved'] },
+        },
+        request,
+      ),
+    ).toBeNull();
   });
 
   it('does not automatically retry a possibly billed provider failure or expose its raw response', async () => {

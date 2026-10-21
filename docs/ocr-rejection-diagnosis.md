@@ -14,7 +14,7 @@ is not available here. Do not label the original incident resolved.
 | More than 20 pages                                                | qpdf page inventory, input-validation / page-limit.                                                              |
 | Interactive AcroForm                                              | qpdf form inventory, input-validation / interactive-forms.                                                       |
 | URI hyperlink, JavaScript, external/active structures, signatures | `validate_pdf_structure` inside native inventory, source-inspection / unsafe-structure.                          |
-| Simple internal GoTo link                                         | Originally rejected by the blanket OCR annotation check; now accepted with strict output retention verification. |
+| Simple internal GoTo link                                         | Accepted with strict output retention verification, including the common `/BS` border-style dictionary.          |
 | Passive note or complex link                                      | Shared safety scan may pass; OCR rejects at source-inspection / annotations. This is not evidence of malware.    |
 | Page over 1008 points per side after UserUnit                     | source-inspection / page-dimensions.                                                                             |
 | Image/mask above 16 MP                                            | source-inspection / image-budget.                                                                                |
@@ -124,3 +124,31 @@ cannot be retroactively assigned a root cause.
 
 Next agents must not fix this by bypassing `validate_pdf_structure`, deleting
 links silently, increasing resource limits, or forcing OCR over digital pages.
+
+## Follow-up implementation — 2026-10-21
+
+This follow-up fixes two confirmed local response problems while preserving the
+original incident's PARTIAL status:
+
+- A simple internal Link with a valid PDF border-style dictionary (`/BS`) is now
+  accepted. The inspector validates the dictionary's keys, width, style and dash
+  pattern, then includes it in the derivative retention digest. Malformed styles
+  and changed output attributes remain rejected.
+- The OCR API now returns an optional, fixed `reason` enum for `unsupported-pdf`.
+  It is sourced only from the existing native rejection allowlist. The browser
+  maps known reasons to local copy and ignores unknown values, server prose,
+  paths and native diagnostics. The user now sees the failing OCR predicate and
+  a safe next step without exposing PDF data.
+- Regression coverage checks `/BS` validation/retention, fixed public reason
+  allowlisting, unknown-reason fallback and each reason-specific local message.
+  The real OCR integration case adds searchable text to a scan and confirms the
+  internal link's border style survives.
+- Validation passed: the focused API run reported 106 tests across OCR
+  inspection, HTTP, real-engine integration and assistant service; the focused
+  frontend run reported 56 OCR-client and assistant-client tests. The mocked
+  Chromium feedback flow passed on desktop and mobile. No live API upload was
+  used by the browser flow.
+
+The original user PDF and its rejection metadata are still unavailable. These
+synthetic and real-engine regressions do not identify its exact cause. This
+follow-up is local code only; it was not deployed.

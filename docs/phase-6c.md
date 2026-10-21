@@ -2,7 +2,19 @@
 
 ## Durable checkpoint
 
-Updated: 2026-10-20 (Asia/Calcutta). Status: **PARTIAL — Phase 6C is on current `main` SHA `0201ecacb62e9ba62b7ffde825f33593b26d4238`; exact-main Run 119 passed all three jobs and Vercel/Render production deployments are live on that SHA. The owner confirmed the old Firebase Admin key was revoked, the rotated credential is active, Groq is Free Plan with Zero Data Retention enabled, and authorized one synthetic production request. Sign-in and passage review succeeded, but the one request returned `provider-unavailable`; the daily allowance now shows 4 of 5. Generation has been disabled again. Provider receipt and token usage were not independently verifiable, and no further provider request is authorized.**
+Updated: 2026-10-21 (UTC). Status: **PARTIAL — Phase 6C and the privacy-safe
+provider diagnostics are present in this checkout at `95b3ea3` (PR #19 merge,
+local branch `work`). The 2026-10-20 diagnosis in
+`docs/ai-response-failure-diagnosis.md` found no evidence-backed runtime fix and
+did not identify the original provider failure's cause. This worktree now adds
+local follow-up fixes for confirmed OCR response and post-settlement Groq
+response paths; they are not deployed. The owner reports
+exact-main Run 121 passed. The diagnosis recorded Render deployment
+`dep-dbbheinlk1mc73dpd130` live on code SHA `6413d39`. The one separately
+authorized synthetic production request returned `provider-unavailable`;
+provider receipt, HTTP status and token usage remain unverified, and the daily
+allowance is 4 of 5. Production generation remains disabled, and no further
+provider request is authorized.**
 
 - Started from clean `main` / `origin/main` at
   `f252998ff2ffce209d28b8073b19b633bbac0e48`.
@@ -27,12 +39,13 @@ Updated: 2026-10-20 (Asia/Calcutta). Status: **PARTIAL — Phase 6C is on curren
   `/health` returns HTTP 200. The Render dashboard confirms the Firebase project,
   Secret File path, and every disabled AI flag. Production Google sign-in and
   authenticated Firestore-backed usage were verified without contacting Groq.
-- The owner confirms directly in Groq Console that the organization is on the
-  Free Plan at $0, developer billing is not activated, `openai/gpt-oss-20b` is
-  allowed, and Inference APIs Zero Data Retention is enabled. The owner also
-  reports that a replacement Groq key is configured securely on Render; its
-  value was never read. No provider request was made, and live generation stays
-  disabled pending the owner's separate explicit authorization.
+- At this initial checkpoint, the owner confirmed directly in Groq Console that
+  the organization was on the Free Plan at $0, developer billing was not
+  activated, `openai/gpt-oss-20b` was allowed, and Inference APIs Zero Data
+  Retention was enabled. The owner also reports that a replacement Groq key is
+  configured securely on Render; its value was never read. No provider request
+  had yet been made at that checkpoint;
+  the later single authorized request and its outcome are recorded below.
 
 ## Current product and spending policy
 
@@ -263,9 +276,10 @@ Kagaz persists no transcript. Firebase may persist authentication session state.
 [Groq's data policy](https://console.groq.com/docs/your-data) describes provider
 data controls. The owner verified in Groq Console that Inference APIs Zero Data
 Retention is enabled. This records the owner's Console verification; the setting
-was not independently inspected through a connector, and no Groq request was
-made. The backend still sends only explicitly approved excerpts and does not
-persist document or conversation content.
+was not independently inspected through a connector. No request had been made
+at that initial verification checkpoint; the later single authorized attempt is
+recorded below. The backend still sends only explicitly approved excerpts and
+does not persist document or conversation content.
 
 The UI follows `design.md` and uses the required gptTaste guidance for focus,
 feedback and restrained motion. It uses semantic fieldsets and labels, explicit
@@ -352,7 +366,7 @@ executable. The latter's directory must precede the global shim on PATH for Turb
 | Exact-head GitHub Actions run 109 (`c1222f2`)        | PASS: quality, production-container, Firebase-assistant                                                                                                     |
 | Production Google sign-in and `/assistant/usage`     | PASS: sign-in succeeded; authenticated usage returned HTTP 200, unauthenticated request HTTP 401; no Groq call                                              |
 | Anonymous production PDF workflows                   | PASS: local Ask PDF, reviewed rotation, export, logout, and post-logout local Ask PDF with synthetic fixture                                                |
-| Live Groq request                                    | NOT RUN; no live request is authorized and every production generation flag remains disabled                                                                |
+| Live Groq request                                    | One separately authorized synthetic request returned `provider-unavailable`; provider receipt/status/usage remain unverified; generation is disabled         |
 
 The final emulator/browser runner passed twice, including after a mobile checkbox
 spacing correction. It tests actual Google popup flow against the Auth emulator,
@@ -525,8 +539,9 @@ Groq Free Plan chat`). Exact-main Run **116** passed Quality,
   environment entries. The Secret File basename was provided by the owner and its
   path was configured; its contents were never read. The owner now confirms the
   organization is on the Free Plan, developer billing is off, provider spend is
-  $0 only, and Inference APIs Zero Data Retention is enabled. No provider request
-  was made.
+  $0 only, and Inference APIs Zero Data Retention is enabled. At that checkpoint,
+  no provider request had been made; the later authorized request is recorded
+  below.
 - The Render dashboard confirms `FIREBASE_PROJECT_ID=kagaz-b4bf7` and
   `GOOGLE_APPLICATION_CREDENTIALS=/etc/secrets/kagaz-b4bf7-firebase-adminsdk-fbsvc-d559585578.json`;
   the Secret File basename matches. Production Google ID-token verification and
@@ -544,8 +559,8 @@ Groq Free Plan chat`). Exact-main Run **116** passed Quality,
   environment values match the registered Web App and preserve the Render API
   origin.
 - Owner-confirmed Groq Free Plan and Zero Data Retention settings remain Console
-  assertions; no live Groq request was authorized or made. Provider runtime
-  connectivity and live answer quality therefore remain untested.
+  assertions. The one authorized live request returned `provider-unavailable`,
+  so provider receipt, usage and live answer quality remain unverified.
 - Structured citations and adversarial mocks do not prove live semantic accuracy.
 - Remote cancellation is best-effort. Unknown billing retains the attempt,
   reserves/charges conservatively and holds the active lease until expiry.
@@ -612,7 +627,8 @@ Groq Free Plan chat`). Exact-main Run **116** passed Quality,
       is false, and the configured dollar budget is zero.
 - [x] Owner confirms the Groq organization is on the Free Plan, developer billing
       is off, `openai/gpt-oss-20b` is allowed, ZDR is enabled, and maximum provider
-      spend is $0; no Groq request has been made.
+      spend is $0. One separately authorized synthetic request returned
+      `provider-unavailable`; provider receipt/status/usage remain unverified.
 - [x] Shared application caps are below Groq's published Free Plan limits:
       5 RPM/100 RPD/6,000 TPM/20,000 TPD with 6,000 reserved tokens/request.
 - [x] Production Google sign-in, backend Firebase ID-token verification and
@@ -622,8 +638,9 @@ Groq Free Plan chat`). Exact-main Run **116** passed Quality,
       confirmed; do not expose or paste any key material.
 - [x] Groq Free Plan account tier, model access and Inference APIs Zero Data
       Retention are confirmed by the owner.
-- [ ] One synthetic-passage live request only after separate owner authorization;
-      no such request is authorized now.
+- [x] One synthetic-passage live request was made after separate owner
+      authorization; it returned `provider-unavailable`. No further request is
+      authorized without fresh explicit approval.
 - [x] Authenticated production `GET /assistant/usage` returns HTTP 200 and reads
       the Firestore quota without a Groq request.
 - [x] Exact-main Run 116 passed Quality, Production-container and
@@ -772,3 +789,22 @@ explicit product/privacy decision.
 - Next: inspect the original attempt's Groq Console entry if available, using
   status-only metadata. Keep the provider disabled. A future live retry would
   require separate explicit approval after any diagnostic release and review.
+
+## Local response follow-up — 2026-10-21
+
+- OCR now retains valid internal-link `/BS` border styles, returns a fixed
+  rejection reason enum, and maps known reasons to local user-facing guidance.
+  Unknown reasons and server/native text remain hidden. The original user PDF is
+  still unavailable, so its exact rejection cause is not attributed.
+- After successful answer settlement, a subsequent usage-read failure now
+  preserves the validated Groq answer with `usage: null`. The web client accepts
+  that explicit state, retains citations, and disables new generation until a
+  fresh usage read succeeds. Quota settlement failures still do not release an
+  unverified answer.
+- Local validation passed: 106 focused API tests, 56 focused frontend tests,
+  mocked Chromium OCR feedback on desktop/mobile, `pnpm lint`, `pnpm typecheck`,
+  and `pnpm build`. The API run includes real OCRmyPDF link-retention coverage.
+  No Groq request, quota mutation, production setting change, or deployment was
+  performed. See the follow-up sections in
+  `docs/ocr-rejection-diagnosis.md` and
+  `docs/ai-response-failure-diagnosis.md` for exact scope and limits.

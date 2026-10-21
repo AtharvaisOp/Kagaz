@@ -108,6 +108,84 @@ describe('explicit OCR upload and trusted response', () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
   it.each([
+    ['encrypted', 'password protection'],
+    ['page-limit', '20 pages'],
+    ['interactive-forms', 'interactive form'],
+    ['annotations', 'source annotations'],
+    ['unsafe-structure', 'external links'],
+    ['page-dimensions', '14 inches'],
+    ['image-budget', '16 megapixels'],
+    ['raster-budget', '400 DPI'],
+    ['resource-budget', 'complex'],
+    ['unreadable-pdf', 'could not read'],
+    ['text-inventory', 'text inventory'],
+    ['inspection-rejected', 'cannot safely accept'],
+  ])(
+    'explains the confirmed OCR rejection %s using local copy',
+    async (reason, message) => {
+      vi.stubGlobal(
+        'fetch',
+        vi.fn().mockResolvedValue(
+          new Response(
+            JSON.stringify({
+              error: {
+                code: 'unsupported-pdf',
+                reason,
+                message: 'native-secret /tmp/private.pdf',
+              },
+            }),
+            { status: 422 },
+          ),
+        ),
+      );
+      await expect(
+        uploadOcr(input, 'eng', new AbortController().signal, () => {}),
+      ).rejects.toThrow(message);
+    },
+  );
+  it.each([
+    '/tmp/private.pdf',
+    '__proto__',
+    'constructor',
+    { text: 'native-secret' },
+    null,
+  ])('ignores an unrecognized OCR reason %#', async (reason) => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            error: {
+              code: 'unsupported-pdf',
+              reason,
+              message: 'native-secret',
+            },
+          }),
+          { status: 422 },
+        ),
+      ),
+    );
+    await expect(
+      uploadOcr(input, 'eng', new AbortController().signal, () => {}),
+    ).rejects.toThrow('OCR cannot safely accept this PDF');
+  });
+  it('does not let an unrelated error carry a misleading OCR reason', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            error: { code: 'server-busy', reason: 'encrypted' },
+          }),
+          { status: 503 },
+        ),
+      ),
+    );
+    await expect(
+      uploadOcr(input, 'eng', new AbortController().signal, () => {}),
+    ).rejects.toThrow('server is busy');
+  });
+  it.each([
     'missing-metadata',
     'wrong-type',
     'invalid-header',

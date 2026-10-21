@@ -308,38 +308,75 @@ describe('billable generation admission and settlement', () => {
     expect(diagnosticText).not.toContain('Tomorrow.');
     expect(diagnosticText).not.toContain('When?');
   });
-  it('diagnoses a post-settlement usage-read error without logging request data', async () => {
-    const diagnostics: AssistantDiagnostic[] = [];
-    const { service, settle, usage, generate } = fixture({
-      diagnosticSink: (diagnostic) => diagnostics.push(diagnostic),
-    });
-    usage.mockRejectedValue(new Error('synthetic question and passage secret'));
+  it.each(['unexpected', 'quota'])(
+    'preserves a settled answer when the usage read fails with %s, without inventing quota',
+    async (kind) => {
+      const diagnostics: AssistantDiagnostic[] = [];
+      const { service, settle, usage, generate } = fixture({
+        diagnosticSink: (diagnostic) => diagnostics.push(diagnostic),
+      });
+      usage.mockRejectedValue(
+        kind === 'quota'
+          ? new AssistantError(
+              'quota-unavailable',
+              503,
+              'synthetic question and passage secret',
+            )
+          : new Error('synthetic question and passage secret'),
+      );
+      await expect(
+        service.answer('uid-private', body(), new AbortController().signal),
+      ).resolves.toMatchObject({
+        answer: { status: 'answered', text: 'Tomorrow.', citations: ['p1'] },
+        usage: null,
+      });
+      expect(generate).toHaveBeenCalledTimes(1);
+      expect(settle).toHaveBeenCalledTimes(1);
+      expect(settle).toHaveBeenCalledWith(expect.anything(), {
+        billing: 'known',
+        costMicroUsd: 132,
+        tokenCount: 1_100,
+      });
+      expect(diagnostics).toEqual([
+        expect.objectContaining({
+          event: 'assistant.request.failure',
+          failureStage: 'quota-usage-read',
+          errorCategory: kind === 'quota' ? 'quota-error' : 'unexpected-error',
+          providerHttpStatus: null,
+          responseReceived: true,
+        }),
+      ]);
+      const diagnosticText = JSON.stringify(diagnostics[0]);
+      for (const privateValue of [
+        'uid-private',
+        'synthetic question and passage secret',
+        'When?',
+        'Tomorrow.',
+      ])
+        expect(diagnosticText).not.toContain(privateValue);
+    },
+  );
+  it('does not attribute an unexpected settlement failure to Groq or release its answer', async () => {
+    const { service, settle, generate } = fixture();
+    settle.mockRejectedValueOnce(new Error('private store failure'));
     await expect(
-      service.answer('uid-private', body(), new AbortController().signal),
-    ).rejects.toMatchObject({ code: 'provider-unavailable' });
+      service.answer('uid', body(), new AbortController().signal),
+    ).rejects.toMatchObject({ code: 'quota-unavailable' });
     expect(generate).toHaveBeenCalledTimes(1);
-    expect(settle).toHaveBeenCalledWith(expect.anything(), {
-      billing: 'known',
-      costMicroUsd: 132,
-      tokenCount: 1_100,
+    expect(settle).toHaveBeenLastCalledWith(expect.anything(), {
+      billing: 'uncertain',
     });
-    expect(diagnostics).toEqual([
-      expect.objectContaining({
-        event: 'assistant.request.failure',
-        failureStage: 'quota-usage-read',
-        errorCategory: 'unexpected-error',
-        providerHttpStatus: null,
-        responseReceived: true,
-      }),
-    ]);
-    const diagnosticText = JSON.stringify(diagnostics[0]);
-    for (const privateValue of [
-      'uid-private',
-      'synthetic question and passage secret',
-      'When?',
-      'Tomorrow.',
-    ])
-      expect(diagnosticText).not.toContain(privateValue);
+  });
+  it('discards a settled answer if cancellation occurs during the usage read', async () => {
+    const { service, usage } = fixture();
+    const controller = new AbortController();
+    usage.mockImplementation(() => {
+      controller.abort();
+      return Promise.reject(new Error('private store failure'));
+    });
+    await expect(
+      service.answer('uid', body(), controller.signal),
+    ).rejects.toMatchObject({ code: 'cancelled' });
   });
   it('validates review before reserving and keeps disabled AI inaccessible', async () => {
     const { service, reserve } = fixture({ enabled: false });

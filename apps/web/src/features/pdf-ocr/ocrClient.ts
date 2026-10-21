@@ -1,4 +1,4 @@
-import type { OcrMetadata } from '@kagaz/shared-types';
+import type { OcrMetadata, PdfRejectionReason } from '@kagaz/shared-types';
 import {
   HeavyPdfError,
   uploadHeavyPdf,
@@ -21,6 +21,32 @@ export const OCR_ERRORS: Readonly<Record<string, string>> = {
   'ocr-failed':
     'The server could not validate searchable text. Try a clearer scan or fewer pages. Your workspace is intact.',
   cancelled: 'OCR was cancelled.',
+};
+
+const OCR_REJECTION_MESSAGES: Readonly<Record<PdfRejectionReason, string>> = {
+  encrypted:
+    'This PDF has password protection or encryption. Open an unencrypted copy you are allowed to use, then try OCR again. Your workspace is unchanged.',
+  'page-limit':
+    'This PDF exceeds the OCR limit of 20 pages. Extract a smaller page range and try again.',
+  'interactive-forms':
+    'This PDF still contains an interactive form. OCR requires a copy with form values flattened into the pages. Your workspace is unchanged.',
+  'unsafe-structure':
+    'This PDF contains a structure OCR does not support, such as external links, actions, attachments or digital signatures. Export a copy without those features from the source application. Kagaz has not removed them.',
+  annotations:
+    'This PDF contains source annotations or links that OCR cannot preserve. Simple internal links are supported. Export a copy with other annotations flattened from the source application, then try again. Your workspace is unchanged.',
+  'page-dimensions':
+    'At least one PDF page exceeds the OCR limit of 14 inches per side. Export that page at a smaller physical size and try again.',
+  'image-budget':
+    'An image in this PDF exceeds the OCR limit of 16 megapixels. Export a lower-resolution scan and try again.',
+  'raster-budget':
+    'A page exceeds the OCR rendering limit of 400 DPI or 16 megapixels. Export a lower-resolution scan and try again.',
+  'resource-budget':
+    'This PDF contains graphics too complex for the OCR processing limit. Extract fewer pages or export a simpler copy from the source application.',
+  'unreadable-pdf':
+    'OCR could not read this PDF reliably. Export a new PDF from the source application and try again. Your workspace is unchanged.',
+  'text-inventory':
+    'OCR could not verify the PDF’s text inventory. Export a new PDF from the source application and try again. Your workspace is unchanged.',
+  'inspection-rejected': OCR_ERRORS['unsupported-pdf']!,
 };
 export function readOcrMetadata(
   headers: Headers,
@@ -84,6 +110,7 @@ export async function uploadOcr(
       maximumInput: 10 * 1024 * 1024,
       sizeHeader: 'X-Kagaz-Output-Bytes',
       errors: OCR_ERRORS,
+      errorReasons: { 'unsupported-pdf': OCR_REJECTION_MESSAGES },
       validate: (headers, size) =>
         readOcrMetadata(headers, bytes.byteLength, size),
     });

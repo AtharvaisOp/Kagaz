@@ -130,6 +130,24 @@ export class AssistantService {
     let postProviderFailureStage: 'quota-settlement' | 'quota-usage-read' =
       'quota-settlement';
     let providerStartedAt = 0;
+    const reportPostProviderFailure = (error: unknown) => {
+      reportAssistantDiagnostic(
+        {
+          event: 'assistant.request.failure',
+          failureStage: postProviderFailureStage,
+          errorCategory:
+            error instanceof ProviderError && error.code === 'cancelled'
+              ? 'cancelled'
+              : error instanceof AssistantError
+                ? 'quota-error'
+                : 'unexpected-error',
+          providerHttpStatus: null,
+          responseReceived: true,
+          durationMs: boundedDurationMs(providerStartedAt, performance.now()),
+        },
+        this.options.diagnosticSink,
+      );
+    };
     const controller = new AbortController();
     const abort = () => controller.abort();
     signal.addEventListener('abort', abort, { once: true });
@@ -182,32 +200,26 @@ export class AssistantService {
           'Generation was cancelled. Already transmitted passages cannot be retracted.',
         );
       postProviderFailureStage = 'quota-usage-read';
-      const usage = await this.usage(uid);
+      let usage: AssistantUsageStatus | null = null;
+      try {
+        usage = await this.usage(uid);
+      } catch (error) {
+        // Settlement already committed. A failed display-only read must not
+        // discard a validated answer or encourage another provider request.
+        if (!controller.signal.aborted) reportPostProviderFailure(error);
+      }
+      if (controller.signal.aborted)
+        throw new ProviderError(
+          'cancelled',
+          'Generation was cancelled. Already transmitted passages cannot be retracted.',
+        );
       return {
         requestId: request.requestId,
         answer: result.answer,
         usage,
       };
     } catch (error) {
-      if (providerResponseReceived) {
-        const errorCategory =
-          error instanceof ProviderError && error.code === 'cancelled'
-            ? 'cancelled'
-            : error instanceof AssistantError
-              ? 'quota-error'
-              : 'unexpected-error';
-        reportAssistantDiagnostic(
-          {
-            event: 'assistant.request.failure',
-            failureStage: postProviderFailureStage,
-            errorCategory,
-            providerHttpStatus: null,
-            responseReceived: true,
-            durationMs: boundedDurationMs(providerStartedAt, performance.now()),
-          },
-          this.options.diagnosticSink,
-        );
-      }
+      if (providerResponseReceived) reportPostProviderFailure(error);
       if (!settled) {
         try {
           await ledger.settle(reservation, {
@@ -229,8 +241,9 @@ export class AssistantService {
       }
       if (
         dispatched &&
-        error instanceof AssistantError &&
-        error.code === 'quota-unavailable'
+        ((error instanceof AssistantError &&
+          error.code === 'quota-unavailable') ||
+          (providerResponseReceived && !(error instanceof AssistantError)))
       )
         throw new AssistantError(
           'quota-unavailable',

@@ -93,7 +93,7 @@ describe('real OCRmyPDF searchable output', () => {
     },
     30_000,
   );
-  it('preserves an inert internal link while adding OCR to its scanned page', async () => {
+  it('preserves an inert internal link and its border style while adding OCR to its scanned page', async () => {
     const workspace = await createTempWorkspace(root);
     try {
       const source = await PDFDocument.load(await createScan());
@@ -106,6 +106,7 @@ describe('real OCRmyPDF searchable output', () => {
             Subtype: 'Link',
             Rect: [20, 20, 150, 60],
             Border: [0, 0, 0],
+            BS: { Type: 'Border', W: 1, S: 'D', D: [3, 2] },
             A: { S: 'GoTo', D: [page.ref, 'Fit'] },
           },
         ]),
@@ -121,6 +122,9 @@ describe('real OCRmyPDF searchable output', () => {
       const output = await PDFDocument.load(await readFile(result.path));
       const link = output.getPage(0).node.Annots()!.lookup(0, PDFDict);
       expect(link.get(PDFName.of('Subtype'))).toEqual(PDFName.of('Link'));
+      expect(
+        link.lookup(PDFName.of('BS'), PDFDict).get(PDFName.of('S')),
+      ).toEqual(PDFName.of('D'));
       expect(
         link.lookup(PDFName.of('A'), PDFDict).get(PDFName.of('S')),
       ).toEqual(PDFName.of('GoTo'));

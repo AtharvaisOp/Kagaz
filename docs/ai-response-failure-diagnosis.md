@@ -131,3 +131,28 @@ authorized future synthetic test, retain the current diagnosis instrumentation,
 exact reviewed-passage consent and zero-spend policy, and keep generation disabled
 until that authorization. Do not change IAM, read keys, reset quotas, enable paid
 mode or claim that AI Chat works based on mocks.
+
+## Follow-up implementation — 2026-10-21
+
+The earlier checkpoint's statement that no runtime code changed describes the
+state at that time. A local follow-up now fixes the confirmed post-settlement
+misclassification path without changing the provider protocol or retry policy:
+
+- Once quota settlement succeeds, a failure in the later display-only usage read
+  no longer discards a validated Groq answer. The API returns the answer with
+  `usage: null`, emits only the existing fixed diagnostic fields at
+  `quota-usage-read`, and does not synthesize quota values.
+- The web client accepts explicit `usage: null`, continues validating request
+  identity and citations, displays the settled answer, and disables new
+  generation while usage is unverified. Missing or malformed usage remains an
+  invalid response.
+- Unexpected and typed usage-read failures, settlement failure classification,
+  cancellation, answer retention and privacy of diagnostic fields have offline
+  regression coverage. The focused API run passed all 106 tests and the focused
+  frontend run passed all 56 tests. No real Groq request was sent.
+
+This fixes a reproduced service path, but it does not attribute the historical
+production `provider-unavailable` incident to that path. Its provider receipt,
+HTTP status and usage remain unverified. The change is local and not deployed;
+production generation remains disabled pending the already documented fresh
+authorization and release process.

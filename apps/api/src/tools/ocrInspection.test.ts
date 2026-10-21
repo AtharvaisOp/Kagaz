@@ -231,6 +231,46 @@ describe('real bounded OCR source inspection', () => {
     link.delete(PDFName.of('A'));
     expect((await inspect(source, inspector, copy)).code).toBe(0);
   });
+  it('accepts a standard internal-link border style and verifies its retention', async () => {
+    const source = await fixture('local-link');
+    source
+      .getPage(0)
+      .node.Annots()!
+      .lookup(0, PDFDict)
+      .set(
+        PDFName.of('BS'),
+        source.context.obj({ Type: 'Border', W: 1, S: 'D', D: [3, 2] }),
+      );
+    expect((await inspect(source)).code).toBe(0);
+    const copy = await PDFDocument.load(await source.save());
+    expect((await inspect(source, inspector, copy)).code).toBe(0);
+    copy
+      .getPage(0)
+      .node.Annots()!
+      .lookup(0, PDFDict)
+      .lookup(PDFName.of('BS'), PDFDict)
+      .set(PDFName.of('W'), copy.context.obj(2));
+    expect((await inspect(source, inspector, copy)).code).toBe(1);
+  });
+  it.each([
+    { W: -1 },
+    { S: 'Unknown' },
+    { D: [-1, 2] },
+    { D: [0, 0] },
+    { Unknown: 'private' },
+    { Type: 'NotBorder' },
+  ])('rejects malformed internal-link border styles %#', async (border) => {
+    const source = await fixture('local-link');
+    source
+      .getPage(0)
+      .node.Annots()!
+      .lookup(0, PDFDict)
+      .set(PDFName.of('BS'), source.context.obj(border));
+    expect(await inspect(source)).toEqual({
+      code: 2,
+      data: { rejection: 'annotations' },
+    });
+  });
   it.each([
     'appearance',
     'named',
