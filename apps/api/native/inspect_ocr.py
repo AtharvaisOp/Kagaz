@@ -61,7 +61,7 @@ def local_links(page, page_ids):
                    and isinstance(number, (int, float, Decimal))
                    and math.isfinite(number) for number in value)
 
-    allowed = {'/Type', '/Subtype', '/Rect', '/A', '/Dest', '/Border', '/H',
+    allowed = {'/Type', '/Subtype', '/Rect', '/A', '/Dest', '/Border', '/BS', '/H',
                '/F', '/C', '/Contents', '/NM', '/P', '/QuadPoints'}
     links = []
     for annotation in page.obj.get('/Annots', []):
@@ -84,9 +84,27 @@ def local_links(page, page_ids):
                     or (len(border) == 4 and (not numbers(border[3])
                                              or any(value < 0 for value in border[3])))):
                 raise OcrRejection('annotations')
-        if '/C' in annotation and (not numbers(annotation['/C'], 3)
-                                   or any(not 0 <= value <= 1 for value in annotation['/C'])):
-            raise OcrRejection('annotations')
+        border_style = annotation.get('/BS')
+        if '/BS' in annotation:
+            if (not isinstance(border_style, pikepdf.Dictionary)
+                    or not set(border_style.keys()) <= {'/Type', '/W', '/S', '/D'}
+                    or border_style.get('/Type', '/Border') != '/Border'
+                    or not numbers(pikepdf.Array([border_style.get('/W', 1)]), 1)
+                    or border_style.get('/W', 1) < 0
+                    or str(border_style.get('/S', '/S')) not in ('/S', '/D', '/B', '/I', '/U')):
+                raise OcrRejection('annotations')
+            if '/S' in border_style and not isinstance(border_style['/S'], pikepdf.Name):
+                raise OcrRejection('annotations')
+            if '/D' in border_style:
+                dash = border_style['/D']
+                if (not numbers(dash) or any(value < 0 for value in dash)
+                        or (len(dash) > 0 and not any(value > 0 for value in dash))):
+                    raise OcrRejection('annotations')
+        if '/C' in annotation:
+            color = annotation['/C']
+            if (not numbers(color) or len(color) not in (0, 1, 3, 4)
+                    or any(not 0 <= value <= 1 for value in color)):
+                raise OcrRejection('annotations')
         if '/H' in annotation and (not isinstance(annotation['/H'], pikepdf.Name)
                                    or str(annotation['/H']) not in ('/N', '/I', '/O', '/P')):
             raise OcrRejection('annotations')
@@ -116,7 +134,9 @@ def local_links(page, page_ids):
         except Exception:
             raise OcrRejection('annotations') from None
         values = {key: primitive(value) for key, value in annotation.items()
-                  if key not in ('/Type', '/Subtype', '/A', '/Dest', '/P')}
+                  if key not in ('/Type', '/Subtype', '/A', '/Dest', '/P', '/BS')}
+        if border_style is not None:
+            values['/BS'] = {key: primitive(value) for key, value in border_style.items()}
         # Object IDs change during rewriting; destination page identity must not.
         values['destination'] = [page_ids[target[0].objgen],
                                  *[primitive(value) for value in list(target)[1:]]]

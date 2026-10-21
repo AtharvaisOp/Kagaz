@@ -131,3 +131,49 @@ authorized future synthetic test, retain the current diagnosis instrumentation,
 exact reviewed-passage consent and zero-spend policy, and keep generation disabled
 until that authorization. Do not change IAM, read keys, reset quotas, enable paid
 mode or claim that AI Chat works based on mocks.
+
+## Follow-up implementation — 2026-10-21
+
+The earlier checkpoint's statement that no runtime code changed describes the
+state at that time. A local follow-up now fixes the confirmed post-settlement
+misclassification path without changing the provider protocol or retry policy:
+
+- Once quota settlement succeeds, a failure in the later display-only usage read
+  no longer discards a validated Groq answer. The API returns the answer with
+  `usage: null`, emits only the existing fixed diagnostic fields at
+  `quota-usage-read`, and does not synthesize quota values.
+- The web client accepts explicit `usage: null`, continues validating request
+  identity and citations, displays the settled answer, and disables new
+  generation while usage is unverified. Missing or malformed usage remains an
+  invalid response.
+- Unexpected and typed usage-read failures, settlement failure classification,
+  cancellation, answer retention and privacy of diagnostic fields have offline
+  regression coverage. The focused API run passed all 106 tests and the focused
+  frontend run passed all 56 tests. No real Groq request was sent.
+
+This fixes a reproduced service path, but it does not attribute the historical
+production `provider-unavailable` incident to that path. Its provider receipt,
+HTTP status and usage remain unverified. The change is local and not deployed;
+production generation remains disabled pending the already documented fresh
+authorization and release process.
+
+## Production release follow-up — 2026-10-21
+
+The owner subsequently requested the next confirmed fixes and production
+release. The display-only usage read now has a two-second bound and stops
+waiting when the service deadline fires after settlement. A settled answer
+returns with `usage: null` even if that read never resolves; an explicit user
+cancellation still discards the answer. Late completion or rejection of the
+read does not issue another provider call or alter the returned answer.
+
+Admission now distinguishes a permanently oversized request using
+`context-too-large` (HTTP 422). Local copy asks the user to select shorter or
+fewer passages. It no longer suggests waiting for a shared allowance reset,
+and rejection occurs before provider dispatch or quota debit. Invalid token
+estimates continue to fail quota verification. The assistant error-message
+lookup also accepts only own keys, so inherited property names cannot appear
+as object or function text in the UI.
+
+These corrections use offline providers and synthetic fixtures. Production
+release authorization covers publishing the code through the existing pipeline;
+the historical failure remains unverified and no new live Groq request is made.

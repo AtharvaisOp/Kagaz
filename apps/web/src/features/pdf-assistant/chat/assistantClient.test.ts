@@ -53,6 +53,48 @@ describe('authenticated AI network boundary', () => {
       'Local editing and Ask PDF remain available',
     );
   });
+  it('explains oversized context using fixed local guidance instead of suggesting a reset', async () => {
+    vi.stubGlobal('window', { location: { origin: 'http://127.0.0.1:5173' } });
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          error: { code: 'context-too-large', message: 'private server text' },
+        }),
+        { status: 422 },
+      ),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    const result = generateAssistantAnswer(
+      request,
+      'token',
+      new AbortController().signal,
+    );
+    await expect(result).rejects.toThrow('Select fewer or shorter passages');
+    await expect(result).rejects.not.toThrow('reset');
+    await expect(result).rejects.not.toThrow('private server text');
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+  it.each(['__proto__', 'constructor', 'toString', 'unknown-error'])(
+    'uses fixed fallback copy for unrecognized error code %s',
+    async (code) => {
+      vi.stubGlobal('window', {
+        location: { origin: 'http://127.0.0.1:5173' },
+      });
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValue(
+          new Response(
+            JSON.stringify({ error: { code, message: 'private server text' } }),
+            { status: 503 },
+          ),
+        );
+      vi.stubGlobal('fetch', fetchMock);
+      await expect(
+        generateAssistantAnswer(request, 'token', new AbortController().signal),
+      ).rejects.toThrow('AI Chat could not connect');
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    },
+  );
 
   it('transmits exactly the approved JSON without PDF bytes, history, filenames, cookies or a client UID', async () => {
     vi.stubGlobal('window', { location: { origin: 'http://127.0.0.1:5173' } });
@@ -119,6 +161,7 @@ describe('authenticated AI network boundary', () => {
     for (const value of [
       null,
       { ...answer, usage: {} },
+      { ...answer, usage: undefined },
       { ...answer, requestId: 'other' },
       { ...answer, answer: { ...answer.answer, text: '' } },
       { ...answer, answer: { ...answer.answer, text: 'a'.repeat(2_401) } },
@@ -132,6 +175,27 @@ describe('authenticated AI network boundary', () => {
       },
     ])
       expect(readAnswer(value, request)).toBeNull();
+  });
+  it('accepts a validated answer with explicitly unavailable usage without trusting forged citations', async () => {
+    const settledAnswer = { ...answer, usage: null };
+    vi.stubGlobal('window', { location: { origin: 'http://127.0.0.1:5173' } });
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(new Response(JSON.stringify(settledAnswer)));
+    vi.stubGlobal('fetch', fetchMock);
+    await expect(
+      generateAssistantAnswer(request, 'token', new AbortController().signal),
+    ).resolves.toEqual(settledAnswer);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(
+      readAnswer(
+        {
+          ...settledAnswer,
+          answer: { ...answer.answer, citations: ['unapproved'] },
+        },
+        request,
+      ),
+    ).toBeNull();
   });
 
   it('does not automatically retry a possibly billed provider failure or expose its raw response', async () => {

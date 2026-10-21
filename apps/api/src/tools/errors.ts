@@ -1,8 +1,24 @@
 import type {
   HeavyToolErrorCode,
   HeavyToolErrorResponse,
+  PdfRejectionReason,
 } from '@kagaz/shared-types';
 import type { OcrRejectionCategory } from './ocrDiagnostics.js';
+
+const publicRejectionReasons: readonly PdfRejectionReason[] = [
+  'encrypted',
+  'page-limit',
+  'interactive-forms',
+  'unsafe-structure',
+  'annotations',
+  'page-dimensions',
+  'image-budget',
+  'raster-budget',
+  'resource-budget',
+  'unreadable-pdf',
+  'text-inventory',
+  'inspection-rejected',
+];
 
 const messages: Record<HeavyToolErrorCode, string> = {
   'invalid-request': 'Send exactly one file and supported tool options.',
@@ -66,7 +82,19 @@ export class HeavyToolError extends Error {
   }
 
   get response(): HeavyToolErrorResponse {
-    return { error: { code: this.code, message: this.message } };
+    const reason =
+      this.code === 'unsupported-pdf'
+        ? publicRejectionReasons.find(
+            (value) => value === this.rejectionCategory,
+          )
+        : undefined;
+    return {
+      error: {
+        code: this.code,
+        message: this.message,
+        ...(reason ? { reason } : {}),
+      },
+    };
   }
 }
 

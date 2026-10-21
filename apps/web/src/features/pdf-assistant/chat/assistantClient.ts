@@ -24,6 +24,8 @@ const ERROR_MESSAGES: Readonly<Record<string, string>> = {
     'Kagaz’s daily AI budget is exhausted. Try again after midnight UTC.',
   'free-limit-exhausted':
     'Kagaz’s shared Groq Free Plan allowance is temporarily exhausted. Try again after it resets. Local editing and Ask PDF remain available.',
+  'context-too-large':
+    'This selection is too large for AI Chat. Select fewer or shorter passages, then review again. No generation was started.',
   'request-replayed':
     'This request has already been handled. Review the passages again for a new request.',
   'provider-unauthorized':
@@ -48,8 +50,9 @@ export class AssistantClientError extends Error {
     readonly usage?: AssistantUsageStatus,
   ) {
     super(
-      ERROR_MESSAGES[code] ??
-        'AI Chat could not connect. Check your connection; a generation attempt may have been counted.',
+      Object.hasOwn(ERROR_MESSAGES, code)
+        ? ERROR_MESSAGES[code]
+        : 'AI Chat could not connect. Check your connection; a generation attempt may have been counted.',
     );
     this.name = 'AssistantClientError';
   }
@@ -109,7 +112,9 @@ export function readAnswer(
   )
     return null;
   const usage = readUsage(value.usage);
-  if (!usage) return null;
+  // Explicit null means the settled answer is valid but quota display is
+  // unavailable. Missing or malformed quota must still reject the envelope.
+  if (!usage && value.usage !== null) return null;
   const response: AssistantAnswerResponse = {
     requestId: request.requestId,
     usage,

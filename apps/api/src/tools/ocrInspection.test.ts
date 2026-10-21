@@ -231,6 +231,94 @@ describe('real bounded OCR source inspection', () => {
     link.delete(PDFName.of('A'));
     expect((await inspect(source, inspector, copy)).code).toBe(0);
   });
+  it('accepts a standard internal-link border style and verifies its retention', async () => {
+    const source = await fixture('local-link');
+    source
+      .getPage(0)
+      .node.Annots()!
+      .lookup(0, PDFDict)
+      .set(
+        PDFName.of('BS'),
+        source.context.obj({ Type: 'Border', W: 1, S: 'D', D: [3, 2] }),
+      );
+    expect((await inspect(source)).code).toBe(0);
+    const copy = await PDFDocument.load(await source.save());
+    expect((await inspect(source, inspector, copy)).code).toBe(0);
+    copy
+      .getPage(0)
+      .node.Annots()!
+      .lookup(0, PDFDict)
+      .lookup(PDFName.of('BS'), PDFDict)
+      .set(PDFName.of('W'), copy.context.obj(2));
+    expect((await inspect(source, inspector, copy)).code).toBe(1);
+  });
+  it.each([
+    { name: 'transparent', color: [] },
+    { name: 'grayscale', color: [0.25] },
+    { name: 'RGB', color: [0.2, 0.4, 0.6] },
+    { name: 'CMYK', color: [0.1, 0.2, 0.3, 0.4] },
+  ])(
+    'accepts a standard $name link color and verifies its retention',
+    async ({ color }) => {
+      const source = await fixture('local-link');
+      source
+        .getPage(0)
+        .node.Annots()!
+        .lookup(0, PDFDict)
+        .set(PDFName.of('C'), source.context.obj(color));
+      expect((await inspect(source)).code).toBe(0);
+      const copy = await PDFDocument.load(await source.save());
+      expect((await inspect(source, inspector, copy)).code).toBe(0);
+      const changed = color.length
+        ? color.map((value, index) => (index === 0 ? 1 - value : value))
+        : [0];
+      copy
+        .getPage(0)
+        .node.Annots()!
+        .lookup(0, PDFDict)
+        .set(PDFName.of('C'), copy.context.obj(changed));
+      expect((await inspect(source, inspector, copy)).code).toBe(1);
+    },
+  );
+  it.each([
+    { name: 'two components', color: [0, 0] },
+    { name: 'five components', color: [0, 0, 0, 0, 0] },
+    { name: 'negative component', color: [-0.1] },
+    { name: 'component above one', color: [1.1] },
+    { name: 'nonnumeric component', color: [0, 'Invalid', 0] },
+    { name: 'boolean component', color: [true] },
+    { name: 'nonarray color', color: 'DeviceRGB' },
+  ])('rejects a malformed link color with $name', async ({ color }) => {
+    const source = await fixture('local-link');
+    source
+      .getPage(0)
+      .node.Annots()!
+      .lookup(0, PDFDict)
+      .set(PDFName.of('C'), source.context.obj(color));
+    expect(await inspect(source)).toEqual({
+      code: 2,
+      data: { rejection: 'annotations' },
+    });
+  });
+  it.each([
+    { W: -1 },
+    { S: 'Unknown' },
+    { D: [-1, 2] },
+    { D: [0, 0] },
+    { Unknown: 'private' },
+    { Type: 'NotBorder' },
+  ])('rejects malformed internal-link border styles %#', async (border) => {
+    const source = await fixture('local-link');
+    source
+      .getPage(0)
+      .node.Annots()!
+      .lookup(0, PDFDict)
+      .set(PDFName.of('BS'), source.context.obj(border));
+    expect(await inspect(source)).toEqual({
+      code: 2,
+      data: { rejection: 'annotations' },
+    });
+  });
   it.each([
     'appearance',
     'named',

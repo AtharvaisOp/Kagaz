@@ -399,14 +399,12 @@ export class AssistantLedger {
       let freeReservation: FreeReservation | undefined;
       if (this.freePlanLimits) {
         const limits = this.freePlanLimits;
-        if (
-          !integer(tokenCeiling) ||
-          tokenCeiling < 1 ||
-          tokenCeiling > limits.maxTokensPerRequest
-        )
+        if (!integer(tokenCeiling) || tokenCeiling < 1)
+          throw quotaUnavailable();
+        if (tokenCeiling > limits.maxTokensPerRequest)
           throw new AssistantError(
-            'free-limit-exhausted',
-            429,
+            'context-too-large',
+            422,
             'This request exceeds Kagaz’s shared Groq Free Plan token allowance. Select a shorter passage and try again.',
           );
         if (!freeUsage) throw quotaUnavailable();
