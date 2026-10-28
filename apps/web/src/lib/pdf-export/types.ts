@@ -8,6 +8,7 @@ import type { FormExportSnapshot } from './forms/types';
 import type { RedactionRegion } from '../../features/pdf-redactions/model/types';
 import type { WatermarkConfig } from '../../features/pdf-watermarks/model/types';
 import type { FontAssetSnapshot } from '../fonts/fontAssets';
+import type { NativeTextEdit } from '../pdf-native-text/types';
 
 export interface ExportSource {
   readonly id: SourceDocumentId;
@@ -30,6 +31,11 @@ export interface ExportWorkspaceRequest {
   readonly watermark?: WatermarkConfig | null;
   /** Export-owned copies of the trusted bundled document-content font bytes. */
   readonly fontAssets?: FontAssetSnapshot;
+  /**
+   * Verified source-text replacements, keyed by workspace page identity.
+   * Each is transformed only after an isolated per-occurrence page copy.
+   */
+  readonly nativeTextEdits?: readonly NativeTextEdit[];
 }
 
 export type ExportProgress =

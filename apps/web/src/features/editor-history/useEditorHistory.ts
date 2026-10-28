@@ -13,6 +13,7 @@ export interface EditorHistoryController {
   readonly form: EditorHistoryBridge;
   readonly redaction: EditorHistoryBridge;
   readonly watermark: EditorHistoryBridge;
+  readonly sourceText: EditorHistoryBridge;
   readonly bind: (
     participants: Partial<
       Record<EditorHistoryDomain, EditorHistoryParticipant>
@@ -98,6 +99,7 @@ export function useEditorHistory(): EditorHistoryController {
       form: createBridge('form'),
       redaction: createBridge('redaction'),
       watermark: createBridge('watermark'),
+      sourceText: createBridge('source-text'),
       bind,
       pruneDomain,
       reset,

@@ -34,6 +34,7 @@ import type {
   WatermarkPreviewGeometry,
 } from '../pdf-watermarks/model/types';
 import { WatermarkPreview } from '../pdf-watermarks/rendering/WatermarkPreview';
+import type { NativeTextSelectionProof } from '../../lib/pdf-native-text/types';
 import { PdfTextLayer } from './PdfTextLayer';
 
 import type {
@@ -67,6 +68,11 @@ interface PdfPageProps {
   readonly onCreateAnnotations: (annotations: readonly PdfAnnotation[]) => void;
   readonly activeTool: AnnotationTool;
   readonly sourceTextOnly: boolean;
+  readonly nativeTextEditing: boolean;
+  readonly onNativeTextEdit: (
+    page: WorkspacePage,
+    selection: NativeTextSelectionProof | null,
+  ) => Promise<boolean>;
   readonly styleDefaults: AnnotationStyleDefaults;
   readonly createAnnotationId: () => string;
   readonly assetRegistry: AnnotationAssetRegistry;
@@ -126,6 +132,8 @@ export function PdfPage({
   onCreateAnnotations,
   activeTool,
   sourceTextOnly,
+  nativeTextEditing,
+  onNativeTextEdit,
   styleDefaults,
   createAnnotationId,
   assetRegistry,
@@ -379,9 +387,11 @@ export function PdfPage({
               (activeTool === 'select' || activeTool === 'highlight')
             }
             highlighting={activeTool === 'highlight'}
+            nativeTextEditing={nativeTextEditing}
             styleDefaults={styleDefaults}
             createId={createAnnotationId}
             onHighlight={onCreateAnnotations}
+            onNativeTextEdit={(selection) => onNativeTextEdit(page, selection)}
           />
         ) : null}
         {hasRenderedViewport && renderedViewport ? (

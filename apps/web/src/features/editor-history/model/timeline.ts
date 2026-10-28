@@ -40,6 +40,7 @@ export class EditorHistoryTimeline {
       this.participants.form?.discardFuture();
       this.participants.redaction?.discardFuture();
       this.participants.watermark?.discardFuture();
+      this.participants['source-text']?.discardFuture();
     }
     this.entries.push({ domain, affectedEntityIds });
     this.cursor = this.entries.length;

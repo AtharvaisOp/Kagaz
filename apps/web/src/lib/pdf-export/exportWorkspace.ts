@@ -19,6 +19,10 @@ import { validateWatermarkPngDeflate } from './watermarks/pngInflateSafety';
 import { prepareWatermarkImageSource } from './watermarks/nativeImage';
 import type { DocumentFontId } from '../fonts/fontCatalog';
 import { FontTextError } from '../fonts/fontErrors';
+import {
+  NativeTextEditError,
+  type NativeTextEdit,
+} from '../pdf-native-text/types';
 
 /** Captured logical IDs select only immutable bundled assets, never an OS font. */
 export function requiredDocumentFonts(
@@ -104,6 +108,37 @@ export async function exportWorkspace(
     ),
   );
   const forms = structuredClone(request.forms);
+  const nativeTextEdits = structuredClone(request.nativeTextEdits ?? []);
+  const pagesById = new Map(pages.map((page) => [page.id, page] as const));
+  const nativeTextEditsByPage = new Map<string, readonly NativeTextEdit[]>();
+  for (const edit of nativeTextEdits) {
+    const page = pagesById.get(edit.workspacePageId);
+    const existing = nativeTextEditsByPage.get(edit.workspacePageId) ?? [];
+    if (
+      !page ||
+      page.sourceDocumentId !== edit.sourceDocumentId ||
+      page.sourcePageIndex !== edit.sourcePageIndex ||
+      existing.some(
+        (candidate) =>
+          candidate.identity.sourceFileFingerprint ===
+            edit.identity.sourceFileFingerprint &&
+          candidate.identity.streamFingerprint ===
+            edit.identity.streamFingerprint &&
+          candidate.identity.runOrdinal === edit.identity.runOrdinal,
+      )
+    ) {
+      throw new NativeTextEditError(
+        'identity-mismatch',
+        'A staged source-text edit no longer matches this workspace page.',
+      );
+    }
+    nativeTextEditsByPage.set(edit.workspacePageId, [...existing, edit]);
+  }
+  const nativeTextEditsBySource = new Map<string, readonly NativeTextEdit[]>();
+  for (const edit of nativeTextEdits) {
+    const existing = nativeTextEditsBySource.get(edit.sourceDocumentId) ?? [];
+    nativeTextEditsBySource.set(edit.sourceDocumentId, [...existing, edit]);
+  }
   if (request.watermark) {
     const invalid = validateWatermarkModel(
       request.watermark,
@@ -161,6 +196,14 @@ export async function exportWorkspace(
   const hasRedactions = [...redactionsByPage.values()].some(
     (regions) => regions.length > 0,
   );
+  for (const edit of nativeTextEdits) {
+    if ((redactionsByPage.get(edit.workspacePageId)?.length ?? 0) > 0) {
+      throw new NativeTextEditError(
+        'redaction-conflict',
+        'Source-text edits cannot be exported on a page with pending redactions. Finalize one workflow at a time.',
+      );
+    }
+  }
   const originalRedactedContent = new Set<string>();
   const uniqueSourceIds = [
     ...new Set(pages.map((page) => page.sourceDocumentId)),
@@ -183,18 +226,27 @@ export async function exportWorkspace(
     total: uniqueSourceIds.length,
   });
 
-  const [pdfLib, flattening, formPreparation, signatureSafety, fontAssets] =
-    await Promise.all([
-      import('pdf-lib'),
-      import('./annotations/flattenAnnotations'),
-      import('./forms/prepareFormSource'),
-      import('../pdf-signatures/signatureSafety'),
-      suppliedFontAssets
-        ? Promise.resolve(suppliedFontAssets)
-        : import('../fonts/fontAssets').then((assets) =>
-            assets.snapshotFontAssets(fontIds, options.signal),
-          ),
-    ]);
+  const [
+    pdfLib,
+    flattening,
+    formPreparation,
+    signatureSafety,
+    fontAssets,
+    nativeTextContent,
+  ] = await Promise.all([
+    import('pdf-lib'),
+    import('./annotations/flattenAnnotations'),
+    import('./forms/prepareFormSource'),
+    import('../pdf-signatures/signatureSafety'),
+    suppliedFontAssets
+      ? Promise.resolve(suppliedFontAssets)
+      : import('../fonts/fontAssets').then((assets) =>
+          assets.snapshotFontAssets(fontIds, options.signal),
+        ),
+    nativeTextEdits.length
+      ? import('../pdf-native-text/nativeTextContent')
+      : Promise.resolve(null),
+  ]);
   const { PDFDocument, degrees } = pdfLib;
   const redactionFinalization = hasRedactions
     ? await import('./redactions/finalizeRedactions')
@@ -261,11 +313,21 @@ export async function exportWorkspace(
         );
       }
       const formSnapshot = formSnapshots.get(sourceId);
+      const sourceNativeTextEdits = nativeTextEditsBySource.get(sourceId) ?? [];
       if (!formSnapshot) {
         throw new FormExportError(
           'missing-source-snapshot',
           'Form safety information is missing for a source PDF.',
           source.fileName,
+        );
+      }
+      if (
+        sourceNativeTextEdits.length > 0 &&
+        formSnapshot.capability !== 'plain'
+      ) {
+        throw new NativeTextEditError(
+          'form-conflict',
+          'Source-text editing is unavailable for PDFs with form structures. Export the source-text change before editing forms.',
         );
       }
       if (
@@ -286,6 +348,16 @@ export async function exportWorkspace(
         fileName: source.fileName,
       });
 
+      if (sourceNativeTextEdits.length > 0) {
+        if (!nativeTextContent) {
+          throw new NativeTextEditError(
+            'verification-failed',
+            'Kagaz could not initialize source-text export verification.',
+          );
+        }
+        nativeTextContent.assertNativeTextSourceFileWithinLimit(source.file);
+      }
+
       let bytes: ArrayBuffer;
       try {
         bytes = await source.file.arrayBuffer();
@@ -298,6 +370,17 @@ export async function exportWorkspace(
       }
 
       throwIfAborted(options.signal);
+      if (sourceNativeTextEdits.length > 0) {
+        if (!nativeTextContent) {
+          throw new NativeTextEditError(
+            'verification-failed',
+            'Kagaz could not initialize source-text export verification.',
+          );
+        }
+        nativeTextContent.assertNativeTextSourceBytesWithinLimit(
+          new Uint8Array(bytes),
+        );
+      }
 
       let sourceDocument: PDFDocument;
       try {
@@ -310,6 +393,29 @@ export async function exportWorkspace(
           'This source PDF could not be opened for export.',
           source.fileName,
         );
+      }
+      if (sourceNativeTextEdits.length > 0) {
+        if (!nativeTextContent) {
+          throw new NativeTextEditError(
+            'verification-failed',
+            'Kagaz could not initialize source-text export verification.',
+          );
+        }
+        nativeTextContent.assertNativeTextDocumentWithinLimits(
+          sourceDocument,
+          options.signal,
+        );
+        await nativeTextContent.assertNativeTextEditsMatchSourceBytes(
+          sourceNativeTextEdits,
+          new Uint8Array(bytes),
+          options.signal,
+        );
+        if (sourceDocument.catalog.getAcroForm()) {
+          throw new NativeTextEditError(
+            'form-conflict',
+            'Source-text editing is unavailable for PDFs with form structures. Export the source-text change before editing forms.',
+          );
+        }
       }
 
       try {
@@ -481,9 +587,46 @@ export async function exportWorkspace(
             originalRedactedContent.add(fingerprint);
           continue;
         }
-        const [copiedPage] = await output.copyPages(sourceDocument, [
-          workspacePage.sourcePageIndex,
-        ]);
+        const nativeTextEditsForPage =
+          nativeTextEditsByPage.get(workspacePage.id) ?? [];
+        const copiedPage = nativeTextEditsForPage.length
+          ? await (async () => {
+              if (!nativeTextContent) {
+                throw new NativeTextEditError(
+                  'verification-failed',
+                  'Kagaz could not initialize source-text export verification.',
+                );
+              }
+              const isolatedDocument = await PDFDocument.create();
+              const [isolatedPage] = await isolatedDocument.copyPages(
+                sourceDocument,
+                [workspacePage.sourcePageIndex],
+              );
+              if (!isolatedPage) return undefined;
+              isolatedDocument.addPage(isolatedPage);
+              await nativeTextContent.applyNativeTextEditsToIsolatedPage(
+                isolatedDocument,
+                isolatedPage,
+                nativeTextEditsForPage,
+                options.signal,
+              );
+              await nativeTextContent.verifyNativeTextEditsOnCopiedPage(
+                isolatedDocument,
+                isolatedPage,
+                nativeTextEditsForPage,
+                options.signal,
+              );
+              const [privateCopiedPage] = await output.copyPages(
+                isolatedDocument,
+                [0],
+              );
+              return privateCopiedPage;
+            })()
+          : (
+              await output.copyPages(sourceDocument, [
+                workspacePage.sourcePageIndex,
+              ])
+            )[0];
         if (!copiedPage) {
           throw new Error('The requested source page was not returned.');
         }
@@ -518,7 +661,8 @@ export async function exportWorkspace(
         if (
           error instanceof PdfExportError ||
           error instanceof AnnotationExportError ||
-          error instanceof FontTextError
+          error instanceof FontTextError ||
+          error instanceof NativeTextEditError
         ) {
           throw error;
         }

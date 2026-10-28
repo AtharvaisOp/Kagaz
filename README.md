@@ -29,6 +29,23 @@ while page order, deletion, rotation, and selection are logical workspace
 state. Start Over protects workspace, annotation, and meaningful in-progress
 editor work with one discard confirmation.
 
+## Bounded native source-text editing
+
+**Edit source text** can genuinely replace or move an existing PDF text operand
+when Kagaz can prove it is a simple, independently owned Latin run: a single
+direct page content stream, one verified Standard-14 Type1 font, an identity
+text matrix, and one complete printable-ASCII `Tj` string. The edit is staged in
+the existing Undo/Redo history and is applied only to a private copied page at
+browser-local export. It is not an annotation, white rectangle, or visual
+overlay; the old operand is replaced and the exported PDF remains searchable.
+
+Most real-world PDFs deliberately fall outside that safety boundary. Scans,
+outlines, embedded/subset/CID fonts, complex scripts, `TJ`/kerning, transforms,
+multiple or shared streams, XObjects, forms, signatures, encryption, JavaScript,
+and redaction conflicts are rejected with an explanation. Kagaz never claims to
+edit them. See [the native text-editing contract](docs/native-text-editing.md)
+for the grammar, integrity checks, and verification approach.
+
 ## Phase 6A local PDF assistant
 
 Open **AI Assistant** from the active editor to request a supported change in
@@ -587,6 +604,11 @@ evidence, resource measurements and remaining isolation limits.
   supports the verified Latin, Latin Extended, Greek and Cyrillic subset;
   Devanagari, RTL and other unverified scripts remain visibly rejected. See the
   [Phase 5C support matrix](docs/phase-5c.md#script-support-matrix).
+- Native editing of _existing_ PDF text is deliberately much narrower than
+  created-text support: only the documented simple Standard-14 Latin source-run
+  subset is eligible. It does not reflow text or support embedded/custom fonts,
+  OCR scans, complex scripts, kerning, transformed text, shared streams, forms,
+  signatures, encryption, or pending-redaction pages.
 - Google accounts are used only for remote AI access; there is no document cloud
   storage or collaboration feature.
 - Very large PDFs may create browser memory pressure.

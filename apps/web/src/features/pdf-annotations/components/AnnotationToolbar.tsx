@@ -24,6 +24,9 @@ import {
 interface AnnotationToolbarProps {
   readonly sourceTextOnly?: boolean;
   readonly onSourceTextOnlyChange?: (enabled: boolean) => void;
+  readonly nativeTextEditing?: boolean;
+  readonly onNativeTextEditingChange?: (enabled: boolean) => void;
+  readonly onCancelSourceTextDraft?: () => void;
   readonly controller: PdfAnnotationController;
   readonly redactionController?: PdfRedactionController;
   readonly onOpenWatermark?: () => void;
@@ -88,6 +91,9 @@ function annotationOpacity(annotation: PdfAnnotation | null): number | null {
 export function AnnotationToolbar({
   sourceTextOnly = false,
   onSourceTextOnlyChange,
+  nativeTextEditing = false,
+  onNativeTextEditingChange,
+  onCancelSourceTextDraft,
   controller,
   redactionController,
   onOpenWatermark,
@@ -124,11 +130,17 @@ export function AnnotationToolbar({
   const setActiveTool = useCallback(
     (tool: AnnotationTool) => {
       onSourceTextOnlyChange?.(false);
+      onNativeTextEditingChange?.(false);
       redactionController?.setActive(false);
       redactionController?.select(null);
       setAnnotationTool(tool);
     },
-    [redactionController, setAnnotationTool, onSourceTextOnlyChange],
+    [
+      redactionController,
+      setAnnotationTool,
+      onNativeTextEditingChange,
+      onSourceTextOnlyChange,
+    ],
   );
   const deleteSelected = useCallback(() => {
     if (redactionController?.selectionId) redactionController.removeSelected();
@@ -357,10 +369,32 @@ export function AnnotationToolbar({
             onClick={() => {
               setActiveTool('select');
               clearSelection();
+              onNativeTextEditingChange?.(false);
               onSourceTextOnlyChange(true);
             }}
           >
             Select PDF text
+          </button>
+        ) : null}
+        {onSourceTextOnlyChange && onNativeTextEditingChange ? (
+          <button
+            type="button"
+            className="annotation-tool-button"
+            aria-pressed={
+              activeTool === 'select' &&
+              sourceTextOnly &&
+              nativeTextEditing &&
+              !redactionController?.active
+            }
+            title="Edit a verified original PDF text run"
+            onClick={() => {
+              setActiveTool('select');
+              clearSelection();
+              onSourceTextOnlyChange(true);
+              onNativeTextEditingChange(true);
+            }}
+          >
+            Edit source text
           </button>
         ) : null}
         <button
@@ -401,6 +435,9 @@ export function AnnotationToolbar({
                 controller.cancelTextEdit(textEditSession.sessionId);
               setAnnotationTool('select');
               clearSelection();
+              onSourceTextOnlyChange?.(false);
+              onNativeTextEditingChange?.(false);
+              onCancelSourceTextDraft?.();
               redactionController.setActive(nextActive);
               if (!nextActive) redactionController.select(null);
             }}
@@ -641,7 +678,7 @@ export function AnnotationToolbar({
       {activeTool === 'text' || activeTool === 'highlight' ? (
         <p className="annotation-font-status">
           {activeTool === 'text'
-            ? 'Text adds an editable Kagaz annotation. Original PDF text cannot be rewritten or moved here.'
+            ? 'Text adds an editable Kagaz annotation. Use Edit source text only for verified original PDF text.'
             : 'Drag over source text to highlight it. Drag on blank space for a manual highlight. Select existing highlights in Annotations.'}
         </p>
       ) : null}
