@@ -1,7 +1,9 @@
 # Checkpoint A — PDF text interaction
 
-Status: PASS for selectable source text and highlighting; source-content rewriting
-is deliberately unsupported. Based on main `6413d39`.
+Status: PASS for selectable source text and highlighting. A separately bounded
+native source-text edit mode is now available only for verified simple Latin
+`Tj` runs; it is not universal PDF text editing. See
+[native-text-editing.md](native-text-editing.md) for the exact contract.
 
 ## Reproduced cause and implementation
 
@@ -34,30 +36,25 @@ highlight. Multi-page selections commit one transaction per participating page.
 
 | Class                                             | Supported behavior                                                                                                                                              |
 | ------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Embedded source characters with usable extraction | Select, copy and highlight; extraction order, fonts and character mappings limit fidelity.                                                                      |
+| Embedded source characters with usable extraction | Select, copy and highlight. A narrow verified Standard-14 `Tj` subset may also be genuinely replaced or moved; see the native-editing contract.                 |
 | Kagaz text annotation in the current workspace    | Select, drag, resize, edit, style, undo/redo, export as real drawn PDF text. After reopening an export it is source text, not a recoverable Kagaz edit session. |
 | OCR invisible text                                | Select/copy if exposed by PDF.js; recognition may be wrong and does not make the visible scan editable.                                                         |
 | Rasterized or outlined characters                 | No character selection without usable recognition; manual highlighting remains available.                                                                       |
 
-The current PDF.js/pdf-lib architecture extracts text, copies source pages and
-appends annotations. It does not expose a safe original-content editor. Genuine
-rewriting would require locating the owning content stream and glyph operands,
-handling shared/nested Form XObjects, encodings and subset fonts, text matrices,
-kerning, clipping and reading order, and verifying both rendering and extraction
-after reopening. Replacing extracted words alone cannot safely perform that job.
-
-A bounded future proposal is an explicit, separately reviewed content-edit mode
-restricted to directly owned text runs with supported encodings, available font
-glyphs and unambiguous stream ownership. It must fail closed for unsupported
-fonts/encodings, shared XObjects, signatures and complex shaping, perform real
-operator replacement, and test that old characters disappear from extraction and
-rendering after export/reopening. No white-rectangle replacement is implemented.
-Native arbitrary-angle/skewed glyph runs currently receive axis-aligned browser
-selection bounds; precision for those runs needs a quad-capable highlight model.
+PDF.js still supplies only selection/copy UI, not mutable PDF operand identity.
+The native edit mode adds a separate bounded content-stream parser to bridge that
+gap. It resolves the owning stream and literal operand, records source/stream
+identity, rewrites a private copied page only after revalidation, and reparses
+the result. It rejects shared/nested Form XObjects, encodings and subset fonts,
+text matrices, kerning, clipping, and reading-order patterns outside its tiny
+grammar. No white-rectangle replacement is implemented. The full supported and
+unsupported set is intentionally maintained in
+[native-text-editing.md](native-text-editing.md).
 
 Highlights are visible annotations, never secure removal. Pending redactions do
 not alter source bytes; only the existing sanitized export removes source content
-on affected pages. No source content is rewritten or hidden as an editing claim.
+on affected pages. Native source editing and redaction cannot be staged on the
+same page, so neither workflow can make an ambiguous removal claim.
 
 ## Design and files
 

@@ -21,6 +21,8 @@ import type { PdfRedactionController } from '../pdf-redactions/hooks/usePdfRedac
 import { RedactionSummary } from '../pdf-redactions/components/RedactionSummary';
 import type { PdfWatermarkController } from '../pdf-watermarks/hooks/usePdfWatermarks';
 import { WatermarkDialog } from '../pdf-watermarks/components/WatermarkDialog';
+import { NativeTextEditor } from '../pdf-native-text/components/NativeTextEditor';
+import type { PdfNativeTextController } from '../pdf-native-text/hooks/usePdfNativeText';
 import { AssistantDialog } from '../pdf-assistant/AssistantDialog';
 import { hasPendingAiReturn } from '../pdf-assistant/chat/firebaseAuth';
 import {
@@ -79,6 +81,7 @@ interface PdfViewerProps {
   readonly formController: PdfFormsController;
   readonly redactionController: PdfRedactionController;
   readonly watermarkController: PdfWatermarkController;
+  readonly nativeTextController: PdfNativeTextController;
   readonly prepareWorkspace: PdfExportController['prepareWorkspace'];
 }
 
@@ -130,6 +133,7 @@ export function PdfViewer({
   formController,
   redactionController,
   watermarkController,
+  nativeTextController,
   prepareWorkspace,
 }: PdfViewerProps) {
   const {
@@ -150,6 +154,15 @@ export function PdfViewer({
   ]);
   const [mobilePageManagerOpen, setMobilePageManagerOpen] = useState(false);
   const [sourceTextOnly, setSourceTextOnly] = useState(false);
+  const [nativeTextEditing, setNativeTextEditing] = useState(false);
+  const sourceTextSelectionEnabled =
+    sourceTextOnly &&
+    annotationController.activeTool === 'select' &&
+    !redactionActive;
+  const nativeTextEditingEnabled =
+    sourceTextSelectionEnabled &&
+    nativeTextEditing &&
+    nativeTextController.draft === null;
   const [assistantOpen, setAssistantOpen] = useState(hasPendingAiReturn);
   const assistantTriggerRef = useRef<HTMLButtonElement>(null);
   const retrievalResetRef = useRef<(() => void) | null>(null);
@@ -321,13 +334,21 @@ export function PdfViewer({
         />
       ) : null}
       <AnnotationToolbar
-        sourceTextOnly={sourceTextOnly}
+        sourceTextOnly={sourceTextSelectionEnabled}
         onSourceTextOnlyChange={setSourceTextOnly}
+        nativeTextEditing={nativeTextEditingEnabled}
+        onNativeTextEditingChange={setNativeTextEditing}
+        onCancelSourceTextDraft={nativeTextController.cancelDraft}
         controller={annotationController}
         redactionController={redactionController}
         watermarkTriggerRef={watermarkTriggerRef}
         watermarkPresent={Boolean(watermarkController.state.present)}
         onOpenWatermark={openWatermark}
+      />
+      <NativeTextEditor
+        controller={nativeTextController}
+        pages={pages}
+        onChoosePage={navigation.scrollToPage}
       />
       {watermarkController.draft ? (
         <WatermarkDialog
@@ -380,6 +401,8 @@ export function PdfViewer({
         pageId={selectedPageId}
         onActivate={() => {
           setSourceTextOnly(false);
+          setNativeTextEditing(false);
+          nativeTextController.cancelDraft();
           redactionController.setActive(false);
           redactionController.select(null);
         }}
@@ -396,6 +419,9 @@ export function PdfViewer({
             );
           annotationController.setActiveTool('select');
           annotationController.clearSelection();
+          setSourceTextOnly(false);
+          setNativeTextEditing(false);
+          nativeTextController.cancelDraft();
           redactionController.setActive(true);
         }}
       />
@@ -417,6 +443,7 @@ export function PdfViewer({
               .map((index) => pages[index])
               .filter((page): page is WorkspacePage => Boolean(page));
             return (
+              nativeTextController.getExportBlockReason() ??
               formController.getExportBlockReason(selectedPages) ??
               annotationController.getExportBlockReason(selectedPages)
             );
@@ -515,7 +542,9 @@ export function PdfViewer({
                   onCreateAnnotation={annotationController.addAnnotation}
                   onCreateAnnotations={annotationController.addAnnotations}
                   activeTool={annotationController.activeTool}
-                  sourceTextOnly={sourceTextOnly}
+                  sourceTextOnly={sourceTextSelectionEnabled}
+                  nativeTextEditing={nativeTextEditingEnabled}
+                  onNativeTextEdit={nativeTextController.beginFromSelection}
                   styleDefaults={annotationController.styleDefaults}
                   createAnnotationId={annotationController.createAnnotationId}
                   assetRegistry={annotationController.assetRegistry}

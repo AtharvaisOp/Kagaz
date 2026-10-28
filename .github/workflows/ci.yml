@@ -179,6 +179,10 @@ jobs:
         env:
           KAGAZ_ARTIFACT_DIR: ${{ runner.temp }}/phase4c-artifacts
         run: node scripts/verify-text-interaction.mjs
+      - name: Verify bounded native PDF source-text editing
+        env:
+          KAGAZ_ARTIFACT_DIR: ${{ runner.temp }}/phase4c-artifacts
+        run: node scripts/verify-native-text-editing.mjs
       - name: Retain frontend startup diagnostics
         if: always()
         env:

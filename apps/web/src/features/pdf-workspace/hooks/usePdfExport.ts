@@ -8,6 +8,10 @@ import { downloadPdf } from '../../../lib/pdf-export/downloadPdf';
 import { exportWorkspace } from '../../../lib/pdf-export/exportWorkspace';
 import { requiredDocumentFonts } from '../../../lib/pdf-export/exportWorkspace';
 import { FontTextError } from '../../../lib/fonts/fontErrors';
+import {
+  NativeTextEditError,
+  type NativeTextEdit,
+} from '../../../lib/pdf-native-text/types';
 import { AnnotationExportError } from '../../../lib/pdf-export/annotations/exportContracts';
 import { snapshotAnnotationImageAssets } from '../../../lib/pdf-export/annotations/imageAssets';
 import {
@@ -65,6 +69,7 @@ const IDLE_EXPORT_STATE: PdfExportState = {
 
 export function friendlyExportError(error: unknown): string {
   if (error instanceof FontTextError) return error.message;
+  if (error instanceof NativeTextEditError) return error.message;
   if (error instanceof AnnotationExportError) {
     switch (error.code) {
       case 'unsupported-text-font':
@@ -220,6 +225,9 @@ export function usePdfExport(
   redactions: readonly RedactionRegion[] = [],
   watermark: WatermarkConfig | null = null,
   watermarkAssets: Pick<AnnotationAssetRegistry, 'get'> = annotationAssets,
+  snapshotNativeTextEdits: (
+    pages: readonly WorkspacePage[],
+  ) => readonly NativeTextEdit[] = () => [],
 ): PdfExportController {
   const [state, setState] = useState<PdfExportState>(IDLE_EXPORT_STATE);
   const generationRef = useRef(0);
@@ -243,6 +251,7 @@ export function usePdfExport(
       const pageSnapshot = snapshotWorkspacePages(pages);
       const sources = sourceMapForPages(pageSnapshot, registry);
       const forms = snapshotForms(pageSnapshot);
+      const nativeTextEdits = snapshotNativeTextEdits(pageSnapshot);
       const redactionsByPage = snapshotRedactionsForPages(
         pageSnapshot,
         redactions,
@@ -291,6 +300,7 @@ export function usePdfExport(
               redactionsByPage,
               watermark: watermarkSnapshot,
               fontAssets: fonts,
+              nativeTextEdits,
             },
             { signal, onProgress },
           ),
@@ -306,6 +316,7 @@ export function usePdfExport(
       redactions,
       watermark,
       watermarkAssets,
+      snapshotNativeTextEdits,
     ],
   );
 

@@ -11,6 +11,7 @@ import { usePdfForms } from './features/pdf-forms/hooks/usePdfForms';
 import { useEditorHistory } from './features/editor-history/useEditorHistory';
 import { usePdfRedactions } from './features/pdf-redactions/hooks/usePdfRedactions';
 import { usePdfWatermarks } from './features/pdf-watermarks/hooks/usePdfWatermarks';
+import { usePdfNativeText } from './features/pdf-native-text/hooks/usePdfNativeText';
 import { ConvertDialog } from './features/office-conversion/ConvertDialog';
 
 import type { FileLoadIssue } from './features/pdf-workspace/loading/types';
@@ -56,17 +57,24 @@ export function App() {
     registry,
     editorHistory.watermark,
   );
+  const nativeTextController = usePdfNativeText(
+    workspace.pages,
+    registry,
+    editorHistory.sourceText,
+  );
   editorHistory.bind({
     annotation: annotationController.historyParticipant,
     form: formController.historyParticipant,
     redaction: redactionController.historyParticipant,
     watermark: watermarkController.historyParticipant,
+    'source-text': nativeTextController.historyParticipant,
   });
   const getExportBlockReason = useCallback(
     (pages: Parameters<typeof formController.getExportBlockReason>[0]) =>
+      nativeTextController.getExportBlockReason() ??
       formController.getExportBlockReason(pages) ??
       annotationController.getExportBlockReason(pages),
-    [annotationController, formController],
+    [annotationController, formController, nativeTextController],
   );
   const pdfExport = usePdfExport(
     workspace,
@@ -78,6 +86,7 @@ export function App() {
     redactionController.state.present,
     watermarkController.state.present,
     watermarkController.assetRegistry,
+    nativeTextController.snapshotForPages,
   );
 
   const handleInitialSelection = (
@@ -101,13 +110,15 @@ export function App() {
         annotationController.hasUnsavedWork ||
           formController.hasUnsavedWork ||
           redactionController.hasUnsavedWork ||
-          watermarkController.hasUnsavedWork,
+          watermarkController.hasUnsavedWork ||
+          nativeTextController.hasUnsavedWork,
         () => {
           pdfExport.cancel();
           annotationController.resetAnnotations();
           formController.resetForms();
           redactionController.reset();
           watermarkController.reset();
+          nativeTextController.reset();
           editorHistory.reset();
         },
       )
@@ -172,12 +183,16 @@ export function App() {
           exportState={pdfExport.state}
           onDownloadPdf={pdfExport.downloadWorkspace}
           onExtractPages={pdfExport.extractPages}
-          exportBlocked={annotationController.textEditSession !== null}
+          exportBlocked={
+            annotationController.textEditSession !== null ||
+            nativeTextController.draft !== null
+          }
           exportBlockReason={getExportBlockReason(workspace.pages)}
           annotationController={annotationController}
           formController={formController}
           redactionController={redactionController}
           watermarkController={watermarkController}
+          nativeTextController={nativeTextController}
           prepareWorkspace={pdfExport.prepareWorkspace}
         />
       ) : null}

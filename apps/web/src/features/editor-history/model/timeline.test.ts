@@ -112,4 +112,18 @@ describe('editor history timeline', () => {
     expect(form.edits).toEqual(['undo']);
     expect(timeline.canUndo).toBe(false);
   });
+
+  it('coordinates source-text edits and discards their redo branch', () => {
+    const timeline = new EditorHistoryTimeline();
+    const sourceText = { ...participant(), discardFuture: vi.fn() };
+    const annotation = participant();
+    timeline.bind({ 'source-text': sourceText, annotation });
+    timeline.record('source-text', ['page-a']);
+    timeline.undo();
+    timeline.record('annotation', ['page-b']);
+
+    expect(sourceText.edits).toEqual(['undo']);
+    expect(sourceText.discardFuture).toHaveBeenCalledOnce();
+    expect(timeline.canRedo).toBe(false);
+  });
 });
